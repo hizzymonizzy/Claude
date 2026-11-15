@@ -64,8 +64,9 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         lifecycleScope.launch {
-            repo.processPending()
-            repo.rebuild()
+            // Show the world right away; walks waiting on map downloads get folded in afterwards.
+            try { repo.rebuild() } catch (e: Exception) { repo.log("world", "Rebuild failed: $e") }
+            if (repo.processPending() > 0) repo.rebuild()
         }
         resumeTracking()
     }

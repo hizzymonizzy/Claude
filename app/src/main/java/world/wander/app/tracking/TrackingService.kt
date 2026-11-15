@@ -53,6 +53,9 @@ class TrackingService : LifecycleService() {
     private var distanceM = 0.0
     private var lastMoveMs = 0L
     private var lastMovePoint: LatLng? = null
+    private var lastFixMs = 0L
+    private var lastFix: LatLng? = null
+    private var vehicleSinceMs: Long? = null
     private var stillJob: Job? = null
     private var idleWatchJob: Job? = null
 
@@ -73,7 +76,15 @@ class TrackingService : LifecycleService() {
             ACTION_STOP_ALLDAY -> { allDay = false; if (!manual) endCapture("all-day off"); maybeStop() }
             ACTION_MOVING -> {
                 stillJob?.cancel()
-                if (!capturing) startCapture(intent.getStringExtra(EXTRA_MODE))
+                val now = System.currentTimeMillis()
+                when {
+                    capturing -> {}
+                    now - lastVehicleMs < VEHICLE_COOLDOWN_MS -> {
+                        repo.log("track", "Ignoring movement right after a vehicle was detected")
+                        maybeStop()
+                    }
+                    else -> startCapture(intent.getStringExtra(EXTRA_MODE))
+                }
             }
             ACTION_STILL -> if (capturing && !manual) scheduleStillStop()
             null -> {
@@ -109,6 +120,8 @@ class TrackingService : LifecycleService() {
         }
         capturing = true
         distanceM = 0.0
+        lastFix = null
+        vehicleSinceMs = null
         lastMoveMs = System.currentTimeMillis()
         lastMovePoint = null
         repo.liveTrack.value = emptyList()
@@ -125,8 +138,25 @@ class TrackingService : LifecycleService() {
     private fun onFix(timeMs: Long, lat: Double, lng: Double, acc: Float) {
         val id = segmentId ?: return
         val p = LatLng(lat, lng)
-        val prev = repo.liveTrack.value.lastOrNull()
-        if (prev != null && acc <= 30f) distanceM += Geo.distanceM(prev, p)
+        // Vehicle guard: sustained speed above any walk, run or ride ends the capture.
+        val prevFix = lastFix
+        if (prevFix != null && acc <= 30f && timeMs > lastFixMs) {
+            val legM = Geo.distanceM(prevFix, p)
+            val speed = legM / ((timeMs - lastFixMs) / 1000.0)
+            if (speed > VEHICLE_SPEED_MPS) {
+                if (vehicleSinceMs == null) vehicleSinceMs = timeMs
+                if (!manual && timeMs - vehicleSinceMs!! > 45_000) {
+                    lastVehicleMs = System.currentTimeMillis()
+                    endCapture("vehicle speed for 45 s")
+                    maybeStop()
+                    return
+                }
+            } else {
+                vehicleSinceMs = null
+                distanceM += legM
+            }
+        }
+        if (acc <= 30f) { lastFix = p; lastFixMs = timeMs }
         repo.lastLocation.value = p
         if (acc <= 30f) repo.liveTrack.value = repo.liveTrack.value + p
         val anchor = lastMovePoint
@@ -235,6 +265,11 @@ class TrackingService : LifecycleService() {
 
         @Volatile var running = false
             private set
+
+        /** Last time a vehicle was detected (by activity recognition or speed). */
+        @Volatile var lastVehicleMs = 0L
+        private const val VEHICLE_COOLDOWN_MS = 90_000L
+        private const val VEHICLE_SPEED_MPS = 7.0
 
         fun intent(context: Context, action: String, mode: String? = null) =
             Intent(context, TrackingService::class.java).setAction(action).apply { if (mode != null) putExtra(EXTRA_MODE, mode) }

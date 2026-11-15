@@ -48,18 +48,15 @@ object Overpass {
         return parse(json, tile)
     }
 
-    /** Tries each server, with backoff between rounds. Throws the last error if all fail. */
+    /** Tries each server once. Throws the last error if all fail; the caller backs off between attempts. */
     private fun postWithRetry(query: String): String {
         var last: Exception? = null
-        for (round in 0 until 3) {
-            for (endpoint in ENDPOINTS) {
-                try {
-                    return post(endpoint, query)
-                } catch (e: Exception) {
-                    last = e
-                }
+        for (endpoint in ENDPOINTS) {
+            try {
+                return post(endpoint, query)
+            } catch (e: Exception) {
+                last = e
             }
-            Thread.sleep(2_000L shl round) // 2 s, 4 s, 8 s
         }
         throw last ?: IllegalStateException("Overpass unavailable")
     }
@@ -67,8 +64,8 @@ object Overpass {
     private fun post(endpoint: String, query: String): String {
         val conn = URL(endpoint).openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
-        conn.connectTimeout = 20_000
-        conn.readTimeout = 120_000
+        conn.connectTimeout = 10_000
+        conn.readTimeout = 60_000
         conn.doOutput = true
         conn.setRequestProperty("User-Agent", USER_AGENT)
         conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")

@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import world.wander.app.geo.Overpass
 import world.wander.app.health.HealthSync
+import world.wander.app.work.ProcessWorker
 import world.wander.engine.AreaAssigner
 import world.wander.engine.AreaInfo
 import world.wander.engine.CellPresence
@@ -74,18 +75,26 @@ class Repository(context: Context) {
 
     // ---- Map data ----
 
+    /** Tiles whose download failed recently, and when to try again (backoff doubles each failure). */
+    private val tileRetry = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Long>>()
+
     private suspend fun ensureTiles(tiles: Collection<String>): Boolean {
         for (tile in tiles) {
             if (dao.tile(tile) != null) continue
+            val retry = tileRetry[tile]
+            if (retry != null && System.currentTimeMillis() < retry.first) return false
             try {
                 val data = Overpass.fetchTile(tile)
                 dao.insertEdges(data.edges)
                 dao.upsertPlaces(data.places)
                 dao.upsertTile(GeoTileEntity(tile, System.currentTimeMillis(), data.edges.size))
                 log("geo", "Fetched tile $tile: ${data.edges.size} road edges, ${data.places.size} places")
+                tileRetry.remove(tile)
                 delay(1_000) // be polite to the public Overpass server
             } catch (e: Exception) {
-                log("geo", "Tile $tile fetch failed: ${e.message}")
+                val wait = ((retry?.second ?: 30_000L) * 2).coerceAtMost(30 * 60_000L)
+                tileRetry[tile] = (System.currentTimeMillis() + wait) to wait
+                log("geo", "Tile $tile fetch failed (${e.message?.lineSequence()?.firstOrNull()}); retrying in ${wait / 60_000} min")
                 return false
             }
         }
@@ -156,7 +165,7 @@ class Repository(context: Context) {
                 val pts = dao.points(seg.id)
                 if (pts.size < 2) { dao.markProcessed(seg.id, true, "too few points"); continue }
                 val tiles = pts.map { Cells.tile(it.lat, it.lng) }.toSet()
-                if (!ensureTiles(tiles)) break // offline; try again later
+                if (!ensureTiles(tiles)) continue // map data not available yet; this walk waits, others carry on
                 val graph = dao.edgesInTiles(tiles.toList()).map {
                     GraphEdge(it.id, it.name, it.startNode, it.endNode, Overpass.decode(it.geometry))
                 }
@@ -173,6 +182,7 @@ class Repository(context: Context) {
                 log("process", "Segment ${seg.id} (${seg.source}): ${pts.size} pts → ${r.coverage.size} road stretches, ${r.presence.size} cell visits, matched ${r.matchedPoints}/${r.keptPoints}")
                 done++
             }
+            if (dao.pendingSegments().isNotEmpty()) ProcessWorker.enqueue(app)
             done
         }
     }
@@ -223,6 +233,7 @@ class Repository(context: Context) {
     suspend fun dailyRun(): DispatchEntity? = withContext(Dispatchers.IO) {
         try { health.sync(prefs.startDay) } catch (e: Exception) { log("health", "Sync failed: ${e.message}") }
         prefs.lastHealthSyncMs = System.currentTimeMillis()
+        rebuild()
         processPending()
         val state = rebuild()
         dao.prunePoints(System.currentTimeMillis() - 90L * 24 * 3600 * 1000)
@@ -240,7 +251,7 @@ class Repository(context: Context) {
     suspend fun diagnosticsReport(extra: List<String>): String = withContext(Dispatchers.IO) {
         val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(zone)
         val pkg = app.packageManager.getPackageInfo(app.packageName, 0)
-        val w = world.value
+        val w = world.value ?: try { rebuild() } catch (e: Exception) { log("world", "Rebuild failed: $e"); null }
         buildString {
             appendLine("Wander World diagnostics · ${fmt.format(java.time.Instant.now())}")
             appendLine("App ${pkg.versionName} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
@@ -257,7 +268,12 @@ class Repository(context: Context) {
                     val s = w.days[d] ?: continue
                     appendLine("  ${java.time.LocalDate.ofEpochDay(d.toLong())}  %5.1f min · %.2f km · %s".format(s.intensityMinutes, s.footMeters / 1000, s.protection))
                 }
-            } else appendLine("(not built yet)")
+            } else appendLine("(could not be built; see log)")
+            val waiting = dao.pendingSegments()
+            if (waiting.isNotEmpty()) {
+                val missing = waiting.flatMap { seg -> dao.points(seg.id).map { Cells.tile(it.lat, it.lng) } }.toSet().filter { dao.tile(it) == null }
+                appendLine("Waiting walks: ${waiting.size} · missing map tiles: ${missing.joinToString().ifEmpty { "none" }}")
+            }
             appendLine()
             appendLine("== Intensity from Health Connect ==")
             dao.allIntensity().sortedByDescending { it.day }.take(28).forEach {

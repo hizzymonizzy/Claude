@@ -25,6 +25,7 @@ class ActivityReceiver : BroadcastReceiver() {
             val enter = event.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER
             repo.log("activity", "${if (enter) "Enter" else "Exit"} $name (service running=${TrackingService.running})")
             if (!enter) continue
+            if (event.activityType == DetectedActivity.IN_VEHICLE) TrackingService.lastVehicleMs = System.currentTimeMillis()
             when (event.activityType) {
                 DetectedActivity.WALKING, DetectedActivity.RUNNING, DetectedActivity.ON_FOOT ->
                     send(context, repo, TrackingService.ACTION_MOVING, "FOOT")
