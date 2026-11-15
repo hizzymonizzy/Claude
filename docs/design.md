@@ -201,7 +201,7 @@ Each res-9 cell gets a main biome from land use covering ≥ 30% of the cell, ot
 
 | Rule | Logic |
 |---|---|
-| Increase | If ≥ 3 of the last 4 weeks have `minutes ≥ 1.2 × goal`: `goal = min(ceiling, round10(goal × 1.10))` |
+| Increase | If ≥ 3 of the last 4 weeks have `minutes ≥ 1.2 × goal`, and the last raise was ≥ 4 weeks ago: `goal = min(ceiling, round10(goal × 1.10))` |
 | Decrease | If the last 2 weeks are both `< 0.7 × goal`: `goal = max(150, round10(mean(last 2 weeks)))` |
 | Bounds | floor 150, ceiling 300 |
 | Lock | If the user has locked the goal, skip both rules |
@@ -232,7 +232,7 @@ Each res-9 cell gets a main biome from land use covering ≥ 30% of the cell, ot
 
 ### 7.2 Founding
 
-An area founds a **Camp** once it has **≥ 3 area-days within any 14-day window**. Founding is an event and goes into the history and the dispatch.
+An area founds a **Camp** once it has **≥ 3 on-foot area-days within any 30-day window** (so a weekly ritual counts). Founding is an event and goes into the history and the dispatch.
 
 The **Capital** is founded on the first day with moving presence in the **home area** (set during onboarding).
 
