@@ -50,7 +50,14 @@ object Cells {
     const val CELL_RES = 9
     const val TILE_RES = 7
 
-    private val h3: H3Core by lazy { H3Core.newInstance() }
+    /**
+     * On Android the native library is packaged as a normal jniLib, so load it the system way.
+     * On a desktop JVM (tests) the library extracts its own bundled native code.
+     */
+    private val h3: H3Core by lazy {
+        val android = System.getProperty("java.vm.vendor").orEmpty().contains("Android", ignoreCase = true)
+        if (android) H3Core.newSystemInstance() else H3Core.newInstance()
+    }
 
     fun cell(lat: Double, lng: Double): String = h3.latLngToCellAddress(lat, lng, CELL_RES)
     fun tile(lat: Double, lng: Double): String = h3.latLngToCellAddress(lat, lng, TILE_RES)

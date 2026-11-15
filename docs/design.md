@@ -570,8 +570,9 @@ Automatic on milestones: first 5K / 10K / half-marathon distance in one outdoor 
 | Q4 | Long-distance travel | Vehicles and flights reveal nothing; they create waystones / portals (§9.2) |
 | Q5 | Dispatch time | 07:30 default, adjustable |
 | Q6 | Title | **Wander World** |
+| Q7 | Visual detail | **Deferred.** Build a lightweight chassis with placeholder visuals; rendering stays separate from game logic so art can be added later without touching the engine. |
 
 **Still open**
-- Engine choice confirmed by Spike S4 (Godot recommended).
-- Source and budget for 3D assets.
+- Engine choice confirmed by Spike S4 (Godot recommended), when visuals come into scope.
+- Source and budget for 3D assets (deferred with Q7).
 - Whether the real-map view gets a light touch of the diorama style (e.g. settlement miniatures as map pins).

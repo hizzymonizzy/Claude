@@ -1,0 +1,198 @@
+package world.wander.app.data
+
+import android.content.Context
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import kotlinx.coroutines.flow.Flow
+
+// ---- Raw capture ----
+
+@Entity(tableName = "segment")
+data class SegmentEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val startMs: Long,
+    val endMs: Long? = null,
+    /** "phone" or "watch". */
+    val source: String,
+    /** "FOOT", "CYCLE" or null when unknown. */
+    val modeHint: String? = null,
+    val processed: Boolean = false,
+    val note: String? = null,
+)
+
+@Entity(tableName = "track_point", indices = [Index("segmentId")])
+data class TrackPointEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val timeMs: Long,
+    val lat: Double,
+    val lng: Double,
+    val accuracyM: Float,
+)
+
+// ---- Observations (source of truth for the world) ----
+
+@Entity(tableName = "edge_coverage", indices = [Index("edgeId"), Index("segmentId")])
+data class EdgeCoverageEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val edgeId: String,
+    val day: Int,
+    val fromM: Double,
+    val toM: Double,
+    val mode: String,
+)
+
+@Entity(tableName = "cell_presence", indices = [Index("segmentId")])
+data class CellPresenceEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val cell: String,
+    val day: Int,
+    val seconds: Double,
+    val mode: String,
+)
+
+@Entity(tableName = "day_movement", indices = [Index("segmentId")])
+data class DayMovementEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val day: Int,
+    val footMeters: Double,
+    val cycleMeters: Double,
+)
+
+@Entity(tableName = "daily_intensity")
+data class DailyIntensityEntity(
+    @PrimaryKey val day: Int,
+    val moderateMin: Double,
+    val vigorousMin: Double,
+    val source: String,
+)
+
+// ---- Map data cache (OpenStreetMap) ----
+
+@Entity(tableName = "geo_tile")
+data class GeoTileEntity(@PrimaryKey val tile: String, val fetchedMs: Long, val edgeCount: Int)
+
+@Entity(tableName = "edge", indices = [Index("tile"), Index("startNode"), Index("endNode")])
+data class EdgeEntity(
+    @PrimaryKey val id: String,
+    val wayId: Long,
+    val name: String?,
+    val highway: String?,
+    val startNode: Long,
+    val endNode: Long,
+    val lengthM: Double,
+    /** "lat,lng;lat,lng;…" */
+    val geometry: String,
+    val tile: String,
+)
+
+@Entity(tableName = "place")
+data class PlaceEntity(
+    @PrimaryKey val id: Long,
+    val name: String,
+    val type: String,
+    val lat: Double,
+    val lng: Double,
+)
+
+@Entity(tableName = "cell_area")
+data class CellAreaEntity(@PrimaryKey val cell: String, val areaId: String)
+
+@Entity(tableName = "area")
+data class AreaEntity(
+    @PrimaryKey val id: String,
+    val name: String?,
+    val placeType: String?,
+    val frozenMs: Long,
+)
+
+// ---- Output and diagnostics ----
+
+@Entity(tableName = "dispatch")
+data class DispatchEntity(@PrimaryKey val day: Int, val title: String, val body: String, val createdMs: Long)
+
+@Entity(tableName = "diag_log")
+data class DiagEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val timeMs: Long, val tag: String, val message: String)
+
+@Dao
+interface WanderDao {
+    // Segments and points
+    @Insert fun insertSegment(s: SegmentEntity): Long
+    @Query("UPDATE segment SET endMs = :endMs WHERE id = :id") fun endSegment(id: Long, endMs: Long)
+    @Query("UPDATE segment SET processed = :processed, note = :note WHERE id = :id") fun markProcessed(id: Long, processed: Boolean, note: String?)
+    @Query("SELECT * FROM segment WHERE processed = 0 AND endMs IS NOT NULL ORDER BY startMs") fun pendingSegments(): List<SegmentEntity>
+    @Query("SELECT * FROM segment WHERE endMs IS NULL") fun openSegments(): List<SegmentEntity>
+    @Query("SELECT * FROM segment WHERE startMs < :endMs AND (endMs IS NULL OR endMs > :startMs)") fun segmentsOverlapping(startMs: Long, endMs: Long): List<SegmentEntity>
+    @Query("SELECT COUNT(*) FROM segment") fun segmentCount(): Int
+    @Query("SELECT * FROM segment ORDER BY startMs DESC LIMIT :limit") fun recentSegments(limit: Int): List<SegmentEntity>
+    @Insert fun insertPoints(p: List<TrackPointEntity>)
+    @Query("SELECT * FROM track_point WHERE segmentId = :segmentId ORDER BY timeMs") fun points(segmentId: Long): List<TrackPointEntity>
+    @Query("SELECT COUNT(*) FROM track_point WHERE segmentId = :segmentId") fun pointCount(segmentId: Long): Int
+    @Query("DELETE FROM track_point WHERE timeMs < :beforeMs") fun prunePoints(beforeMs: Long)
+
+    // Observations
+    @Insert fun insertCoverage(c: List<EdgeCoverageEntity>)
+    @Insert fun insertPresence(c: List<CellPresenceEntity>)
+    @Insert fun insertMovement(c: List<DayMovementEntity>)
+    @Query("DELETE FROM edge_coverage WHERE segmentId = :segmentId") fun deleteCoverage(segmentId: Long)
+    @Query("DELETE FROM cell_presence WHERE segmentId = :segmentId") fun deletePresence(segmentId: Long)
+    @Query("DELETE FROM day_movement WHERE segmentId = :segmentId") fun deleteMovement(segmentId: Long)
+    @Query("SELECT * FROM edge_coverage") fun allCoverage(): List<EdgeCoverageEntity>
+    @Query("SELECT * FROM cell_presence") fun allPresence(): List<CellPresenceEntity>
+    @Query("SELECT * FROM day_movement") fun allMovement(): List<DayMovementEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertIntensity(d: List<DailyIntensityEntity>)
+    @Query("SELECT * FROM daily_intensity") fun allIntensity(): List<DailyIntensityEntity>
+
+    // Geo
+    @Query("SELECT * FROM geo_tile WHERE tile = :tile") fun tile(tile: String): GeoTileEntity?
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertTile(t: GeoTileEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) fun insertEdges(e: List<EdgeEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertPlaces(p: List<PlaceEntity>)
+    @Query("SELECT * FROM edge WHERE tile IN (:tiles)") fun edgesInTiles(tiles: List<String>): List<EdgeEntity>
+    @Query("SELECT * FROM edge WHERE id IN (:ids)") fun edgesById(ids: List<String>): List<EdgeEntity>
+    @Query("SELECT * FROM edge WHERE startNode IN (:nodes) OR endNode IN (:nodes)") fun edgesTouching(nodes: List<Long>): List<EdgeEntity>
+    @Query("SELECT * FROM place") fun allPlaces(): List<PlaceEntity>
+    @Query("SELECT * FROM cell_area WHERE cell = :cell") fun cellArea(cell: String): CellAreaEntity?
+    @Insert(onConflict = OnConflictStrategy.IGNORE) fun insertCellArea(c: CellAreaEntity)
+    @Query("SELECT * FROM cell_area") fun allCellAreas(): List<CellAreaEntity>
+    @Insert(onConflict = OnConflictStrategy.IGNORE) fun insertArea(a: AreaEntity)
+    @Query("UPDATE area SET name = :name WHERE id = :id AND name IS NULL") fun freezeAreaName(id: String, name: String)
+    @Query("SELECT * FROM area") fun allAreas(): List<AreaEntity>
+
+    // Dispatch and diagnostics
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertDispatch(d: DispatchEntity)
+    @Query("SELECT * FROM dispatch ORDER BY day DESC") fun dispatches(): Flow<List<DispatchEntity>>
+    @Query("SELECT * FROM dispatch WHERE day = :day") fun dispatch(day: Int): DispatchEntity?
+    @Insert fun log(d: DiagEntity)
+    @Query("SELECT * FROM diag_log ORDER BY id DESC LIMIT 300") fun diagnostics(): Flow<List<DiagEntity>>
+    @Query("DELETE FROM diag_log WHERE timeMs < :beforeMs") fun pruneDiagnostics(beforeMs: Long)
+}
+
+@Database(
+    entities = [
+        SegmentEntity::class, TrackPointEntity::class, EdgeCoverageEntity::class, CellPresenceEntity::class,
+        DayMovementEntity::class, DailyIntensityEntity::class, GeoTileEntity::class, EdgeEntity::class,
+        PlaceEntity::class, CellAreaEntity::class, AreaEntity::class, DispatchEntity::class, DiagEntity::class,
+    ],
+    version = 1,
+    exportSchema = true,
+)
+abstract class WanderDb : RoomDatabase() {
+    abstract fun dao(): WanderDao
+
+    companion object {
+        fun create(context: Context): WanderDb =
+            Room.databaseBuilder(context, WanderDb::class.java, "wander.db").build()
+    }
+}
