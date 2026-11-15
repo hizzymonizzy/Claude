@@ -59,7 +59,11 @@ object Cells {
         if (android) H3Core.newSystemInstance() else H3Core.newInstance()
     }
 
+    /** Fine cell (~25 m) for wear on paths you make yourself. */
+    const val TRODDEN_RES = 11
+
     fun cell(lat: Double, lng: Double): String = h3.latLngToCellAddress(lat, lng, CELL_RES)
+    fun cellAt(lat: Double, lng: Double, res: Int): String = h3.latLngToCellAddress(lat, lng, res)
     fun tile(lat: Double, lng: Double): String = h3.latLngToCellAddress(lat, lng, TILE_RES)
     fun parent(cell: String, res: Int): String = h3.cellToParentAddress(cell, res)
 

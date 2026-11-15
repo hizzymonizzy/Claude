@@ -81,6 +81,46 @@ data class TrailEntity(
     val geometry: String,
 )
 
+/** A stretch walked off the mapped network: a path you made yourself. */
+@Entity(tableName = "wild_trail", indices = [Index("segmentId")])
+data class WildTrailEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val day: Int,
+    val geometry: String,
+)
+
+@Entity(tableName = "trodden", indices = [Index("segmentId")])
+data class TroddenEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val cell: String,
+    val day: Int,
+)
+
+/** A named area (park, wood, beach, campus, big store). Rings joined by '|'. */
+@Entity(tableName = "landmark", indices = [Index("tile")])
+data class LandmarkEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val kind: String,
+    val geometry: String,
+    val areaM2: Double,
+    val tile: String,
+)
+
+@Entity(tableName = "landmark_tile")
+data class LandmarkTileEntity(@PrimaryKey val tile: String, val fetchedMs: Long, val count: Int)
+
+@Entity(tableName = "landmark_visit", indices = [Index("segmentId")])
+data class LandmarkVisitEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val landmarkId: String,
+    val day: Int,
+    val seconds: Double,
+)
+
 @Entity(tableName = "daily_intensity")
 data class DailyIntensityEntity(
     @PrimaryKey val day: Int,
@@ -165,6 +205,20 @@ interface WanderDao {
     @Insert fun insertTrails(t: List<TrailEntity>)
     @Query("DELETE FROM trail WHERE segmentId = :segmentId") fun deleteTrails(segmentId: Long)
     @Query("SELECT * FROM trail") fun allTrails(): List<TrailEntity>
+    @Insert fun insertWild(t: List<WildTrailEntity>)
+    @Query("DELETE FROM wild_trail WHERE segmentId = :segmentId") fun deleteWild(segmentId: Long)
+    @Query("SELECT * FROM wild_trail") fun allWild(): List<WildTrailEntity>
+    @Insert fun insertTrodden(t: List<TroddenEntity>)
+    @Query("DELETE FROM trodden WHERE segmentId = :segmentId") fun deleteTrodden(segmentId: Long)
+    @Query("SELECT * FROM trodden") fun allTrodden(): List<TroddenEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertLandmarks(l: List<LandmarkEntity>)
+    @Query("SELECT * FROM landmark WHERE tile IN (:tiles)") fun landmarksInTiles(tiles: List<String>): List<LandmarkEntity>
+    @Query("SELECT * FROM landmark WHERE id IN (:ids)") fun landmarksById(ids: List<String>): List<LandmarkEntity>
+    @Query("SELECT * FROM landmark_tile WHERE tile = :tile") fun landmarkTile(tile: String): LandmarkTileEntity?
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertLandmarkTile(t: LandmarkTileEntity)
+    @Insert fun insertVisits(v: List<LandmarkVisitEntity>)
+    @Query("DELETE FROM landmark_visit WHERE segmentId = :segmentId") fun deleteVisits(segmentId: Long)
+    @Query("SELECT * FROM landmark_visit") fun allVisits(): List<LandmarkVisitEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertIntensity(d: List<DailyIntensityEntity>)
     @Query("SELECT * FROM daily_intensity") fun allIntensity(): List<DailyIntensityEntity>
 
@@ -201,9 +255,10 @@ interface WanderDao {
         SegmentEntity::class, TrackPointEntity::class, EdgeCoverageEntity::class, CellPresenceEntity::class,
         DayMovementEntity::class, DailyIntensityEntity::class, GeoTileEntity::class, EdgeEntity::class,
         PlaceEntity::class, CellAreaEntity::class, AreaEntity::class, DispatchEntity::class, DiagEntity::class,
-        TrailEntity::class,
+        TrailEntity::class, WildTrailEntity::class, TroddenEntity::class, LandmarkEntity::class,
+        LandmarkTileEntity::class, LandmarkVisitEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class WanderDb : RoomDatabase() {
@@ -219,7 +274,23 @@ abstract class WanderDb : RoomDatabase() {
             }
         }
 
+        /** v3 adds named areas (landmarks) and your own paths; walks are re-processed once to find them. */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `wild_trail` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `day` INTEGER NOT NULL, `geometry` TEXT NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_wild_trail_segmentId` ON `wild_trail` (`segmentId`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `trodden` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `cell` TEXT NOT NULL, `day` INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_trodden_segmentId` ON `trodden` (`segmentId`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `landmark` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `kind` TEXT NOT NULL, `geometry` TEXT NOT NULL, `areaM2` REAL NOT NULL, `tile` TEXT NOT NULL, PRIMARY KEY(`id`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_landmark_tile` ON `landmark` (`tile`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `landmark_tile` (`tile` TEXT NOT NULL, `fetchedMs` INTEGER NOT NULL, `count` INTEGER NOT NULL, PRIMARY KEY(`tile`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `landmark_visit` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `landmarkId` TEXT NOT NULL, `day` INTEGER NOT NULL, `seconds` REAL NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_landmark_visit_segmentId` ON `landmark_visit` (`segmentId`)")
+                db.execSQL("UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL")
+            }
+        }
+
         fun create(context: Context): WanderDb =
-            Room.databaseBuilder(context, WanderDb::class.java, "wander.db").addMigrations(MIGRATION_1_2).build()
+            Room.databaseBuilder(context, WanderDb::class.java, "wander.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
     }
 }

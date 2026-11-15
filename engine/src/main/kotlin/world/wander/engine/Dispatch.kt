@@ -49,6 +49,14 @@ object DispatchWriter {
             lines += pick(rnd, "A quiet day. The world rests, and so can you.", "No travels yesterday. The roads keep their own company.")
         }
 
+        // Places discovered.
+        val found = events.filterIsInstance<WorldEvent.LandmarkDiscovered>()
+            .mapNotNull { e -> state.landmarks.firstOrNull { it.id == e.landmarkId }?.name }.distinct()
+        if (found.isNotEmpty()) {
+            val shown = found.take(3)
+            lines += "Discovered " + shown.joinToString(", ") + (if (found.size > 3) " and ${found.size - 3} more." else ".")
+        }
+
         // Settlements.
         for (e in events) when (e) {
             is WorldEvent.Founded -> lines += if (e.capital)

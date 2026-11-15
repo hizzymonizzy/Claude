@@ -23,6 +23,8 @@ object MapLayersBuilder {
     private const val REVEAL_RADIUS_M = 40.0
     /** How far fog clears either side of the path you actually walked. */
     private const val TRAIL_RADIUS_M = 35.0
+    /** Discovered places up to this size clear completely (a small park, a store); bigger ones just get named. */
+    private const val CLEAR_PLACES_UNDER_M2 = 50_000.0
     /** Fogged pockets smaller than this, fully enclosed by explored ground, are cleared too (≈ 2 hectares). */
     private const val FILL_HOLES_UNDER_M2 = 20_000.0
 
@@ -32,6 +34,17 @@ object MapLayersBuilder {
                 addNumberProperty("level", s.level)
                 addStringProperty("name", e.name ?: "")
             }
+        },
+    )
+
+    fun wild(layers: MapLayers): FeatureCollection = FeatureCollection.fromFeatures(
+        layers.wild.map { (pts, level) -> Feature.fromGeometry(line(pts)).apply { addNumberProperty("level", level) } },
+    )
+
+    fun landmarkLabels(layers: MapLayers): FeatureCollection = FeatureCollection.fromFeatures(
+        layers.landmarks.map { (name, rings, _) ->
+            val r = rings.maxBy { it.size }
+            Feature.fromGeometry(Point.fromLngLat(r.sumOf { it.lng } / r.size, r.sumOf { it.lat } / r.size)).apply { addStringProperty("name", name) }
         },
     )
 
@@ -63,7 +76,8 @@ object MapLayersBuilder {
             arrayOf(Coordinate(-180.0, -85.0), Coordinate(180.0, -85.0), Coordinate(180.0, 85.0), Coordinate(-180.0, 85.0), Coordinate(-180.0, -85.0)),
         )
         val revealed = layers.discovered.mapNotNull { (e, _) -> bufferedLatLng(Overpass.decode(e.geometry), REVEAL_RADIUS_M) } +
-            layers.trails.mapNotNull { bufferedLatLng(it, TRAIL_RADIUS_M) }
+            layers.trails.mapNotNull { bufferedLatLng(it, TRAIL_RADIUS_M) } +
+            layers.landmarks.filter { it.third <= CLEAR_PLACES_UNDER_M2 }.mapNotNull { (_, rings, _) -> placePolygon(rings) }
         val fog: Geometry = if (revealed.isEmpty()) world else try {
             world.difference(fillSmallHoles(UnaryUnionOp.union(revealed)))
         } catch (_: Exception) { world }
@@ -74,6 +88,11 @@ object MapLayersBuilder {
         }
         return FeatureCollection.fromFeatures(polys.map { Feature.fromGeometry(toGeo(it)) })
     }
+
+    private fun placePolygon(rings: List<List<LatLng>>): Geometry? = try {
+        val polys = rings.filter { it.size >= 4 }.map { r -> gf.createPolygon(r.map { Coordinate(it.lng, it.lat) }.toTypedArray()) }
+        if (polys.isEmpty()) null else UnaryUnionOp.union(polys)
+    } catch (_: Exception) { null }
 
     /** Removes small fogged pockets enclosed by explored ground (e.g. the block inside a loop you walked). */
     private fun fillSmallHoles(g: Geometry): Geometry {

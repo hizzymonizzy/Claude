@@ -16,6 +16,12 @@ data class TrackResult(
     val coverage: List<EdgeCoverage>,
     /** The path actually walked (usable fixes, simplified), one polyline per run, for clearing fog. */
     val trails: List<Trail>,
+    /** Stretches walked where there is no mapped path: your own paths. */
+    val wildTrails: List<Trail>,
+    /** Fine cells along those stretches, per day, for wear. */
+    val trodden: List<TroddenCell>,
+    /** Time spent inside named areas (parks, woods, stores…). */
+    val landmarkVisits: List<LandmarkVisit>,
     val presence: List<CellPresence>,
     val movement: List<DayMovement>,
     val keptPoints: Int,
@@ -71,7 +77,7 @@ class TrackProcessor(
         return runs to dropped
     }
 
-    fun process(points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>): TrackResult {
+    fun process(points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>, landmarks: List<Landmark> = emptyList()): TrackResult {
         val (runs, dropped) = runs(points)
         val matcher = if (edges.isNotEmpty()) MapMatcher(edges) else null
         val coverage = mutableListOf<EdgeCoverage>()
@@ -80,6 +86,9 @@ class TrackProcessor(
         var kept = 0
         var matched = 0
         val trails = mutableListOf<Trail>()
+        val wild = mutableListOf<Trail>()
+        val trodden = HashSet<TroddenCell>()
+        val visits = HashMap<Pair<String, Int>, Double>()
 
         for (run in runs) {
             kept += run.size
@@ -91,6 +100,7 @@ class TrackProcessor(
                 val dt = (b.timeMs - a.timeMs) / 1000.0
                 val day = dayOf(a.timeMs)
                 val cell = Cells.cell(a.lat, a.lng)
+                for (lm in landmarks) if (lm.contains(a.lat, a.lng)) visits.merge(lm.id to day, dt, Double::plus)
                 presence.merge(Triple(cell, day, mode), dt, Double::plus)
                 val m = movement.getOrPut(day) { DoubleArray(2) }
                 m[if (mode == Mode.FOOT) 0 else 1] += Geo.distanceM(a.lat, a.lng, b.lat, b.lng)
@@ -98,6 +108,22 @@ class TrackProcessor(
             if (matcher != null) {
                 val m = matcher.match(run.map { LatLng(it.lat, it.lng) })
                 matched += m.count { it != null }
+                // Off-network stretches: consecutive fixes with no mapped path nearby.
+                var k = 0
+                while (k < run.size) {
+                    if (m[k] != null) { k++; continue }
+                    var e = k
+                    while (e + 1 < run.size && m[e + 1] == null) e++
+                    // Include the fixes on either side so a wild path joins the road it leaves from.
+                    val from = (k - 1).coerceAtLeast(0); val to = (e + 1).coerceAtMost(run.size - 1)
+                    val pts = run.subList(from, to + 1).map { LatLng(it.lat, it.lng) }
+                    if (pts.size >= 3 && Geo.lengthM(pts) >= 30) {
+                        val day = dayOf(run[k].timeMs)
+                        wild += Trail(day, simplify(pts, 4.0))
+                        sample(pts, 10.0).forEach { trodden += TroddenCell(Cells.cellAt(it.lat, it.lng, Cells.TRODDEN_RES), day) }
+                    }
+                    k = e + 1
+                }
                 for (iv in matcher.coverage(m)) {
                     coverage += EdgeCoverage(iv.edgeId, dayOf(run[iv.legIndex].timeMs), iv.fromM, iv.toM, mode)
                 }
@@ -106,12 +132,31 @@ class TrackProcessor(
         return TrackResult(
             coverage = coverage,
             trails = trails,
+            wildTrails = wild,
+            trodden = trodden.toList(),
+            landmarkVisits = visits.map { (k, v) -> LandmarkVisit(k.first, k.second, v) },
             presence = presence.map { (k, v) -> CellPresence(k.first, k.second, v, k.third) },
             movement = movement.map { (d, v) -> DayMovement(d, v[0], v[1]) },
             keptPoints = kept,
             droppedPoints = dropped,
             matchedPoints = matched,
         )
+    }
+
+    /** Points every [stepM] meters along a polyline. */
+    private fun sample(points: List<LatLng>, stepM: Double): List<LatLng> {
+        val out = mutableListOf(points.first())
+        for (i in 1 until points.size) {
+            val a = points[i - 1]; val b = points[i]
+            val d = Geo.distanceM(a, b)
+            val n = (d / stepM).toInt()
+            for (s in 1..n) {
+                val t = s * stepM / d
+                out += LatLng(a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t)
+            }
+            out += b
+        }
+        return out
     }
 
     /** Douglas–Peucker simplification in local meters. */

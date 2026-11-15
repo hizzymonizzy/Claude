@@ -138,6 +138,17 @@ Raw GPS points are kept for **90 days** (for re-matching after improvements), th
 
 ---
 
+## 4.6 Beyond roads: your path and what it passed through (alpha 0.1.4–0.1.5)
+
+Field testing showed roads alone miss much of real walking: stores, parking lots, parks, bike trails. Discovery now has three layers:
+
+| Layer | What it is | Effect |
+|---|---|---|
+| **Your path** | Every usable GPS run, simplified (Douglas–Peucker, 4 m) and kept forever | Fog clears 35 m either side; fogged pockets under ~2 ha enclosed by explored ground clear too |
+| **Mapped ways** | OSM roads, footways, paths, cycleways, tracks | Charted by name, wear in (unchanged) |
+| **Named places** | OSM parks, gardens, woods, beaches, nature reserves, cemeteries, campuses, zoos, big-box stores (≥ 2,000 m²) | ≥ 60 s inside on a day discovers it ("Discovered Thompson Park"); places ≤ 5 ha clear completely; listed in the Atlas |
+| **Your own paths** | Stretches ≥ 30 m with no mapped way within 25 m (cut-throughs, park lawns, unmapped trails) | Drawn as footpaths; wear per H3 res-11 cell (~25 m) by distinct days, same levels and decay as roads |
+
 ## 5. Geo data
 
 ### 5.1 Sources
@@ -570,6 +581,7 @@ Automatic on milestones: first 5K / 10K / half-marathon distance in one outdoor 
 | Q4 | Long-distance travel | Vehicles and flights reveal nothing; they create waystones / portals (§9.2) |
 | Q5 | Dispatch time | 07:30 default, adjustable |
 | Q6 | Title | **Wander World** |
+| Q8 | Art source | **0 A.D. (Wildfire Games)**: open-source RTS in the Age-of-Empires style. Art is CC BY-SA 3.0: commercial use allowed with attribution; modified art must stay CC BY-SA. Models are COLLADA (.dae), importable into Godot. Use as the base kit for the tilt-shift world view (§10.3). |
 | Q7 | Visual detail | **Deferred.** Build a lightweight chassis with placeholder visuals; rendering stays separate from game logic so art can be added later without touching the engine. |
 
 **Still open**

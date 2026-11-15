@@ -138,6 +138,8 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         s.source("fog")?.setGeoJson(fog)
         s.source("roads")?.setGeoJson(MapLayersBuilder.roads(layers))
         s.source("peek")?.setGeoJson(MapLayersBuilder.peeks(layers))
+        s.source("wild")?.setGeoJson(MapLayersBuilder.wild(layers))
+        s.source("landmarks")?.setGeoJson(MapLayersBuilder.landmarkLabels(layers))
         s.source("settlements")?.setGeoJson(MapLayersBuilder.settlements(world))
     }
     LaunchedEffect(style, track) { style?.source("track")?.setGeoJson(MapLayersBuilder.track(track)) }
@@ -205,7 +207,7 @@ private fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
 private fun addWorldLayers(s: Style) {
     val empty = FeatureCollection.fromFeatures(emptyList())
-    for (id in listOf("fog", "peek", "roads", "track", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
+    for (id in listOf("fog", "peek", "wild", "roads", "landmarks", "track", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
 
     s.addLayer(FillLayer("fog", "fog").withProperties(fillColor(FOG), fillOpacity(0.93f)))
     s.addLayer(
@@ -220,6 +222,19 @@ private fun addWorldLayers(s: Style) {
             lineColor(match(get("level"), literal("#A1887F"),
                 stop(1, "#BCAAA4"), stop(2, "#A1887F"), stop(3, "#8D6E63"), stop(4, "#6D4C41"), stop(5, "#E0A100"))),
             lineWidth(interpolate(linear(), get("level"), stop(1, 1.5f), stop(3, 3.5f), stop(5, 6f))),
+        ),
+    )
+    // Paths you made yourself: dashed footpaths that darken as they wear in.
+    s.addLayer(
+        LineLayer("wild", "wild").withProperties(
+            lineCap(Property.LINE_CAP_ROUND), lineColor("#8D6E63"), lineOpacity(0.85f),
+            lineDasharray(arrayOf(2f, 1.5f)),
+            lineWidth(interpolate(linear(), get("level"), stop(1, 1.5f), stop(5, 4.5f))),
+        ),
+    )
+    s.addLayer(
+        SymbolLayer("landmark-names", "landmarks").withProperties(
+            textField(get("name")), textSize(12f), textColor("#2E5E3A"), textHaloColor("#F4ECD8"), textHaloWidth(2f),
         ),
     )
     s.addLayer(

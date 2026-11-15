@@ -42,6 +42,12 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
         val presenceByDay = input.presence.groupBy { it.day }
         val intensityByDay = input.intensity.associate { it.day to (it.moderateMin + p.vigorousWeight * it.vigorousMin) }
         val movementByDay = input.movement.groupBy { it.day }
+        val visitsByDay = input.landmarkVisits.groupBy { it.day }
+        val troddenByDay = input.trodden.groupBy { it.day }
+        val landmarkFirst = HashMap<String, Int>()
+        val landmarkDays = HashMap<String, Int>()
+        val landmarkLast = HashMap<String, Int>()
+        val trodden = HashMap<String, Double>()
 
         val edges = HashMap<String, EdgeAcc>()
         val familiarity = HashMap<String, Double>()
@@ -131,6 +137,18 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             }
             if (newlyDiscovered.isNotEmpty()) events += WorldEvent.RoadsCharted(day, newlyDiscovered)
 
+            // 1b. Named places walked through, and your own paths.
+            visitsByDay[day]?.groupBy { it.landmarkId }?.forEach { (id, vs) ->
+                if (id !in input.landmarks || vs.sumOf { it.seconds } < p.landmarkSeconds) return@forEach
+                landmarkDays.merge(id, 1, Int::plus)
+                landmarkLast[id] = day
+                if (id !in landmarkFirst) {
+                    landmarkFirst[id] = day
+                    events += WorldEvent.LandmarkDiscovered(day, id)
+                }
+            }
+            troddenByDay[day]?.map { it.cell }?.distinct()?.forEach { trodden.merge(it, 1.0, Double::plus) }
+
             // 2. Cells and areas: familiarity and development.
             val footByArea = HashMap<String, Double>()
             val cycleByArea = HashMap<String, Double>()
@@ -212,6 +230,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                     for (e in edges.values) if (e.discoveredDay != null) {
                         e.wear = max(1.0, e.wear - e.wear * p.wearDecayWeekly / 7.0 * m)
                     }
+                    for (c in trodden.keys) trodden[c] = max(1.0, trodden.getValue(c) * (1 - p.wearDecayWeekly / 7.0 * m))
                 }
             }
 
@@ -313,6 +332,11 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             events = events,
             days = days,
             areaNames = areaNames,
+            landmarks = landmarkFirst.map { (id, first) ->
+                val info = input.landmarks.getValue(id)
+                LandmarkState(id, info.name, info.kind, info.areaM2, first, landmarkDays[id] ?: 0, landmarkLast[id] ?: first)
+            },
+            troddenWear = trodden,
         )
     }
 

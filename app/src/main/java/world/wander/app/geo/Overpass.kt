@@ -2,6 +2,8 @@ package world.wander.app.geo
 
 import org.json.JSONObject
 import world.wander.app.data.EdgeEntity
+import world.wander.app.data.LandmarkEntity
+import world.wander.engine.Landmark
 import world.wander.app.data.PlaceEntity
 import world.wander.engine.Cells
 import world.wander.engine.Geo
@@ -60,6 +62,68 @@ object Overpass {
         }
         throw IllegalStateException(errors.joinToString(" | "))
     }
+
+    private const val AREA_FILTERS = """
+        nwr["leisure"~"^(park|garden|playground|nature_reserve|dog_park|golf_course|common|recreation_ground|marina)$"]["name"](BBOX);
+        nwr["landuse"~"^(recreation_ground|cemetery|forest|village_green|meadow)$"]["name"](BBOX);
+        nwr["natural"~"^(beach|wood|wetland|heath|grassland)$"]["name"](BBOX);
+        nwr["tourism"~"^(zoo|theme_park|attraction|camp_site)$"]["name"](BBOX);
+        nwr["amenity"~"^(university|college|marketplace)$"]["name"](BBOX);
+        way["shop"]["name"]["building"](BBOX);
+    """
+
+    /** Named areas in a tile: parks, woods, beaches, campuses, big stores. Small shops are dropped. */
+    fun fetchLandmarks(tile: String): List<LandmarkEntity> {
+        val boundary = Cells.boundary(tile)
+        val bbox = "${boundary.minOf { it.lat }},${boundary.minOf { it.lng }},${boundary.maxOf { it.lat }},${boundary.maxOf { it.lng }}"
+        val query = "[out:json][timeout:90];(" + AREA_FILTERS.replace("BBOX", bbox).replace("nwr[", "way[") +
+            AREA_FILTERS.replace("BBOX", bbox).lines().filter { it.trim().startsWith("nwr[") }.joinToString("\n") { it.replace("nwr[", "relation[") } +
+            ");out body geom;"
+        return parseLandmarks(postWithRetry(query), tile)
+    }
+
+    internal fun parseLandmarks(json: String, tile: String): List<LandmarkEntity> {
+        val elements = JSONObject(json).getJSONArray("elements")
+        val out = mutableListOf<LandmarkEntity>()
+        for (i in 0 until elements.length()) {
+            val el = elements.getJSONObject(i)
+            val tags = el.optJSONObject("tags") ?: continue
+            val name = tags.optString("name").takeIf { it.isNotBlank() } ?: continue
+            val kind = listOf("leisure", "landuse", "natural", "tourism", "amenity", "shop").firstNotNullOfOrNull { k ->
+                tags.optString(k).takeIf { it.isNotBlank() }?.let { if (k == "shop") "store" else it }
+            } ?: "place"
+            val rings: List<List<LatLng>> = when (el.getString("type")) {
+                "way" -> {
+                    val g = el.optJSONArray("geometry") ?: continue
+                    val pts = (0 until g.length()).map { val o = g.getJSONObject(it); LatLng(o.getDouble("lat"), o.getDouble("lon")) }
+                    if (pts.size >= 4 && pts.first() == pts.last()) listOf(pts) else continue
+                }
+                "relation" -> {
+                    val members = el.optJSONArray("members") ?: continue
+                    val pieces = (0 until members.length()).mapNotNull { m ->
+                        val mem = members.getJSONObject(m)
+                        if (mem.optString("type") != "way") return@mapNotNull null
+                        val g = mem.optJSONArray("geometry") ?: return@mapNotNull null
+                        (0 until g.length()).map { val o = g.getJSONObject(it); LatLng(o.getDouble("lat"), o.getDouble("lon")) }
+                    }
+                    Landmark.stitch(pieces).ifEmpty { continue }
+                }
+                else -> continue
+            }
+            val lm = try { Landmark("x", name, kind, rings) } catch (_: Exception) { continue }
+            if (kind == "store" && lm.areaM2 < 2_000) continue // big-box stores only
+            if (lm.areaM2 < 200) continue
+            out += LandmarkEntity(
+                id = "${el.getString("type").first()}${el.getLong("id")}",
+                name = name, kind = kind,
+                geometry = rings.joinToString("|") { encode(it) },
+                areaM2 = lm.areaM2, tile = tile,
+            )
+        }
+        return out
+    }
+
+    fun decodeRings(s: String): List<List<LatLng>> = s.split('|').filter { it.isNotBlank() }.map { decode(it) }
 
     private fun post(endpoint: String, query: String): String {
         val conn = URL(endpoint).openConnection() as HttpURLConnection

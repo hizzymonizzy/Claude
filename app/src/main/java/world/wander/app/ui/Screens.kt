@@ -91,7 +91,7 @@ fun AtlasScreen(repo: Repository) {
             if (w != null) {
                 val km = w.days.values.sumOf { it.footMeters } / 1000
                 Text(
-                    "${w.discoveredCount} roads charted · %.1f km walked · ${w.settlements.size} settlements".format(km),
+                    "${w.discoveredCount} roads charted · ${w.landmarks.size} places · %.1f km walked · ${w.settlements.size} settlements".format(km),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -102,6 +102,14 @@ fun AtlasScreen(repo: Repository) {
                 "No settlements yet. Walk somewhere on three different days within a month and a camp will appear.",
                 style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic,
             )
+        }
+        val places = w?.landmarks.orEmpty().sortedByDescending { it.visitDays }
+        if (places.isNotEmpty()) item {
+            SectionTitle("Places discovered")
+            places.forEach { l ->
+                Text("${l.name} · ${l.kind.replace('_', ' ')} · ${l.visitDays} visit-day${if (l.visitDays == 1) "" else "s"} · since ${dayLabel(l.discoveredDay)}", style = MaterialTheme.typography.bodyMedium)
+            }
+            SectionTitle("Settlements")
         }
         items(list, key = { it.areaId }) { s ->
             Card(Modifier.fillMaxWidth()) {

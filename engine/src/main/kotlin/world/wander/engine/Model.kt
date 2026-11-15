@@ -59,6 +59,9 @@ data class WorldInput(
     val goalLocked: Boolean = false,
     /** Optional fixed goal when locked; null = whatever the goal had adapted to. */
     val lockedGoal: Int? = null,
+    val landmarks: Map<String, LandmarkInfo> = emptyMap(),
+    val landmarkVisits: List<LandmarkVisit> = emptyList(),
+    val trodden: List<TroddenCell> = emptyList(),
 )
 
 /** All tuning numbers in one place. Changing them and replaying rebuilds the world. */
@@ -99,6 +102,8 @@ data class WorldParams(
     val capitalMinFloorTier: Int = Tier.VILLAGE.ordinal,
     /** Wear needed for each visual road level (trail, path, cobble, road, avenue). */
     val wearLevels: List<Double> = listOf(1.0, 3.0, 10.0, 30.0, 100.0),
+    /** Seconds inside a named area on one day to discover it. */
+    val landmarkSeconds: Double = 60.0,
 )
 
 // ---- Derived state ----
@@ -147,8 +152,19 @@ sealed class WorldEvent {
     data class Founded(override val day: Int, val areaId: String, val capital: Boolean) : WorldEvent()
     data class TierChanged(override val day: Int, val areaId: String, val from: Tier, val to: Tier) : WorldEvent()
     data class RoadsCharted(override val day: Int, val edgeIds: List<String>) : WorldEvent()
+    data class LandmarkDiscovered(override val day: Int, val landmarkId: String) : WorldEvent()
     data class GoalChanged(override val day: Int, val from: Int, val to: Int) : WorldEvent()
 }
+
+data class LandmarkState(
+    val id: String,
+    val name: String,
+    val kind: String,
+    val areaM2: Double,
+    val discoveredDay: Int,
+    val visitDays: Int,
+    val lastVisitDay: Int,
+)
 
 data class DaySummary(
     val day: Int,
@@ -169,7 +185,17 @@ data class WorldState(
     val events: List<WorldEvent>,
     val days: Map<Int, DaySummary>,
     val areaNames: Map<String, String>,
+    val landmarks: List<LandmarkState> = emptyList(),
+    /** Wear on your own paths, per fine cell. */
+    val troddenWear: Map<String, Double> = emptyMap(),
 ) {
+    /** Visual level (1–5) for a wear value, same scale as roads. */
+    fun levelFor(wear: Double, levels: List<Double> = WorldParams().wearLevels): Int {
+        var level = 1
+        levels.forEachIndexed { i, need -> if (wear >= need) level = i + 1 }
+        return level
+    }
+
     fun eventsOn(day: Int) = events.filter { it.day == day }
     val discoveredCount get() = edges.values.count { it.discovered }
 }

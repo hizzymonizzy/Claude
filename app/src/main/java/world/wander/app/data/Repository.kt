@@ -23,6 +23,10 @@ import world.wander.engine.EdgeCoverage
 import world.wander.engine.EdgeState
 import world.wander.engine.GraphEdge
 import world.wander.engine.LatLng
+import world.wander.engine.Landmark
+import world.wander.engine.LandmarkInfo
+import world.wander.engine.LandmarkVisit
+import world.wander.engine.TroddenCell
 import world.wander.engine.Mode
 import world.wander.engine.Place
 import world.wander.engine.TrackPoint
@@ -37,6 +41,10 @@ data class MapLayers(
     val discovered: List<Pair<EdgeEntity, EdgeState>>,
     val peek: List<EdgeEntity>,
     val trails: List<List<LatLng>> = emptyList(),
+    /** Your own paths, with a wear level 1–5. */
+    val wild: List<Pair<List<LatLng>, Int>> = emptyList(),
+    /** Discovered named areas: name, rings, area. */
+    val landmarks: List<Triple<String, List<List<LatLng>>, Double>> = emptyList(),
 )
 
 /** Everything the UI, the tracking service and the daily worker share. */
@@ -81,6 +89,26 @@ class Repository(context: Context) {
 
     private suspend fun ensureTiles(tiles: Collection<String>): Boolean {
         for (tile in tiles) {
+            if (dao.tile(tile) != null && dao.landmarkTile(tile) == null) {
+                val retry = tileRetry["lm:$tile"]
+                if (retry != null && System.currentTimeMillis() < retry.first) return false
+                try {
+                    val lms = Overpass.fetchLandmarks(tile)
+                    dao.upsertLandmarks(lms)
+                    dao.upsertLandmarkTile(LandmarkTileEntity(tile, System.currentTimeMillis(), lms.size))
+                    log("geo", "Fetched ${lms.size} named places for tile $tile")
+                    tileRetry.remove("lm:$tile")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    val wait = ((retry?.second ?: 30_000L) * 2).coerceAtMost(30 * 60_000L)
+                    tileRetry["lm:$tile"] = (System.currentTimeMillis() + wait) to wait
+                    log("geo", "Named places for $tile failed (${e.message?.lineSequence()?.firstOrNull()}); retrying in ${wait / 60_000} min")
+                    return false
+                }
+                delay(1_000)
+                continue
+            }
             if (dao.tile(tile) != null) continue
             val retry = tileRetry[tile]
             if (retry != null && System.currentTimeMillis() < retry.first) return false
@@ -101,6 +129,8 @@ class Repository(context: Context) {
             }
             delay(1_000) // be polite to the public Overpass server
         }
+        // Road tiles just downloaded still need their named places.
+        if (tiles.any { dao.landmarkTile(it) == null }) return ensureTiles(tiles)
         return true
     }
 
@@ -176,9 +206,16 @@ class Repository(context: Context) {
                     GraphEdge(it.id, it.name, it.startNode, it.endNode, Overpass.decode(it.geometry))
                 }
                 val hint = seg.modeHint?.let { Mode.valueOf(it) }
-                val r = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph)
+                val landmarks = dao.landmarksInTiles(tiles.toList()).distinctBy { it.id }.mapNotNull {
+                    try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
+                }
+                val r = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks)
                 db.runInTransaction {
                     dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
+                    dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id)
+                    dao.insertWild(r.wildTrails.map { WildTrailEntity(segmentId = seg.id, day = it.day, geometry = Overpass.encode(it.points)) })
+                    dao.insertTrodden(r.trodden.map { TroddenEntity(segmentId = seg.id, cell = it.cell, day = it.day) })
+                    dao.insertVisits(r.landmarkVisits.map { LandmarkVisitEntity(segmentId = seg.id, landmarkId = it.landmarkId, day = it.day, seconds = it.seconds) })
                     dao.insertTrails(r.trails.filter { it.points.size >= 2 }.map { TrailEntity(segmentId = seg.id, day = it.day, geometry = Overpass.encode(it.points)) })
                     dao.insertCoverage(r.coverage.map { EdgeCoverageEntity(segmentId = seg.id, edgeId = it.edgeId, day = it.day, fromM = it.fromM, toM = it.toM, mode = it.mode.name) })
                     dao.insertPresence(r.presence.map { CellPresenceEntity(segmentId = seg.id, cell = it.cell, day = it.day, seconds = it.seconds, mode = it.mode.name) })
@@ -206,6 +243,8 @@ class Repository(context: Context) {
         val edgeInfos = edges.mapValues { (_, e) ->
             GraphEdge(e.id, e.name, e.startNode, e.endNode, Overpass.decode(e.geometry)).toInfo()
         }
+        val visits = dao.allVisits()
+        val landmarkEntities = visits.map { it.landmarkId }.distinct().chunked(500).flatMap { dao.landmarksById(it) }.associateBy { it.id }
         val rest = prefs.restPeriods.map { (a, b) -> a..(if (b < 0) today else b) }
         val input = WorldInput(
             startDay = prefs.startDay,
@@ -219,6 +258,9 @@ class Repository(context: Context) {
             areas = dao.allAreas().associate { it.id to AreaInfo(it.id, it.name, it.placeType) },
             restPeriods = rest,
             goalLocked = prefs.goalLocked,
+            landmarks = landmarkEntities.mapValues { (_, l) -> LandmarkInfo(l.id, l.name, l.kind, l.areaM2) },
+            landmarkVisits = visits.map { LandmarkVisit(it.landmarkId, it.day, it.seconds) },
+            trodden = dao.allTrodden().map { TroddenCell(it.cell, it.day) },
         )
         val state = engine.build(input, today)
         // Freeze fallback names the first time an unnamed area earns one.
@@ -230,7 +272,15 @@ class Repository(context: Context) {
         val discoveredIds = discovered.map { it.id }.toSet()
         val peek = nodes.chunked(400).flatMap { dao.edgesTouching(it) }.filter { it.id !in discoveredIds }.distinctBy { it.id }
         val trails = dao.allTrails().map { Overpass.decode(it.geometry) }
-        _layers.value = MapLayers(discoveredEntities, peek, trails)
+        val wild = dao.allWild().map { w ->
+            val pts = Overpass.decode(w.geometry)
+            val wear = pts.map { state.troddenWear[Cells.cellAt(it.lat, it.lng, Cells.TRODDEN_RES)] ?: 1.0 }.average()
+            pts to state.levelFor(wear)
+        }
+        val shownLandmarks = state.landmarks.mapNotNull { l ->
+            landmarkEntities[l.id]?.let { Triple(l.name, Overpass.decodeRings(it.geometry), l.areaM2) }
+        }
+        _layers.value = MapLayers(discoveredEntities, peek, trails, wild, shownLandmarks)
         _world.value = state
         state
     }
@@ -268,7 +318,8 @@ class Repository(context: Context) {
             appendLine()
             appendLine("== World ==")
             if (w != null) {
-                appendLine("Roads charted: ${w.discoveredCount} · cells known: ${w.cellFamiliarity.size}")
+                appendLine("Roads charted: ${w.discoveredCount} · cells known: ${w.cellFamiliarity.size} · own-path cells: ${w.troddenWear.size}")
+                appendLine("Places discovered: " + w.landmarks.joinToString { "${it.name} (${it.kind}, ${it.visitDays}d)" }.ifEmpty { "none" })
                 appendLine("Goal: %.0f / %d min (ratio %.2f, %s)".format(w.goal.trailing7Minutes, w.goal.goal, w.goal.ratio, w.goal.protection))
                 for (st in w.settlements) appendLine("  ${st.name} [${st.areaId}] ${st.tier} (peak ${st.peakTier}) D=%.1f days=${st.areaDays} cells=${st.exploredCells}".format(st.development))
                 appendLine("Last 14 days (intensity min · walked km):")
