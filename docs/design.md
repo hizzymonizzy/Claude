@@ -1,6 +1,7 @@
-# Design Doc: A World Built by Walking
+# Wander World: Design Doc
 
-> **Status:** Draft v0.1. Builds on [`concept.md`](concept.md).
+> **Status:** Draft v0.2. Builds on [`concept.md`](concept.md).
+> **Target devices:** Pixel Fold 10 + Pixel Watch 4.
 > **Scope:** Phase 1 (core loop) in full detail. Phases 2–4 at the level of how each system works.
 > **Convention:** Every number is a **starting value** and lives in one tuning file (§3.3). Items marked **🔶 Decision** need the owner's call. Items marked **🧪 Spike** need a proof-of-concept before we commit.
 
@@ -32,7 +33,10 @@
 | D4 | **Areas = neighborhoods** from OSM place nodes; falls back to H3 res-7 parents. | Gives real names; the fallback covers places with no neighborhood data. |
 | D5 | **Daily tick.** Decay, restoration, goal checks and the dispatch run once per day; exploration and familiarity update live. | Simple, predictable, testable; matches the once-a-day rhythm. |
 | D6 | **Two data sources, two jobs.** Health Connect drives *protection* (intensity minutes). The app's own GPS drives *growth* (exploration, familiarity, materials). | Concept §3: indoor exercise protects the world but doesn't build it. |
-| D7 | **MapLibre for both map styles**, drawing our own GeoJSON layers. | One rendering stack; full style control; no Google Maps terms or costs. |
+| D7 | **MapLibre for the real-map view**, drawing our own GeoJSON layers. | Full style control for the practical view; no Google Maps terms or costs. |
+| D8 | **A 3D engine for the world view**: a tilt-shift realistic diorama on H3 hex tiles (§10.3). | A realistic miniature look needs real 3D, lighting and depth of field, which a map renderer can't do. Our hex grid doubles as the board for a civilization-style look. |
+| D9 | **Two GPS sources:** the phone's own capture and watch workouts imported from Health Connect (with their routes). | The Pixel Watch 4 records GPS on its own, so runs without the phone still build the world. |
+| D10 | **Vehicles and flights never reveal roads.** They create **waystones** where you first set foot (§9). | Exploration stays earned on foot; travel still connects the world. |
 
 ---
 
@@ -65,7 +69,8 @@
 - **`health`**: reads Health Connect; produces **daily intensity metrics**.
 - **`world-engine`**: pure Kotlin, no Android dependencies. `(observations, metrics, params, clock) → world state + world events`. Fully unit-testable and replayable.
 - **`dispatch`**: turns a day's world events into the daily dispatch text.
-- **`app`**: UI, rendering, permissions, WorkManager scheduling.
+- **`app`**: UI, real-map rendering, permissions, WorkManager scheduling. Adaptive layouts for the Fold (§10.5).
+- **`world-render`**: the 3D world view (§10.3), embedded in the app and fed by world state.
 
 ### 3.2 Data flow
 
@@ -91,6 +96,7 @@ All numbers live in a single `WorldParams` data class (versioned). Changing para
 | Stop capture | `STILL` for ≥ 2 min, or `IN_VEHICLE` entered → stop GPS, close the segment |
 | Manual sessions | "Start a walk" button forces capture on, for intentional sessions |
 | Coarse presence | Low-power passive/balanced location, a few fixes per day, used **only** for region and travel detection (§9) |
+| Watch workouts | Pixel Watch 4 GPS workouts sync (via the Fitbit app) to Health Connect as `ExerciseSessionRecord` with an exercise route. Imported in the daily sync and run through the same filter → map matching pipeline. If a watch route and a phone segment overlap in time, keep the denser track. |
 
 > **🧪 Spike S1 (highest risk): background capture on Android 14+.** Android limits starting a location foreground service from the background. We must verify, on the owner's actual phone, that an activity-transition broadcast can reliably start capture. Fallbacks, in order:
 > (a) A long-running, low-priority foreground service during waking hours, idling cheaply until movement is detected.
@@ -101,7 +107,7 @@ All numbers live in a single `WorldParams` data class (versioned). Changing para
 ### 4.2 Filtering
 
 - Drop fixes with reported accuracy > 30 m.
-- Speed sanity: sustained > 7 m/s → treat as vehicle; those points never count toward exploration or familiarity. Cycling (`ON_BICYCLE`) counts toward familiarity and materials at **50%** weight and does reveal roads. **🔶 Decision:** confirm cycling should count at all.
+- Speed sanity: sustained > 7 m/s → treat as vehicle; those points never count toward exploration or familiarity. Cycling (`ON_BICYCLE`) is **for discovery, not establishing**: it reveals roads at full credit but adds little to settlements (weights in §7.1).
 - Split a track into segments where there's a gap of more than 60 s or 100 m.
 - Smooth with a simple Kalman filter before map matching.
 
@@ -117,7 +123,7 @@ All numbers live in a single `WorldParams` data class (versioned). Changing para
 ### 4.4 Discovering an edge
 
 - An edge is **discovered** when its total covered length (combined over all visits) reaches **60% of its length, or 150 m for long edges**, whichever is less.
-- An edge's **wear** goes up by 1 per **distinct day** it's covered by ≥ 50% (or ≥ 150 m).
+- An edge's **wear** goes up by 1 per **distinct day** it's covered by ≥ 50% (or ≥ 150 m) on foot; 0.25 by bike.
 
 ### 4.5 Observations written
 
@@ -185,7 +191,8 @@ Each res-9 cell gets a main biome from land use covering ≥ 30% of the cell, ot
 - **Intensity minutes = moderate + 2 × vigorous.**
 - **Deduplication:** use Health Connect's aggregate APIs, which apply the user's data-source priority settings.
 - The app does **not** write its own sessions to Health Connect in v1, to avoid double counting.
-- **🧪 Spike S3:** check what the owner's phone and any watch actually write to Health Connect. **🔶 Decision:** which phone and wearable do you use?
+- **Pixel Watch 4:** its activity data goes through the Fitbit app. Fitbit's **Active Zone Minutes** are heart-rate based and count cardio and peak zones twice, which is the same idea as our moderate + 2 × vigorous. If AZM reaches Health Connect as intensity records, we use it directly; heart rate makes it more accurate than step-based estimates.
+- **🧪 Spike S3:** confirm what the Pixel Watch 4 / Fitbit app writes to Health Connect (intensity records, exercise sessions, **exercise routes**) and which read permissions the routes need.
 
 ### 6.2 The goal
 
@@ -214,6 +221,14 @@ Each res-9 cell gets a main biome from land use covering ≥ 30% of the cell, ot
   `ΔD = 1.0 + 0.5 × min(1, (minutes − 5) / 30)`
 
   So each day is worth 1.0–1.5. Frequency dominates; spending longer in one day adds at most 50%.
+
+- **Mode weights** (discovery vs. establishing):
+
+  | Mode | Reveals roads | Wear | Familiarity / ΔD | Materials | Counts toward founding a camp |
+  |---|---|---|---|---|---|
+  | Walk / run | Full | 1.0 | 1.0 | 1.0 | Yes |
+  | Cycle | Full | 0.25 | 0.25 | 0.5 | No: only on-foot days found settlements |
+  | Vehicle / flight | Never | — | — | — | No: creates waystones only (§9) |
 
 ### 7.2 Founding
 
@@ -304,17 +319,22 @@ if 1.0 < r ≤ 1.5:
 
 ---
 
-## 9. Regions, travel and dormancy (Phase 2)
+## 9. Regions, waystones and dormancy (Phase 2)
 
 ### 9.1 Regions
 - A **region** is a cluster of areas. The home region is created at onboarding.
 - A **new region** is created when coarse presence stays > 100 km from every existing region's centroid for ≥ 6 hours (so passing through an airport doesn't count).
 - Areas join the region whose centroid is nearest (within 100 km).
 
-### 9.2 Travel routes
-- A route opens when presence moves from region A to region B within 48 hours.
-- **Route type:** < 800 km → **road**; ≥ 800 km → **sea lane** if either region is coastal, else **air route**. These are cosmetic and only affect how the route is drawn and which projects are possible. **🔶 Decision:** fine as is, or should every long route be a sea lane, for a consistent "islands" feel?
-- Repeat trips strengthen a route (cosmetic: busier shipping).
+### 9.2 Waystones
+Vehicles and flights **never reveal roads**. Instead, travel means **finding waystones**: portal stones that appear where you first set foot after the trip.
+
+- **Placement:** after a vehicle segment (`IN_VEHICLE`, sustained > 7 m/s) or a flight (a large position jump with no samples in between), the first on-foot fix becomes a waystone candidate. It's placed if that spot is **≥ 2 km from any discovered edge** (not reachable through your explored roads). Otherwise you've just returned to known ground and nothing is created.
+- **Two kinds:**
+  - **Great waystones** sit between regions. Finding one in a new region creates the region and a portal link back to the region you came from. These portal links are what connect the islands of the world view.
+  - **Lesser waystones** sit within a region. They mark a separate **pocket** of explored ground (e.g. a park you drive to). Pockets connect to the rest of the region **only by walking** between them: once a chain of discovered edges joins two pockets, they merge and the waystone becomes a landmark.
+- **Repeat trips** brighten a waystone and its portal link (cosmetic), and the dispatch notes it ("The Honolulu stone hums again").
+- **Trade:** portal links connect regional trade networks (§12.2). Inside a region, trade flows only along walked roads, which gives you a reason to walk the gap between pockets.
 
 ### 9.3 Dormancy
 - Any region other than home with no presence for **14 days** becomes dormant (decay ×0.1).
@@ -342,14 +362,44 @@ Layers, bottom to top:
 6. **You:** current position and the live track.
 
 ### 10.3 World view (Phase 2)
-- **Landmasses:** each region's explored cells plus a 1-cell ring, merged and smoothed into a coastline.
-- **Layout between regions:** start from the capital; place each region at its **real compass direction** at a distance of `k × ln(1 + d / 100 km)`; then gently push overlapping regions apart while keeping their direction within ±20°. The layout is recalculated only when a region is added, with an animated transition.
-- **Inside a region:** real geometry, re-styled (roads by wear, settlements as illustrated tiles, biome textures on cells).
-- **Zoom levels:** world (islands and routes), region (settlements and roads), settlement (close-up illustration).
 
-> **🔶 Decision: visual style.** Recommendation: **hand-drawn cartography**, ink and watercolor in the style of an old explorer's chart. It fits "charting roads," "the Atlas" and parchment fog, it works well for a small team (2D, tile-based assets), and both map views can share it. Alternatives: cozy low-poly 3D (more appealing, much more expensive to make) or flat modern illustration.
+**Style: civilization-style world development, tilt-shift realistic.** The world reads as a living miniature: realistic materials and lighting, viewed from an oblique, overhead camera, with shallow depth of field so it looks like a model on a table.
 
-### 10.4 Notifications
+**The board is the hex grid.** Each H3 res-9 cell is a terrain tile, which gives the world a civilization-game board for free:
+- **Terrain** comes from the cell's biome (§5.4) and real elevation (gentle relief): woods, fields, highlands, coast, urban ground.
+- **Roads** are drawn across tiles along their real paths, styled by wear: trodden dirt → gravel → cobbles → paved → lamplit avenue.
+- **Settlements** occupy their center tile and **spread onto neighboring tiles as they grow**: Camp and Hamlet 1 tile, Village + 1 ring, Town + 2 rings, City and Metropolis + 3 rings, built with buildings that fit the biome and region.
+- **Ruins** keep their footprint: broken walls and overgrown foundations at the peak size.
+- **Liveliness** shows as tiny figures, carts, smoke from chimneys and lit windows.
+- **Fog** is low cloud and mist over unexplored tiles; the peek-ahead edges show as faint tracks disappearing into the mist.
+- **Waystones** are standing stones that glow; portal links are arcs of light between islands.
+
+**Layout:**
+- **Landmasses:** each region's explored tiles plus a 1-tile ring, surrounded by sea.
+- **Between regions:** place each region at its **real compass direction** from the capital, at a distance of `k × ln(1 + d / 100 km)`; then gently push overlapping regions apart while keeping their direction within ±20°. Recalculated only when a region is added, with an animated transition.
+- **Zoom levels:** world (islands and portal links), region (settlements and roads), settlement (close-up of the miniature).
+
+**Look recipe:** physically based materials, warm directional sunlight with soft shadows, a slightly raised camera angle (~35–50°), **depth-of-field blur** focused on the center of the screen, a little extra saturation and contrast. Optional time of day matching your local time.
+
+**Engine:** this needs a real 3D renderer embedded in the Android app.
+| Option | Pros | Cons |
+|---|---|---|
+| **Godot 4 (embedded as an Android library)** (recommended) | Full scene editor for building assets and tiles, built-in depth of field, free and open source, small enough to embed | Bridge between Kotlin and Godot to build; extra app size |
+| Filament (Google's renderer) | Very light, native to Android, strong materials and depth of field | Only a renderer: terrain, instancing, scene tools all written by hand |
+| Unity as a Library | Mature tools and asset store | Heavy, licensing costs, awkward to embed |
+
+> **🧪 Spike S4:** embed Godot in a Compose app on the Pixel Fold 10. Render a 2,000-tile hex region with settlements and depth of field at 60 fps, feeding it world state from Kotlin.
+
+**Assets** are the biggest cost of this style. Plan: a modular kit (terrain tiles per biome, road pieces per wear level, building sets per biome × tier, ruins variants, props), starting from licensed realistic asset packs and adjusted for a consistent look. Phase 2 starts with one biome set (temperate, home) and adds others as regions appear.
+
+### 10.4 Pixel Fold layouts
+- **Folded (phone):** single pane; the map fills the screen with the dispatch card on top.
+- **Unfolded (tablet):** map or world view on the large pane, with a side panel for the dispatch, Atlas or settlement card. Exploring the world is best unfolded.
+- **Half-folded (tabletop):** world view on the top half, controls and the dispatch on the bottom half.
+- Built with Compose window size classes; no fixed layouts.
+- **Later idea:** a Pixel Watch tile showing weekly goal progress and protection state.
+
+### 10.5 Notifications
 - **One per day:** the dispatch, at the user's chosen time (default 07:30).
 - **Required by Android:** the tracking foreground-service notification while capturing. Kept minimal ("Charting your walk · 1.2 km").
 - **Nothing else.** No nudges, no reminders, no "you're about to lose…" messages.
@@ -383,7 +433,7 @@ Layers, bottom to top:
 - Gold and materials come from movement only. Trade creates neither.
 
 ### 12.2 Trade network
-- A graph of settlements connected by worn roads (inside a region, any path of edges with W ≥ 3 between two settlements) and travel routes (between regions).
+- A graph of settlements connected by worn roads (inside a region, any path of edges with W ≥ 3 between two settlements) and portal links between great waystones (between regions).
 - **Access:** a settlement's **goods** (its biome materials plus regional specialties) can be bought with gold at any settlement on the same connected network.
 - **Prosperity** (separate from tier): `f(tier, connected settlements, distinct goods reachable)`. It drives visuals, project variety and townspeople flavor. **It never raises tier.**
 
@@ -397,7 +447,8 @@ Layers, bottom to top:
 | Market square | Village | 150 g, 20 stone | Network goods reach +1 hop |
 | Bridge | Village | 120 g, 30 timber | Connects networks across water edges |
 | Inn | Town | 200 g, 40 brick | Travelers in dispatches; +liveliness ceiling |
-| Pier / Harbor | Town, coastal | 200 g, 40 timber | Enables sea lane visuals and goods |
+| Pier / Harbor | Town, coastal | 200 g, 40 timber | Coastal goods; harbor visuals |
+| Waystone shrine | Village with a waystone | 250 g, 50 stone | Doubles goods reach through that waystone's portal links |
 | Lighthouse | Town, coastal | 300 g, 60 stone | Landmark |
 | Walls | Town | 300 g, 80 stone | Cosmetic |
 | Cathedral / Observatory | City | 800 g, mixed + specialty goods | Landmark |
@@ -426,6 +477,8 @@ Automatic on milestones: first 5K / 10K / half-marathon distance in one outdoor 
 | `cell_presence` | h3, day, movingSeconds, mode |
 | `elevation_gain` | h3, day, meters |
 | `region_presence` | ts, lat, lng (coarse) |
+| `vehicle_segment` | startTs, endTs, kind (vehicle/flight), endLat, endLng |
+| `watch_route` | hcSessionId, startTs, endTs, imported (bool) |
 | `daily_intensity` | day, moderateMin, vigorousMin, source |
 
 **Geo cache**
@@ -444,7 +497,8 @@ Automatic on milestones: first 5K / 10K / half-marathon distance in one outdoor 
 | `cell_state` | h3, familiarity F |
 | `settlement` | areaId, regionId, D, peakD, tier, peakTier, foundedDay, lastAreaDay, position |
 | `region` | regionId, centroid, isHome, dormant, layoutX/Y |
-| `route` | regionA, regionB, type, trips |
+| `waystone` | id, h3, regionId, kind (great/lesser), foundDay, trips, merged (bool) |
+| `portal_link` | waystoneA, waystoneB, trips |
 | `goal_state` | weekStart, goal, locked, minutes |
 | `world_event` | id, day, type, payload (feeds dispatch and history) |
 
@@ -471,7 +525,7 @@ Automatic on milestones: first 5K / 10K / half-marathon distance in one outdoor 
 | `ACTIVITY_RECOGNITION` | Movement detection | Onboarding |
 | `FOREGROUND_SERVICE_LOCATION` | Capture service | Manifest |
 | `POST_NOTIFICATIONS` | Dispatch and capture notification | Onboarding |
-| Health Connect reads: activity intensity, exercise, steps, steps cadence | Weekly goal | Onboarding (verify exact permission names in S3) |
+| Health Connect reads: activity intensity, exercise, steps, steps cadence, **exercise routes** | Weekly goal; watch workouts build the world | Onboarding (verify exact permission names in S3) |
 
 ---
 
@@ -492,26 +546,32 @@ Automatic on milestones: first 5K / 10K / half-marathon distance in one outdoor 
 |---|---|---|
 | S1 | Background capture triggered by activity detection on Android 14+ | Reliably captures ≥ 90% of real walks over 1 week with ≤ 5% battery/day |
 | S2 | On-device HMM map matching | ≥ 90% edge accuracy on 10 test walks |
-| S3 | Health Connect intensity data on the owner's devices | A daily intensity number that matches the source app within 10% |
+| S3 | Health Connect data from the Pixel Watch 4 (intensity, sessions, routes) | A daily intensity number within 10% of the Fitbit app; watch routes import and match |
+| S4 | Godot embedded on the Pixel Fold 10 (§10.3) | 2,000-tile region with settlements and depth of field at 60 fps, driven from Kotlin (needed before Phase 2) |
 
 ### 18.2 Phase 1 milestones
 1. **M1 Capture:** detection, foreground service, filtering, segments, raw storage, live track on a plain map.
 2. **M2 Geo:** Overpass fetch and cache, road graph, areas, biomes, map matching, edge coverage.
 3. **M3 Engine:** observations → discovery, wear, familiarity, founding and tiers; replay; unit tests.
 4. **M4 Real-map view:** fog, peek ahead, worn roads, names, settlements.
-5. **M5 Health + protection:** Health Connect sync, goal, decay, restoration, rest mode, grace period, goal screen.
+5. **M5 Health + protection:** Health Connect sync, watch route import, goal, decay, restoration, rest mode, grace period, goal screen.
 6. **M6 Dispatch + Atlas:** daily tick scheduling, templated dispatch, notification, archive, Atlas and settlement cards.
 7. **M7 Polish + field test:** onboarding, permission flows, encrypted backup, battery tuning, then live with it for 4 weeks and tune.
 
 ---
 
-## 19. Decisions needed
+## 19. Decisions
 
-| # | Question | Recommendation |
+| # | Question | Decision |
 |---|---|---|
-| Q1 | Which phone and wearable do you use? (affects S3) | — |
-| Q2 | Visual style | Hand-drawn cartography (§10.3) |
-| Q3 | Does cycling count? | Yes for revealing roads; 50% weight for familiarity and materials (§4.2) |
-| Q4 | Long-distance route types | Road / sea lane / air by distance and coast (§9.2) |
-| Q5 | Dispatch time | 07:30 default, user-adjustable |
-| Q6 | Working title | Open |
+| Q1 | Devices | Pixel Fold 10 + Pixel Watch 4 (§6.1, §10.4) |
+| Q2 | Visual style | Civilization-style world development, tilt-shift realistic, on hex tiles (§10.3) |
+| Q3 | Cycling | Counts for discovery; minimal establishing; can't found settlements (§7.1) |
+| Q4 | Long-distance travel | Vehicles and flights reveal nothing; they create waystones / portals (§9.2) |
+| Q5 | Dispatch time | 07:30 default, adjustable |
+| Q6 | Title | **Wander World** |
+
+**Still open**
+- Engine choice confirmed by Spike S4 (Godot recommended).
+- Source and budget for 3D assets.
+- Whether the real-map view gets a light touch of the diorama style (e.g. settlement miniatures as map pins).

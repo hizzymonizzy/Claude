@@ -1,6 +1,6 @@
-# Concept: A World Built by Walking
+# Wander World: Concept
 
-> **Working title:** TBD
+> **Title:** Wander World
 > **Status:** Concept agreed. Next step is the design doc.
 > **Platform:** Android (native)
 > **Audience:** One player. Solo, with no competition.
@@ -93,7 +93,7 @@ Wear counts separate days, not laps, so walking the same block repeatedly in one
 The **map is the home screen**, with a toggle between:
 
 - **Real map:** actual street layout, fog overlay, worn trails, and hints at the fog's edge. Useful for planning a walk.
-- **World view:** the stylized civilization with settlements, trade routes, ruins, biomes and islands. For browsing what you've built.
+- **World view:** a civilization-style, tilt-shift realistic miniature of your world on hex tiles, with settlements, trade, ruins, biomes, islands and waystones. For browsing what you've built.
 
 The daily dispatch appears as a card on the map, one tap away. It never blocks opening the app and looking around.
 
@@ -184,7 +184,7 @@ Extra minutes **restore**; they never **store** protection for later. Effort mak
 ### 7.1 Regions as islands
 - Settlements group into **regions** by geography (starting value: activity more than about 100 km from any existing region starts a new one).
 - **Inside a region**, the real layout is kept.
-- **Between regions**, empty distance is compressed. The world view shows regions as separate landmasses, roughly keeping their compass direction from the capital, linked by your trips.
+- **Between regions**, empty distance is compressed. The world view shows regions as separate landmasses, roughly keeping their compass direction from the capital, linked by waystones (see §8.2).
 - So the home region is the home continent, Denver becomes a mountain region, and Honolulu literally becomes an island.
 
 ### 7.2 Dormancy
@@ -219,7 +219,7 @@ This gives you a reason to vary your routes: need stone, take the hill loop.
 
 ### 8.2 Infrastructure and trade
 - **Walking lays roads** inside a region (§4.2).
-- **Travel opens long-distance routes** between regions: a road for drivable distances, a sea lane or air route for longer ones, opened automatically when you physically travel between regions.
+- **Vehicles and flights never reveal roads.** Instead, arriving somewhere by car or plane means **finding a waystone**: a portal stone where you first set foot. Waystones between regions link them into one network; within a region, they mark separate pockets of explored ground, which you can join up only by walking between them.
 - **Trade moves along your network.** Connected settlements trade with each other.
 - **Trade creates prosperity and access, never gold.**
   - *Prosperity* makes towns visibly thrive (busier markets, richer buildings, better project proposals).
@@ -275,7 +275,7 @@ Once a day (morning), a short summary of what happened since the last one:
 | Area | Approach |
 |---|---|
 | Language / UI | Kotlin, Jetpack Compose |
-| Map rendering | MapLibre Native for Android with custom styles for both map views |
+| Map rendering | Real map: MapLibre Native. World view: a 3D engine with a tilt-shift diorama look (see design doc) |
 | Map data | OpenStreetMap: vector tiles (e.g. Protomaps/PMTiles or a hosted provider) plus place names, land use and road geometry |
 | Elevation | Open elevation data (for hills and the stone biome) |
 | Spatial grid | Uber H3 (`h3-java`); about resolution 9 (~0.1 km²) for familiarity cells, grouped into neighborhoods via OSM boundaries |
@@ -326,7 +326,7 @@ Once a day (morning), a short summary of what happened since the last one:
 - Visual style for the world view (illustrated, low-poly, hand-drawn cartography, …).
 - Peek-ahead radius: one block, or based on distance?
 - How detailed the gold and materials amounts are, and what the full project catalog is.
-- How travel between regions is detected (location jumps vs. Health Connect / activity signals) and how route types are chosen.
+- How vehicle and flight trips are detected so waystones are placed correctly.
 - Offline behavior and how much map data to cache.
 - Backup / device migration story.
 
