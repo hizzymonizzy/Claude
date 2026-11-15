@@ -409,7 +409,7 @@ Layers, bottom to top:
 ## 11. The daily dispatch
 
 ### 11.1 Generation
-- Built from the previous day's **world events** in priority order: founding / tier-up → new region / route → charted roads (up to 3 named) → materials and arrivals (Phase 3+) → goal status → one proposal (Phase 3+) → townspeople note (Phase 4).
+- Built from the previous day's **world events** in priority order: founding / tier-up → new region / waystone → charted roads (up to 3 named) → materials and arrivals (Phase 3+) → goal status → one proposal (Phase 3+) → townspeople note (Phase 4).
 - **v1:** templates with several phrasings per event type, chosen by a seeded random draw. Tone rules: warm, observational, no guilt-tripping, no exclamation marks about losses.
 - **Quiet days:** *"A quiet day. The world rests, and so can you."* Under `r < 0.8` it notes softly what's happening (*"Moss is creeping over the eastern camp."*) without blame.
 - **Later:** optional on-device LLM rewriting for variety. Not in v1.
