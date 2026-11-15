@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 // ---- Raw capture ----
@@ -68,6 +70,15 @@ data class DayMovementEntity(
     val day: Int,
     val footMeters: Double,
     val cycleMeters: Double,
+)
+
+/** The path actually walked (simplified), kept for good: fog clears along it. */
+@Entity(tableName = "trail", indices = [Index("segmentId")])
+data class TrailEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val day: Int,
+    val geometry: String,
 )
 
 @Entity(tableName = "daily_intensity")
@@ -151,6 +162,9 @@ interface WanderDao {
     @Query("SELECT * FROM edge_coverage") fun allCoverage(): List<EdgeCoverageEntity>
     @Query("SELECT * FROM cell_presence") fun allPresence(): List<CellPresenceEntity>
     @Query("SELECT * FROM day_movement") fun allMovement(): List<DayMovementEntity>
+    @Insert fun insertTrails(t: List<TrailEntity>)
+    @Query("DELETE FROM trail WHERE segmentId = :segmentId") fun deleteTrails(segmentId: Long)
+    @Query("SELECT * FROM trail") fun allTrails(): List<TrailEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertIntensity(d: List<DailyIntensityEntity>)
     @Query("SELECT * FROM daily_intensity") fun allIntensity(): List<DailyIntensityEntity>
 
@@ -187,15 +201,25 @@ interface WanderDao {
         SegmentEntity::class, TrackPointEntity::class, EdgeCoverageEntity::class, CellPresenceEntity::class,
         DayMovementEntity::class, DailyIntensityEntity::class, GeoTileEntity::class, EdgeEntity::class,
         PlaceEntity::class, CellAreaEntity::class, AreaEntity::class, DispatchEntity::class, DiagEntity::class,
+        TrailEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class WanderDb : RoomDatabase() {
     abstract fun dao(): WanderDao
 
     companion object {
+        /** v2 adds walked trails; existing walks are re-processed once so their trails exist too. */
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `trail` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `day` INTEGER NOT NULL, `geometry` TEXT NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_trail_segmentId` ON `trail` (`segmentId`)")
+                db.execSQL("UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL")
+            }
+        }
+
         fun create(context: Context): WanderDb =
-            Room.databaseBuilder(context, WanderDb::class.java, "wander.db").build()
+            Room.databaseBuilder(context, WanderDb::class.java, "wander.db").addMigrations(MIGRATION_1_2).build()
     }
 }

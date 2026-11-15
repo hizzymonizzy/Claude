@@ -10,8 +10,12 @@ data class TrackPoint(
     val accuracyM: Float,
 )
 
+data class Trail(val day: Int, val points: List<LatLng>)
+
 data class TrackResult(
     val coverage: List<EdgeCoverage>,
+    /** The path actually walked (usable fixes, simplified), one polyline per run, for clearing fog. */
+    val trails: List<Trail>,
     val presence: List<CellPresence>,
     val movement: List<DayMovement>,
     val keptPoints: Int,
@@ -75,10 +79,12 @@ class TrackProcessor(
         val movement = HashMap<Int, DoubleArray>()
         var kept = 0
         var matched = 0
+        val trails = mutableListOf<Trail>()
 
         for (run in runs) {
             kept += run.size
             val mode = modeHint ?: inferMode(run)
+            trails += Trail(dayOf(run.first().timeMs), simplify(run.map { LatLng(it.lat, it.lng) }, 4.0))
             // Cell time and distance, per leg.
             for (k in 1 until run.size) {
                 val a = run[k - 1]; val b = run[k]
@@ -99,12 +105,35 @@ class TrackProcessor(
         }
         return TrackResult(
             coverage = coverage,
+            trails = trails,
             presence = presence.map { (k, v) -> CellPresence(k.first, k.second, v, k.third) },
             movement = movement.map { (d, v) -> DayMovement(d, v[0], v[1]) },
             keptPoints = kept,
             droppedPoints = dropped,
             matchedPoints = matched,
         )
+    }
+
+    /** Douglas–Peucker simplification in local meters. */
+    private fun simplify(points: List<LatLng>, toleranceM: Double): List<LatLng> {
+        if (points.size < 3) return points
+        val proj = LocalProjection(points.first())
+        val xs = points.map { proj.x(it) }; val ys = points.map { proj.y(it) }
+        val keep = BooleanArray(points.size).also { it[0] = true; it[points.size - 1] = true }
+        val stack = ArrayDeque<Pair<Int, Int>>().apply { add(0 to points.size - 1) }
+        while (stack.isNotEmpty()) {
+            val (a, b) = stack.removeLast()
+            var maxD = 0.0; var idx = -1
+            val dx = xs[b] - xs[a]; val dy = ys[b] - ys[a]
+            val len = kotlin.math.hypot(dx, dy)
+            for (i in a + 1 until b) {
+                val d = if (len == 0.0) kotlin.math.hypot(xs[i] - xs[a], ys[i] - ys[a])
+                else kotlin.math.abs(dy * xs[i] - dx * ys[i] + xs[b] * ys[a] - ys[b] * xs[a]) / len
+                if (d > maxD) { maxD = d; idx = i }
+            }
+            if (idx >= 0 && maxD > toleranceM) { keep[idx] = true; stack.add(a to idx); stack.add(idx to b) }
+        }
+        return points.filterIndexed { i, _ -> keep[i] }
     }
 
     private fun inferMode(run: List<TrackPoint>): Mode {

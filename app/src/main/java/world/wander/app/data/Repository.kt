@@ -36,6 +36,7 @@ import java.time.ZoneId
 data class MapLayers(
     val discovered: List<Pair<EdgeEntity, EdgeState>>,
     val peek: List<EdgeEntity>,
+    val trails: List<List<LatLng>> = emptyList(),
 )
 
 /** Everything the UI, the tracking service and the daily worker share. */
@@ -90,13 +91,15 @@ class Repository(context: Context) {
                 dao.upsertTile(GeoTileEntity(tile, System.currentTimeMillis(), data.edges.size))
                 log("geo", "Fetched tile $tile: ${data.edges.size} road edges, ${data.places.size} places")
                 tileRetry.remove(tile)
-                delay(1_000) // be polite to the public Overpass server
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val wait = ((retry?.second ?: 30_000L) * 2).coerceAtMost(30 * 60_000L)
                 tileRetry[tile] = (System.currentTimeMillis() + wait) to wait
                 log("geo", "Tile $tile fetch failed (${e.message?.lineSequence()?.firstOrNull()}); retrying in ${wait / 60_000} min")
                 return false
             }
+            delay(1_000) // be polite to the public Overpass server
         }
         return true
     }
@@ -175,7 +178,8 @@ class Repository(context: Context) {
                 val hint = seg.modeHint?.let { Mode.valueOf(it) }
                 val r = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph)
                 db.runInTransaction {
-                    dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id)
+                    dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
+                    dao.insertTrails(r.trails.filter { it.points.size >= 2 }.map { TrailEntity(segmentId = seg.id, day = it.day, geometry = Overpass.encode(it.points)) })
                     dao.insertCoverage(r.coverage.map { EdgeCoverageEntity(segmentId = seg.id, edgeId = it.edgeId, day = it.day, fromM = it.fromM, toM = it.toM, mode = it.mode.name) })
                     dao.insertPresence(r.presence.map { CellPresenceEntity(segmentId = seg.id, cell = it.cell, day = it.day, seconds = it.seconds, mode = it.mode.name) })
                     dao.insertMovement(r.movement.map { DayMovementEntity(segmentId = seg.id, day = it.day, footMeters = it.footMeters, cycleMeters = it.cycleMeters) })
@@ -225,7 +229,8 @@ class Repository(context: Context) {
         val nodes = discoveredEntities.flatMap { listOf(it.first.startNode, it.first.endNode) }.distinct()
         val discoveredIds = discovered.map { it.id }.toSet()
         val peek = nodes.chunked(400).flatMap { dao.edgesTouching(it) }.filter { it.id !in discoveredIds }.distinctBy { it.id }
-        _layers.value = MapLayers(discoveredEntities, peek)
+        val trails = dao.allTrails().map { Overpass.decode(it.geometry) }
+        _layers.value = MapLayers(discoveredEntities, peek, trails)
         _world.value = state
         state
     }

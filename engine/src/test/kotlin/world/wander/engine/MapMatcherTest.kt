@@ -55,5 +55,9 @@ class MapMatcherTest {
         val walkedM = r.movement.sumOf { it.footMeters }
         assertTrue("walked $walkedM", walkedM in 180.0..220.0)
         assertTrue(r.presence.sumOf { it.seconds } in 130.0..150.0)
+        // The walked path is kept (simplified: a straight walk needs only its ends), the drive is not.
+        val trail = r.trails.single().points
+        assertTrue("trail ${trail.size}", trail.size in 2..4)
+        assertTrue(trail.all { Geo.distanceM(it, at(it.let { p -> proj.x(p) }, 2.0)) < 5 })
     }
 }

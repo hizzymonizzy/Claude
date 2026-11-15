@@ -21,6 +21,10 @@ import org.maplibre.geojson.Polygon as GeoPolygon
 object MapLayersBuilder {
     private val gf = GeometryFactory()
     private const val REVEAL_RADIUS_M = 40.0
+    /** How far fog clears either side of the path you actually walked. */
+    private const val TRAIL_RADIUS_M = 35.0
+    /** Fogged pockets smaller than this, fully enclosed by explored ground, are cleared too (≈ 2 hectares). */
+    private const val FILL_HOLES_UNDER_M2 = 20_000.0
 
     fun roads(layers: MapLayers): FeatureCollection = FeatureCollection.fromFeatures(
         layers.discovered.map { (e, s) ->
@@ -58,9 +62,10 @@ object MapLayersBuilder {
         val world = gf.createPolygon(
             arrayOf(Coordinate(-180.0, -85.0), Coordinate(180.0, -85.0), Coordinate(180.0, 85.0), Coordinate(-180.0, 85.0), Coordinate(-180.0, -85.0)),
         )
-        val revealed = layers.discovered.mapNotNull { (e, _) -> bufferedLatLng(Overpass.decode(e.geometry)) }
+        val revealed = layers.discovered.mapNotNull { (e, _) -> bufferedLatLng(Overpass.decode(e.geometry), REVEAL_RADIUS_M) } +
+            layers.trails.mapNotNull { bufferedLatLng(it, TRAIL_RADIUS_M) }
         val fog: Geometry = if (revealed.isEmpty()) world else try {
-            world.difference(UnaryUnionOp.union(revealed))
+            world.difference(fillSmallHoles(UnaryUnionOp.union(revealed)))
         } catch (_: Exception) { world }
         val polys = when (fog) {
             is Polygon -> listOf(fog)
@@ -70,12 +75,37 @@ object MapLayersBuilder {
         return FeatureCollection.fromFeatures(polys.map { Feature.fromGeometry(toGeo(it)) })
     }
 
-    /** Buffers a road in local meters, then returns the outline in lat/lng degrees. */
-    private fun bufferedLatLng(points: List<LatLng>): Geometry? {
+    /** Removes small fogged pockets enclosed by explored ground (e.g. the block inside a loop you walked). */
+    private fun fillSmallHoles(g: Geometry): Geometry {
+        fun fill(p: Polygon): Polygon {
+            val keep = (0 until p.numInteriorRing).map { p.getInteriorRingN(it) }.filter { ringAreaM2(it.coordinates) >= FILL_HOLES_UNDER_M2 }
+            return gf.createPolygon(p.exteriorRing as org.locationtech.jts.geom.LinearRing, keep.map { it as org.locationtech.jts.geom.LinearRing }.toTypedArray())
+        }
+        return when (g) {
+            is Polygon -> fill(g)
+            is MultiPolygon -> gf.createMultiPolygon((0 until g.numGeometries).map { fill(g.getGeometryN(it) as Polygon) }.toTypedArray())
+            else -> g
+        }
+    }
+
+    /** Area of a lng/lat ring in square meters (shoelace in a local projection). */
+    private fun ringAreaM2(coords: Array<Coordinate>): Double {
+        if (coords.size < 4) return 0.0
+        val proj = LocalProjection(LatLng(coords[0].y, coords[0].x))
+        var sum = 0.0
+        for (i in 0 until coords.size - 1) {
+            val a = LatLng(coords[i].y, coords[i].x); val b = LatLng(coords[i + 1].y, coords[i + 1].x)
+            sum += proj.x(a) * proj.y(b) - proj.x(b) * proj.y(a)
+        }
+        return kotlin.math.abs(sum) / 2
+    }
+
+    /** Buffers a line in local meters, then returns the outline in lat/lng degrees. */
+    private fun bufferedLatLng(points: List<LatLng>, radiusM: Double): Geometry? {
         if (points.size < 2) return null
         val proj = LocalProjection(points.first())
         val ls = gf.createLineString(points.map { Coordinate(proj.x(it), proj.y(it)) }.toTypedArray())
-        val buf = ls.buffer(REVEAL_RADIUS_M, 4)
+        val buf = ls.buffer(radiusM, 4)
         val coords = buf.coordinates
         if (buf !is Polygon) return null
         fun ring(r: org.locationtech.jts.geom.LinearRing) = gf.createLinearRing(
