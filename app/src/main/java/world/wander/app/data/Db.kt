@@ -166,6 +166,8 @@ interface WanderDao {
     @Query("SELECT * FROM cell_area WHERE cell = :cell") fun cellArea(cell: String): CellAreaEntity?
     @Insert(onConflict = OnConflictStrategy.IGNORE) fun insertCellArea(c: CellAreaEntity)
     @Query("SELECT * FROM cell_area") fun allCellAreas(): List<CellAreaEntity>
+    @Query("SELECT * FROM cell_area WHERE areaId LIKE 'r7:%'") fun fallbackCellAreas(): List<CellAreaEntity>
+    @Query("UPDATE cell_area SET areaId = :areaId WHERE cell = :cell") fun reassignCell(cell: String, areaId: String)
     @Insert(onConflict = OnConflictStrategy.IGNORE) fun insertArea(a: AreaEntity)
     @Query("UPDATE area SET name = :name WHERE id = :id AND name IS NULL") fun freezeAreaName(id: String, name: String)
     @Query("SELECT * FROM area") fun allAreas(): List<AreaEntity>
@@ -177,6 +179,7 @@ interface WanderDao {
     @Insert fun log(d: DiagEntity)
     @Query("SELECT * FROM diag_log ORDER BY id DESC LIMIT 300") fun diagnostics(): Flow<List<DiagEntity>>
     @Query("DELETE FROM diag_log WHERE timeMs < :beforeMs") fun pruneDiagnostics(beforeMs: Long)
+    @Query("SELECT * FROM diag_log ORDER BY id DESC LIMIT :limit") fun recentLogs(limit: Int): List<DiagEntity>
 }
 
 @Database(

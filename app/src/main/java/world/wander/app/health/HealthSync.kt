@@ -28,13 +28,15 @@ import java.time.ZoneId
  */
 class HealthSync(private val context: Context, private val dao: WanderDao, private val log: (String) -> Unit) {
 
-    val permissions: Set<String> = setOf(
-        HealthPermission.getReadPermission(ActivityIntensityRecord::class),
-        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
-        HealthPermission.getReadPermission(StepsRecord::class),
-        HealthPermission.PERMISSION_READ_EXERCISE_ROUTES,
-        HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND,
+    /** Each permission with a plain-language label, in the order shown in Settings. */
+    val permissionLabels: List<Pair<String, String>> = listOf(
+        HealthPermission.getReadPermission(ActivityIntensityRecord::class) to "Activity intensity (weekly goal)",
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class) to "Exercise sessions (find watch workouts)",
+        HealthPermission.PERMISSION_READ_EXERCISE_ROUTES to "Exercise routes (watch GPS) · needs \"Always allow\"",
+        HealthPermission.getReadPermission(StepsRecord::class) to "Steps (backup for intensity)",
+        HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND to "Read in background (morning dispatch)",
     )
+    val permissions: Set<String> = permissionLabels.map { it.first }.toSet()
 
     fun available(): Boolean =
         HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
@@ -43,8 +45,8 @@ class HealthSync(private val context: Context, private val dao: WanderDao, priva
 
     suspend fun granted(): Set<String> = client.permissionController.getGrantedPermissions()
 
-    /** Syncs the last [days] days. Safe to run repeatedly. */
-    suspend fun sync(days: Long = 28) {
+    /** Syncs the last [days] days. Safe to run repeatedly. Watch routes before [worldStartDay] are ignored. */
+    suspend fun sync(worldStartDay: Int, days: Long = 28) {
         if (!available()) { log("Health Connect not available"); return }
         val granted = granted()
         val zone = ZoneId.systemDefault()
@@ -106,7 +108,7 @@ class HealthSync(private val context: Context, private val dao: WanderDao, priva
             dao.upsertIntensity(byDay.map { (d, v) -> DailyIntensityEntity(d, v[0], v[1], source) })
         }
 
-        if (HealthPermission.getReadPermission(ExerciseSessionRecord::class) in granted) importWatchRoutes(start, end, zone)
+        if (HealthPermission.getReadPermission(ExerciseSessionRecord::class) in granted) importWatchRoutes(maxOf(start, LocalDate.ofEpochDay(worldStartDay.toLong()).atStartOfDay()), end, zone)
     }
 
     /** Imports outdoor GPS workouts (e.g. from the Pixel Watch) that the phone didn't capture itself. */
@@ -121,6 +123,7 @@ class HealthSync(private val context: Context, private val dao: WanderDao, priva
             ReadRecordsRequest(ExerciseSessionRecord::class, TimeRangeFilter.between(start, end)),
         ).records
         var imported = 0
+        var needConsent = 0
         for (s in sessions) {
             val mode = outdoor[s.exerciseType] ?: continue
             if (s.metadata.dataOrigin.packageName == context.packageName) continue
@@ -141,11 +144,12 @@ class HealthSync(private val context: Context, private val dao: WanderDao, priva
                     })
                     imported++
                 }
-                is ExerciseRouteResult.ConsentRequired -> log("Watch workout at ${s.startTime.atZone(zone).toLocalTime()} needs route consent")
+                is ExerciseRouteResult.ConsentRequired -> needConsent++
                 else -> {}
             }
         }
         if (imported > 0) log("Imported $imported watch workout route(s)")
+        if (needConsent > 0) log("$needConsent watch workout(s) need route access: set Exercise routes to \"Always allow\" in Health Connect")
     }
 
     private fun Duration.toMinutesPart(@Suppress("UNUSED_PARAMETER") exact: Boolean): Double = toMillis() / 60_000.0

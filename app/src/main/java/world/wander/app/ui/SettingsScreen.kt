@@ -2,6 +2,7 @@ package world.wander.app.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -40,6 +41,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.PermissionController
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -51,6 +55,7 @@ import world.wander.app.data.Repository
 import world.wander.app.data.SegmentEntity
 import world.wander.app.tracking.ActivityReceiver
 import world.wander.app.tracking.TrackingService
+import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -112,10 +117,27 @@ fun SettingsScreen(repo: Repository) {
                 permLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
             }
             val healthAvailable = repo.health.available()
-            PermRow(
-                if (healthAvailable) "Health Connect (${healthGranted.size}/${repo.health.permissions.size})" else "Health Connect (not available)",
-                healthGranted.containsAll(repo.health.permissions),
-            ) { if (healthAvailable) healthLauncher.launch(repo.health.permissions) }
+            SectionTitle("Health Connect")
+            if (!healthAvailable) {
+                Text("Health Connect isn't available on this phone.", style = MaterialTheme.typography.bodySmall)
+            } else {
+                repo.health.permissionLabels.forEach { (perm, label) ->
+                    Text((if (perm in healthGranted) "✓ " else "○ ") + label, style = MaterialTheme.typography.bodyMedium)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!healthGranted.containsAll(repo.health.permissions)) {
+                        OutlinedButton(onClick = { healthLauncher.launch(repo.health.permissions) }) { Text("Grant") }
+                    }
+                    OutlinedButton(onClick = { openHealthConnectSettings(ctx) }) { Text("Open Health Connect") }
+                }
+                if (HealthPermission.PERMISSION_READ_EXERCISE_ROUTES !in healthGranted) {
+                    Text(
+                        "Watch routes need a separate choice: in Health Connect → App permissions → Wander World α → Exercise routes, pick \"Always allow\".",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            HorizontalDivider()
 
             SectionTitle("2 · Home")
             Text(
@@ -130,8 +152,8 @@ fun SettingsScreen(repo: Repository) {
                             .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).await()
                         if (loc == null) { message = "Couldn't get a location fix"; return@launch }
                         message = "Fetching your neighborhood…"
-                        repo.setHome(loc.latitude, loc.longitude)
-                        message = "Home set."
+                        val named = repo.setHome(loc.latitude, loc.longitude)
+                        message = if (named) "Home set." else "Home saved. The map server is busy; your neighborhood will be named on the next try."
                     } catch (e: SecurityException) { message = "Grant location first" } catch (e: Exception) { message = "Failed: ${e.message}" }
                     refresh++
                 }
@@ -164,7 +186,7 @@ fun SettingsScreen(repo: Repository) {
                 OutlinedButton(onClick = {
                     scope.launch {
                         message = "Syncing Health Connect…"
-                        try { repo.health.sync(); message = "Health synced" } catch (e: Exception) { message = "Health sync failed: ${e.message}" }
+                        try { repo.health.sync(prefs.startDay); message = "Health synced" } catch (e: Exception) { message = "Health sync failed: ${e.message}" }
                         repo.processPending(); repo.rebuild()
                     }
                 }) { Text("Sync health") }
@@ -178,6 +200,16 @@ fun SettingsScreen(repo: Repository) {
                     message = if (d != null) "Yesterday's dispatch written" else "Nothing new to dispatch"
                 }
             }) { Text("Run daily dispatch now") }
+            Button(onClick = {
+                scope.launch {
+                    val extra = listOf(
+                        "Permissions: location=${ctx.has(Manifest.permission.ACCESS_FINE_LOCATION)} background=${ctx.has(Manifest.permission.ACCESS_BACKGROUND_LOCATION)} " +
+                            "activity=${ctx.has(Manifest.permission.ACTIVITY_RECOGNITION)} notifications=${ctx.has(Manifest.permission.POST_NOTIFICATIONS)}",
+                        "Health Connect: " + repo.health.permissionLabels.joinToString("; ") { (p, l) -> (if (p in healthGranted) "✓ " else "✗ ") + l },
+                    )
+                    shareDiagnostics(ctx, repo.diagnosticsReport(extra))
+                }
+            }) { Text("Share diagnostics") }
 
             SectionTitle("Recent captures")
         }
@@ -204,6 +236,31 @@ fun SettingsScreen(repo: Repository) {
         }
         item { Spacer(Modifier.height(32.dp)) }
     }
+}
+
+private fun openHealthConnectSettings(ctx: Context) {
+    // The system page for this app's Health Connect permissions (Android 14+), else Health Connect itself.
+    val appPage = Intent("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS").putExtra(Intent.EXTRA_PACKAGE_NAME, ctx.packageName)
+    try { ctx.startActivity(appPage) } catch (_: Exception) {
+        try { ctx.startActivity(HealthConnectClient.getHealthConnectManageDataIntent(ctx)) } catch (_: Exception) {}
+    }
+}
+
+/** Writes the report to a file and opens the share sheet (Drive, email, messages…). */
+private suspend fun shareDiagnostics(ctx: Context, report: String) {
+    val file = withContext(Dispatchers.IO) {
+        val dir = File(ctx.cacheDir, "diagnostics").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val stamp = java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"))
+        File(dir, "wander-diagnostics-$stamp.txt").apply { writeText(report) }
+    }
+    val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
+    val send = Intent(Intent.ACTION_SEND)
+        .setType("text/plain")
+        .putExtra(Intent.EXTRA_STREAM, uri)
+        .putExtra(Intent.EXTRA_SUBJECT, file.name)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    ctx.startActivity(Intent.createChooser(send, "Share diagnostics"))
 }
 
 @Composable

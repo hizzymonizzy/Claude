@@ -15,7 +15,12 @@ import java.net.URLEncoder
  * Overpass API, and splits ways into edges at intersections.
  */
 object Overpass {
-    private const val ENDPOINT = "https://overpass-api.de/api/interpreter"
+    /** Public Overpass servers, tried in turn. The main one is often at capacity. */
+    private val ENDPOINTS = listOf(
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    )
     private const val USER_AGENT = "WanderWorld-alpha/0.1 (personal fitness map)"
 
     private const val WALKABLE =
@@ -39,12 +44,28 @@ object Overpass {
             );
             out body geom;
         """.trimIndent()
-        val json = post(query)
+        val json = postWithRetry(query)
         return parse(json, tile)
     }
 
-    private fun post(query: String): String {
-        val conn = URL(ENDPOINT).openConnection() as HttpURLConnection
+    /** Tries each server, with backoff between rounds. Throws the last error if all fail. */
+    private fun postWithRetry(query: String): String {
+        var last: Exception? = null
+        for (round in 0 until 3) {
+            for (endpoint in ENDPOINTS) {
+                try {
+                    return post(endpoint, query)
+                } catch (e: Exception) {
+                    last = e
+                }
+            }
+            Thread.sleep(2_000L shl round) // 2 s, 4 s, 8 s
+        }
+        throw last ?: IllegalStateException("Overpass unavailable")
+    }
+
+    private fun post(endpoint: String, query: String): String {
+        val conn = URL(endpoint).openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.connectTimeout = 20_000
         conn.readTimeout = 120_000
@@ -54,8 +75,8 @@ object Overpass {
         conn.outputStream.use { it.write(("data=" + URLEncoder.encode(query, "UTF-8")).toByteArray()) }
         val code = conn.responseCode
         if (code != 200) {
-            val err = conn.errorStream?.bufferedReader()?.readText()?.take(200)
-            throw IllegalStateException("Overpass HTTP $code ${err ?: ""}")
+            val host = URL(endpoint).host
+            throw IllegalStateException("$host HTTP $code ${conn.responseMessage ?: ""}".trim())
         }
         return conn.inputStream.bufferedReader().use { it.readText() }
     }

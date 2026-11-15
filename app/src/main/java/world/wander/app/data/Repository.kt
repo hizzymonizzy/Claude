@@ -92,8 +92,9 @@ class Repository(context: Context) {
         return true
     }
 
+    /** Assigns cells to neighborhoods. Cells whose map tile isn't downloaded yet wait until it is. */
     private fun assignAreas(cells: Collection<String>) {
-        val missing = cells.filter { dao.cellArea(it) == null }
+        val missing = cells.filter { dao.cellArea(it) == null && dao.tile(Cells.parent(it, Cells.TILE_RES)) != null }
         if (missing.isEmpty()) return
         val places = dao.allPlaces().map { Place(it.id, it.name, it.type, it.lat, it.lng) }
         for (cell in missing) {
@@ -103,14 +104,47 @@ class Repository(context: Context) {
         }
     }
 
-    suspend fun setHome(lat: Double, lng: Double) = withContext(Dispatchers.IO) {
+    /**
+     * Cells that fell back to a plain hex area (no named place known at the time, e.g. because the
+     * map download failed) move to their real neighborhood once place data is available.
+     */
+    private fun repairFallbackAreas() {
+        val fallback = dao.fallbackCellAreas()
+        if (fallback.isEmpty()) return
+        val places = dao.allPlaces().map { Place(it.id, it.name, it.type, it.lat, it.lng) }
+        if (places.isEmpty()) return
+        var moved = 0
+        for (ca in fallback) {
+            val area = AreaAssigner.assign(ca.cell, places)
+            if (area.id == ca.areaId || area.id.startsWith("r7:")) continue
+            dao.insertArea(AreaEntity(area.id, area.name, area.placeType, System.currentTimeMillis()))
+            dao.reassignCell(ca.cell, area.id)
+            moved++
+        }
+        if (moved > 0) log("geo", "Moved $moved block(s) into their named neighborhoods")
+    }
+
+    /** The home area follows the home cell, in case that cell was re-assigned. */
+    private fun resolveHome() {
+        val lat = prefs.homeLat ?: return
+        val lng = prefs.homeLng ?: return
         val cell = Cells.cell(lat, lng)
-        ensureTiles(listOf(Cells.tile(lat, lng)))
-        assignAreas(listOf(cell))
-        val areaId = dao.cellArea(cell)?.areaId
-        prefs.homeLat = lat; prefs.homeLng = lng; prefs.homeAreaId = areaId
-        log("home", "Home set in area $areaId")
+        if (dao.cellArea(cell) == null) {
+            assignAreas(listOf(cell))
+        }
+        val areaId = dao.cellArea(cell)?.areaId ?: return
+        if (areaId != prefs.homeAreaId) {
+            prefs.homeAreaId = areaId
+            log("home", "Home is in area $areaId")
+        }
+    }
+
+    suspend fun setHome(lat: Double, lng: Double) = withContext(Dispatchers.IO) {
+        prefs.homeLat = lat; prefs.homeLng = lng; prefs.homeAreaId = null
+        val ok = ensureTiles(listOf(Cells.tile(lat, lng)))
+        if (!ok) log("home", "Home saved; its neighborhood will be named once map data downloads")
         rebuild()
+        prefs.homeAreaId != null
     }
 
     // ---- Processing captured tracks into observations ----
@@ -147,6 +181,8 @@ class Repository(context: Context) {
 
     suspend fun rebuild(): WorldState = withContext(Dispatchers.IO) {
         val today = today()
+        repairFallbackAreas()
+        resolveHome()
         val coverage = dao.allCoverage()
         val edgeIds = coverage.map { it.edgeId }.distinct()
         val edges = edgeIds.chunked(500).flatMap { dao.edgesById(it) }.associateBy { it.id }
@@ -185,7 +221,7 @@ class Repository(context: Context) {
 
     /** The daily routine: sync health, process captures, rebuild, and write yesterday's dispatch. */
     suspend fun dailyRun(): DispatchEntity? = withContext(Dispatchers.IO) {
-        try { health.sync() } catch (e: Exception) { log("health", "Sync failed: ${e.message}") }
+        try { health.sync(prefs.startDay) } catch (e: Exception) { log("health", "Sync failed: ${e.message}") }
         prefs.lastHealthSyncMs = System.currentTimeMillis()
         processPending()
         val state = rebuild()
@@ -198,6 +234,44 @@ class Repository(context: Context) {
         dao.upsertDispatch(entity)
         prefs.lastDispatchDay = yesterday
         entity
+    }
+
+    /** A plain-text report of everything useful for debugging, for sharing. */
+    suspend fun diagnosticsReport(extra: List<String>): String = withContext(Dispatchers.IO) {
+        val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(zone)
+        val pkg = app.packageManager.getPackageInfo(app.packageName, 0)
+        val w = world.value
+        buildString {
+            appendLine("Wander World diagnostics · ${fmt.format(java.time.Instant.now())}")
+            appendLine("App ${pkg.versionName} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+            appendLine("World start: ${java.time.LocalDate.ofEpochDay(prefs.startDay.toLong())} · home area: ${prefs.homeAreaId} · tracking: ${if (prefs.autoTrackingEnabled) prefs.trackingMode else "off"} · resting: ${prefs.resting} · goal locked: ${prefs.goalLocked}")
+            extra.forEach { appendLine(it) }
+            appendLine()
+            appendLine("== World ==")
+            if (w != null) {
+                appendLine("Roads charted: ${w.discoveredCount} · cells known: ${w.cellFamiliarity.size}")
+                appendLine("Goal: %.0f / %d min (ratio %.2f, %s)".format(w.goal.trailing7Minutes, w.goal.goal, w.goal.ratio, w.goal.protection))
+                for (st in w.settlements) appendLine("  ${st.name} [${st.areaId}] ${st.tier} (peak ${st.peakTier}) D=%.1f days=${st.areaDays} cells=${st.exploredCells}".format(st.development))
+                appendLine("Last 14 days (intensity min · walked km):")
+                for (d in w.today - 13..w.today) {
+                    val s = w.days[d] ?: continue
+                    appendLine("  ${java.time.LocalDate.ofEpochDay(d.toLong())}  %5.1f min · %.2f km · %s".format(s.intensityMinutes, s.footMeters / 1000, s.protection))
+                }
+            } else appendLine("(not built yet)")
+            appendLine()
+            appendLine("== Intensity from Health Connect ==")
+            dao.allIntensity().sortedByDescending { it.day }.take(28).forEach {
+                appendLine("  ${java.time.LocalDate.ofEpochDay(it.day.toLong())} moderate %.0f vigorous %.0f (${it.source})".format(it.moderateMin, it.vigorousMin))
+            }
+            appendLine()
+            appendLine("== Captures ==")
+            dao.recentSegments(40).forEach {
+                appendLine("  ${fmt.format(java.time.Instant.ofEpochMilli(it.startMs))} → ${it.endMs?.let { e -> fmt.format(java.time.Instant.ofEpochMilli(e)) } ?: "recording"} · ${it.source} · ${it.modeHint ?: "?"} · ${dao.pointCount(it.id)} pts · ${it.note ?: if (it.processed) "processed" else "waiting"}")
+            }
+            appendLine()
+            appendLine("== Log (newest first) ==")
+            dao.recentLogs(500).forEach { appendLine("${fmt.format(java.time.Instant.ofEpochMilli(it.timeMs))} [${it.tag}] ${it.message}") }
+        }
     }
 
     companion object {

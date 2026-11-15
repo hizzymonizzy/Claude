@@ -14,8 +14,8 @@ android {
         applicationId = "world.wander.app"
         minSdk = 34
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0-alpha"
+        versionCode = 2
+        versionName = "0.1.1-alpha"
         // Pixel Fold 10 is 64-bit ARM (H3 ships no x86_64 Android build, so no emulator for now).
         ndk { abiFilters += setOf("arm64-v8a") }
     }
