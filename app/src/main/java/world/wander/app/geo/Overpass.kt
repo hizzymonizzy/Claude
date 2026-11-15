@@ -19,7 +19,7 @@ object Overpass {
     private val ENDPOINTS = listOf(
         "https://overpass-api.de/api/interpreter",
         "https://overpass.private.coffee/api/interpreter",
-        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
     )
     private const val USER_AGENT = "WanderWorld-alpha/0.1 (personal fitness map)"
 
@@ -50,15 +50,15 @@ object Overpass {
 
     /** Tries each server once. Throws the last error if all fail; the caller backs off between attempts. */
     private fun postWithRetry(query: String): String {
-        var last: Exception? = null
+        val errors = mutableListOf<String>()
         for (endpoint in ENDPOINTS) {
             try {
                 return post(endpoint, query)
             } catch (e: Exception) {
-                last = e
+                errors += "${URL(endpoint).host}: ${e.message?.lineSequence()?.firstOrNull() ?: e.javaClass.simpleName}"
             }
         }
-        throw last ?: IllegalStateException("Overpass unavailable")
+        throw IllegalStateException(errors.joinToString(" | "))
     }
 
     private fun post(endpoint: String, query: String): String {

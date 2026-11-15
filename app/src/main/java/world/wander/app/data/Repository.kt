@@ -164,13 +164,16 @@ class Repository(context: Context) {
             for (seg in dao.pendingSegments()) {
                 val pts = dao.points(seg.id)
                 if (pts.size < 2) { dao.markProcessed(seg.id, true, "too few points"); continue }
-                val tiles = pts.map { Cells.tile(it.lat, it.lng) }.toSet()
+                val processor = TrackProcessor(zone)
+                val usable = processor.usablePoints(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) })
+                if (usable.isEmpty()) { dao.markProcessed(seg.id, true, "no walkable points (vehicle or poor GPS)"); continue }
+                val tiles = usable.map { Cells.tile(it.lat, it.lng) }.toSet()
                 if (!ensureTiles(tiles)) continue // map data not available yet; this walk waits, others carry on
                 val graph = dao.edgesInTiles(tiles.toList()).map {
                     GraphEdge(it.id, it.name, it.startNode, it.endNode, Overpass.decode(it.geometry))
                 }
                 val hint = seg.modeHint?.let { Mode.valueOf(it) }
-                val r = TrackProcessor(zone).process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph)
+                val r = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph)
                 db.runInTransaction {
                     dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id)
                     dao.insertCoverage(r.coverage.map { EdgeCoverageEntity(segmentId = seg.id, edgeId = it.edgeId, day = it.day, fromM = it.fromM, toM = it.toM, mode = it.mode.name) })
@@ -271,7 +274,8 @@ class Repository(context: Context) {
             } else appendLine("(could not be built; see log)")
             val waiting = dao.pendingSegments()
             if (waiting.isNotEmpty()) {
-                val missing = waiting.flatMap { seg -> dao.points(seg.id).map { Cells.tile(it.lat, it.lng) } }.toSet().filter { dao.tile(it) == null }
+                val proc = TrackProcessor(zone)
+                val missing = waiting.flatMap { seg -> proc.usablePoints(dao.points(seg.id).map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }).map { Cells.tile(it.lat, it.lng) } }.toSet().filter { dao.tile(it) == null }
                 appendLine("Waiting walks: ${waiting.size} · missing map tiles: ${missing.joinToString().ifEmpty { "none" }}")
             }
             appendLine()

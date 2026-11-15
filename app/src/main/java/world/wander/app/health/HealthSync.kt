@@ -111,6 +111,22 @@ class HealthSync(private val context: Context, private val dao: WanderDao, priva
         if (HealthPermission.getReadPermission(ExerciseSessionRecord::class) in granted) importWatchRoutes(maxOf(start, LocalDate.ofEpochDay(worldStartDay.toLong()).atStartOfDay()), end, zone)
     }
 
+    /**
+     * The newest watch workout whose route is waiting for consent. Asking for it shows Health Connect's
+     * route prompt, which offers "Allow all routes" (that grants route access for good).
+     */
+    suspend fun routeConsentSessionId(): String? {
+        if (!available()) return null
+        val zone = ZoneId.systemDefault()
+        val end = LocalDate.now(zone).plusDays(1).atStartOfDay()
+        val sessions = client.readRecords(
+            ReadRecordsRequest(ExerciseSessionRecord::class, TimeRangeFilter.between(end.minusDays(29), end)),
+        ).records
+        return sessions.sortedByDescending { it.startTime }
+            .firstOrNull { it.exerciseRouteResult is ExerciseRouteResult.ConsentRequired }
+            ?.metadata?.id
+    }
+
     /** Imports outdoor GPS workouts (e.g. from the Pixel Watch) that the phone didn't capture itself. */
     private suspend fun importWatchRoutes(start: LocalDateTime, end: LocalDateTime, zone: ZoneId) {
         val outdoor = mapOf(

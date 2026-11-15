@@ -33,7 +33,10 @@ class TrackProcessor(
 ) {
     fun dayOf(timeMs: Long): Int = Instant.ofEpochMilli(timeMs).atZone(zone).toLocalDate().toEpochDay().toInt()
 
-    fun process(points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>): TrackResult {
+    /** The fixes that survive filtering (no vehicle-speed legs, no inaccurate fixes): the only ones needing map data. */
+    fun usablePoints(points: List<TrackPoint>): List<TrackPoint> = runs(points).first.flatten()
+
+    private fun runs(points: List<TrackPoint>): Pair<List<List<TrackPoint>>, Int> {
         val sorted = points.filter { it.accuracyM <= maxAccuracyM }.sortedBy { it.timeMs }
         // Split into runs on gaps and vehicle-speed legs.
         val runs = mutableListOf<MutableList<TrackPoint>>()
@@ -61,7 +64,11 @@ class TrackProcessor(
             }
         }
         if (current.size > 1) runs.add(current)
+        return runs to dropped
+    }
 
+    fun process(points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>): TrackResult {
+        val (runs, dropped) = runs(points)
         val matcher = if (edges.isNotEmpty()) MapMatcher(edges) else null
         val coverage = mutableListOf<EdgeCoverage>()
         val presence = HashMap<Triple<String, Int, Mode>, Double>()

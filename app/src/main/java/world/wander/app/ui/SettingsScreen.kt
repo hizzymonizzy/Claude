@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.contracts.ExerciseRouteRequestContract
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.PermissionController
 import com.google.android.gms.location.LocationServices
@@ -77,6 +78,11 @@ fun SettingsScreen(repo: Repository) {
     val bgLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { refresh++ }
     val healthLauncher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) {
         healthGranted = it; refresh++
+    }
+    val routeLauncher = rememberLauncherForActivityResult(ExerciseRouteRequestContract()) { route ->
+        repo.log("health", if (route != null) "Route access granted (${route.route.size} points in the sample workout)" else "Route prompt closed without access")
+        scope.launch { try { repo.health.sync(prefs.startDay) } catch (_: Exception) {}; repo.processPending(); repo.rebuild() }
+        refresh++
     }
     LaunchedEffect(refresh) {
         healthGranted = try { if (repo.health.available()) repo.health.granted() else emptySet() } catch (_: Exception) { emptySet() }
@@ -132,9 +138,16 @@ fun SettingsScreen(repo: Repository) {
                 }
                 if (HealthPermission.PERMISSION_READ_EXERCISE_ROUTES !in healthGranted) {
                     Text(
-                        "Watch routes need a separate choice: in Health Connect → App permissions → Wander World α → Exercise routes, pick \"Always allow\".",
+                        "Watch routes are granted from Health Connect's route prompt. Tap below and choose \"Allow all routes\".",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    Button(onClick = {
+                        scope.launch {
+                            val id = try { repo.health.routeConsentSessionId() } catch (e: Exception) { null }
+                            if (id == null) message = "No watch workout with a route found in the last 4 weeks. Record one with the watch, sync, and try again."
+                            else routeLauncher.launch(id)
+                        }
+                    }) { Text("Allow watch routes") }
                 }
             }
             HorizontalDivider()
@@ -240,9 +253,13 @@ fun SettingsScreen(repo: Repository) {
 
 private fun openHealthConnectSettings(ctx: Context) {
     // The system page for this app's Health Connect permissions (Android 14+), else Health Connect itself.
-    val appPage = Intent("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS").putExtra(Intent.EXTRA_PACKAGE_NAME, ctx.packageName)
-    try { ctx.startActivity(appPage) } catch (_: Exception) {
-        try { ctx.startActivity(HealthConnectClient.getHealthConnectManageDataIntent(ctx)) } catch (_: Exception) {}
+    val attempts = listOf(
+        Intent("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS").putExtra(Intent.EXTRA_PACKAGE_NAME, ctx.packageName),
+        Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", ctx.packageName, null)),
+        HealthConnectClient.getHealthConnectManageDataIntent(ctx),
+    )
+    for (i in attempts) {
+        try { ctx.startActivity(i); return } catch (_: Exception) {}
     }
 }
 

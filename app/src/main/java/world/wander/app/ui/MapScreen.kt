@@ -1,5 +1,7 @@
 package world.wander.app.ui
 
+import android.annotation.SuppressLint
+import android.content.Context
 import android.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,7 +33,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -94,6 +101,9 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     var style by remember { mutableStateOf<Style?>(null) }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var centered by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // Show where you are as soon as the map opens, not only while recording.
+    LaunchedEffect(Unit) { if (repo.lastLocation.value == null) currentLocation(context)?.let { repo.lastLocation.value = it } }
 
     val mapView = remember {
         MapView(context).apply {
@@ -163,8 +173,12 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
 
         SmallFloatingActionButton(
             onClick = {
-                val t = me ?: return@SmallFloatingActionButton
-                map?.animateCamera(CameraUpdateFactory.newLatLngZoom(MlLatLng(t.lat, t.lng), 16.0))
+                scope.launch {
+                    val t = currentLocation(context) ?: me
+                    if (t == null) { repo.log("map", "No location fix available"); return@launch }
+                    repo.lastLocation.value = t
+                    map?.animateCamera(CameraUpdateFactory.newLatLngZoom(MlLatLng(t.lat, t.lng), 16.0))
+                }
             },
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
         ) { Text("◎") }
@@ -178,6 +192,14 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         ) { Text(if (walking) "Stop walk" else "Start a walk") }
     }
 }
+
+/** A fresh location fix (falls back to the last known one). Null without permission or a fix. */
+@SuppressLint("MissingPermission")
+private suspend fun currentLocation(context: Context): WLatLng? = try {
+    val client = LocationServices.getFusedLocationProviderClient(context)
+    val loc = client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).await() ?: client.lastLocation.await()
+    loc?.let { WLatLng(it.latitude, it.longitude) }
+} catch (_: Exception) { null }
 
 private fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
