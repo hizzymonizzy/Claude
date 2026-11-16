@@ -2,7 +2,8 @@ package world.wander.app.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Color
+import android.graphics.BitmapFactory
+import world.wander.app.R
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -52,14 +53,19 @@ import org.maplibre.android.style.expressions.Expression.literal
 import org.maplibre.android.style.expressions.Expression.match
 import org.maplibre.android.style.expressions.Expression.stop
 import org.maplibre.android.style.expressions.Expression.zoom
-import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.BackgroundLayer
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
-import org.maplibre.android.style.layers.PropertyFactory.circleColor
-import org.maplibre.android.style.layers.PropertyFactory.circleRadius
-import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
-import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
+import org.maplibre.android.style.layers.PropertyFactory.backgroundColor
+import org.maplibre.android.style.layers.PropertyFactory.fillPattern
+import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.iconAnchor
+import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
+import org.maplibre.android.style.layers.PropertyFactory.iconImage
+import org.maplibre.android.style.layers.PropertyFactory.iconSize
+import org.maplibre.android.style.layers.PropertyFactory.lineBlur
+import org.maplibre.android.style.layers.PropertyFactory.visibility
 import org.maplibre.android.style.layers.PropertyFactory.fillColor
 import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
@@ -113,7 +119,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
                 m.uiSettings.isCompassEnabled = true
                 m.uiSettings.isAttributionEnabled = true
                 m.cameraPosition = CameraPosition.Builder().target(MlLatLng(40.73, -74.17)).zoom(13.0).build()
-                m.setStyle(Style.Builder().fromUri(STYLE_URL)) { s -> addWorldLayers(s); style = s }
+                m.setStyle(Style.Builder().fromUri(STYLE_URL)) { s -> addSprites(s, context); restyleBasemap(s); addWorldLayers(s); style = s }
             }
         }
     }
@@ -139,7 +145,8 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         s.source("roads")?.setGeoJson(MapLayersBuilder.roads(layers))
         s.source("peek")?.setGeoJson(MapLayersBuilder.peeks(layers))
         s.source("wild")?.setGeoJson(MapLayersBuilder.wild(layers))
-        s.source("landmarks")?.setGeoJson(MapLayersBuilder.landmarkLabels(layers))
+        val kinds = world?.landmarks.orEmpty().associate { it.name to it.kind }
+        s.source("landmarks")?.setGeoJson(MapLayersBuilder.landmarkLabels(layers, kinds))
         s.source("settlements")?.setGeoJson(MapLayersBuilder.settlements(world))
     }
     LaunchedEffect(style, track) { style?.source("track")?.setGeoJson(MapLayersBuilder.track(track)) }
@@ -209,7 +216,9 @@ private fun addWorldLayers(s: Style) {
     val empty = FeatureCollection.fromFeatures(emptyList())
     for (id in listOf("fog", "peek", "wild", "roads", "landmarks", "track", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
 
-    s.addLayer(FillLayer("fog", "fog").withProperties(fillColor(FOG), fillOpacity(0.93f)))
+    s.addLayer(FillLayer("fog", "fog").withProperties(fillPattern("fog_parchment"), fillOpacity(0.96f)))
+    // Soft edge: a wide blurred line along the fog boundary.
+    s.addLayer(LineLayer("fog-edge", "fog").withProperties(lineColor(FOG), lineWidth(16f), lineBlur(14f), lineOpacity(0.9f)))
     s.addLayer(
         LineLayer("peek", "peek").withProperties(
             lineColor(INK), lineOpacity(0.35f), lineWidth(1.5f), lineDasharray(arrayOf(1.5f, 2.5f)),
@@ -234,7 +243,9 @@ private fun addWorldLayers(s: Style) {
     )
     s.addLayer(
         SymbolLayer("landmark-names", "landmarks").withProperties(
+            iconImage(get("icon")), iconSize(0.5f), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
             textField(get("name")), textSize(12f), textColor("#2E5E3A"), textHaloColor("#F4ECD8"), textHaloWidth(2f),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.2f)),
         ),
     )
     s.addLayer(
@@ -245,23 +256,56 @@ private fun addWorldLayers(s: Style) {
     )
     s.addLayer(LineLayer("track", "track").withProperties(lineColor("#C0392B"), lineWidth(3f), lineOpacity(0.8f)))
     s.addLayer(
-        CircleLayer("settlements", "settlements").withProperties(
-            circleColor(INK), circleStrokeColor("#F4ECD8"), circleStrokeWidth(2f),
-            circleRadius(interpolate(linear(), get("tier"), stop(0, 4f), stop(1, 6f), stop(6, 14f))),
+        SymbolLayer("settlements", "settlements").withProperties(
+            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true),
+            iconSize(interpolate(linear(), zoom(), stop(10, 0.35f), stop(14, 0.6f), stop(17, 1.0f))),
+            iconAnchor(Property.ICON_ANCHOR_BOTTOM),
         ),
     )
     s.addLayer(
         SymbolLayer("settlement-labels", "settlements").withProperties(
             textField(get("label")), textSize(interpolate(linear(), zoom(), stop(10, 11f), stop(16, 15f))),
             textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f),
-            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 1.1f)),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.3f)),
         ),
     )
     s.addLayer(
-        CircleLayer("me", "me").withProperties(
-            circleColor("#1E88E5"), circleRadius(7f), circleStrokeColor(Color.WHITE.toHexString()), circleStrokeWidth(2f),
+        SymbolLayer("me", "me").withProperties(
+            iconImage("wanderer"), iconSize(0.6f), iconAllowOverlap(true), iconIgnorePlacement(true),
+            iconAnchor(Property.ICON_ANCHOR_BOTTOM),
         ),
     )
 }
 
-private fun Int.toHexString() = String.format("#%06X", 0xFFFFFF and this)
+private val SPRITES = mapOf(
+    "tier_0" to R.drawable.sprite_tier_0, "tier_1" to R.drawable.sprite_tier_1, "tier_2" to R.drawable.sprite_tier_2,
+    "tier_3" to R.drawable.sprite_tier_3, "tier_4" to R.drawable.sprite_tier_4, "tier_5" to R.drawable.sprite_tier_5,
+    "tier_6" to R.drawable.sprite_tier_6, "place_park" to R.drawable.sprite_place_park,
+    "place_store" to R.drawable.sprite_place_store, "place_generic" to R.drawable.sprite_place_generic,
+    "wanderer" to R.drawable.sprite_wanderer, "fog_parchment" to R.drawable.fog_parchment,
+)
+
+private fun addSprites(s: Style, context: Context) {
+    val opts = BitmapFactory.Options().apply { inScaled = false }
+    for ((name, res) in SPRITES) BitmapFactory.decodeResource(context.resources, res, opts)?.let { s.addImage(name, it) }
+}
+
+/** Recolors the base map toward parchment and hides its labels: names appear only once you discover them. */
+private fun restyleBasemap(s: Style) {
+    for (layer in s.layers) {
+        val id = layer.id.lowercase()
+        when (layer) {
+            is BackgroundLayer -> layer.setProperties(backgroundColor("#EFE6CF"))
+            is FillLayer -> when {
+                "water" in id -> layer.setProperties(fillColor("#A9C4C7"))
+                listOf("park", "wood", "grass", "landcover", "forest", "garden").any { it in id } -> layer.setProperties(fillColor("#D3DEB0"))
+                "building" in id -> layer.setProperties(fillColor("#E0CFAE"))
+                "landuse" in id -> layer.setProperties(fillColor("#E9DEC2"))
+            }
+            is LineLayer -> if (listOf("road", "highway", "street", "path", "bridge", "tunnel", "rail").any { it in id }) {
+                layer.setProperties(lineColor("#E6D8B8"))
+            }
+            is SymbolLayer -> layer.setProperties(visibility(Property.NONE))
+        }
+    }
+}

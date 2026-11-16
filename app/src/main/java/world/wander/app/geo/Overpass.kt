@@ -17,12 +17,11 @@ import java.net.URLEncoder
  * Overpass API, and splits ways into edges at intersections.
  */
 object Overpass {
-    /** Public Overpass servers, tried in turn. The main one is often at capacity. */
-    private val ENDPOINTS = listOf(
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.private.coffee/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter",
-    )
+    /**
+     * Only the official OpenStreetMap-backed server (FOSSGIS e.V.). Every request reveals the area you
+     * walked in, so unofficial mirrors are deliberately not used. See docs/security.md.
+     */
+    private val ENDPOINTS = listOf("https://overpass-api.de/api/interpreter")
     private const val USER_AGENT = "WanderWorld-alpha/0.1 (personal fitness map)"
 
     private const val WALKABLE =

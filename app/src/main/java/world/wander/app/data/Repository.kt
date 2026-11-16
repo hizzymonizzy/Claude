@@ -89,26 +89,6 @@ class Repository(context: Context) {
 
     private suspend fun ensureTiles(tiles: Collection<String>): Boolean {
         for (tile in tiles) {
-            if (dao.tile(tile) != null && dao.landmarkTile(tile) == null) {
-                val retry = tileRetry["lm:$tile"]
-                if (retry != null && System.currentTimeMillis() < retry.first) return false
-                try {
-                    val lms = Overpass.fetchLandmarks(tile)
-                    dao.upsertLandmarks(lms)
-                    dao.upsertLandmarkTile(LandmarkTileEntity(tile, System.currentTimeMillis(), lms.size))
-                    log("geo", "Fetched ${lms.size} named places for tile $tile")
-                    tileRetry.remove("lm:$tile")
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    val wait = ((retry?.second ?: 30_000L) * 2).coerceAtMost(30 * 60_000L)
-                    tileRetry["lm:$tile"] = (System.currentTimeMillis() + wait) to wait
-                    log("geo", "Named places for $tile failed (${e.message?.lineSequence()?.firstOrNull()}); retrying in ${wait / 60_000} min")
-                    return false
-                }
-                delay(1_000)
-                continue
-            }
             if (dao.tile(tile) != null) continue
             val retry = tileRetry[tile]
             if (retry != null && System.currentTimeMillis() < retry.first) return false
@@ -129,9 +109,36 @@ class Repository(context: Context) {
             }
             delay(1_000) // be polite to the public Overpass server
         }
-        // Road tiles just downloaded still need their named places.
-        if (tiles.any { dao.landmarkTile(it) == null }) return ensureTiles(tiles)
         return true
+    }
+
+    /**
+     * Named places are a bonus layer: they never hold up a walk. When a tile's places arrive later,
+     * walks in that tile are re-processed so their visits count.
+     */
+    private suspend fun ensureLandmarks(tiles: Collection<String>) {
+        for (tile in tiles) {
+            if (dao.tile(tile) == null || dao.landmarkTile(tile) != null) continue
+            val key = "lm:$tile"
+            val retry = tileRetry[key]
+            if (retry != null && System.currentTimeMillis() < retry.first) continue
+            try {
+                val lms = Overpass.fetchLandmarks(tile)
+                dao.upsertLandmarks(lms)
+                dao.upsertLandmarkTile(LandmarkTileEntity(tile, System.currentTimeMillis(), lms.size))
+                tileRetry.remove(key)
+                val again = dao.allPresenceCells().filter { Cells.parent(it.cell, Cells.TILE_RES) == tile }.map { it.segmentId }.toSet()
+                again.forEach { dao.markProcessed(it, false, "re-processing for named places") }
+                log("geo", "Fetched ${lms.size} named places for tile $tile; re-processing ${again.size} walk(s)")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val wait = ((retry?.second ?: 30_000L) * 2).coerceAtMost(30 * 60_000L)
+                tileRetry[key] = (System.currentTimeMillis() + wait) to wait
+                log("geo", "Named places for $tile unavailable (${e.message?.lineSequence()?.firstOrNull()}); walks processed without them, retry in ${wait / 60_000} min")
+            }
+            delay(1_000)
+        }
     }
 
     /** Assigns cells to neighborhoods. Cells whose map tile isn't downloaded yet wait until it is. */
@@ -192,6 +199,15 @@ class Repository(context: Context) {
     // ---- Processing captured tracks into observations ----
 
     suspend fun processPending(): Int = withContext(Dispatchers.IO) {
+        var done = processOnce()
+        // Places for tiles we have roads for; if that re-queued walks, process them again.
+        val tiles = dao.allPresenceCells().map { Cells.parent(it.cell, Cells.TILE_RES) }.toSet()
+        ensureLandmarks(tiles)
+        if (dao.pendingSegments().isNotEmpty()) done += processOnce()
+        done
+    }
+
+    private suspend fun processOnce(): Int = withContext(Dispatchers.IO) {
         processLock.withLock {
             var done = 0
             for (seg in dao.pendingSegments()) {

@@ -176,6 +176,8 @@ data class DispatchEntity(@PrimaryKey val day: Int, val title: String, val body:
 @Entity(tableName = "diag_log")
 data class DiagEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val timeMs: Long, val tag: String, val message: String)
 
+data class SegmentCell(val segmentId: Long, val cell: String)
+
 @Dao
 interface WanderDao {
     // Segments and points
@@ -201,6 +203,7 @@ interface WanderDao {
     @Query("DELETE FROM day_movement WHERE segmentId = :segmentId") fun deleteMovement(segmentId: Long)
     @Query("SELECT * FROM edge_coverage") fun allCoverage(): List<EdgeCoverageEntity>
     @Query("SELECT * FROM cell_presence") fun allPresence(): List<CellPresenceEntity>
+    @Query("SELECT DISTINCT segmentId, cell FROM cell_presence") fun allPresenceCells(): List<SegmentCell>
     @Query("SELECT * FROM day_movement") fun allMovement(): List<DayMovementEntity>
     @Insert fun insertTrails(t: List<TrailEntity>)
     @Query("DELETE FROM trail WHERE segmentId = :segmentId") fun deleteTrails(segmentId: Long)

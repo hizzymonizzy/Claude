@@ -1,6 +1,13 @@
 package world.wander.app.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.res.imageResource
+import world.wander.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +39,11 @@ import world.wander.engine.Tier
 import world.wander.engine.WorldParams
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+
+private val TIER_SPRITES = listOf(
+    R.drawable.sprite_tier_0, R.drawable.sprite_tier_1, R.drawable.sprite_tier_2, R.drawable.sprite_tier_3,
+    R.drawable.sprite_tier_4, R.drawable.sprite_tier_5, R.drawable.sprite_tier_6,
+)
 
 private val dateFmt = DateTimeFormatter.ofPattern("MMM d, yyyy")
 fun dayLabel(day: Int): String = LocalDate.ofEpochDay(day.toLong()).format(dateFmt)
@@ -114,7 +126,14 @@ fun AtlasScreen(repo: Repository) {
         items(list, key = { it.areaId }) { s ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text((if (s.isCapital) "★ " else "") + s.name, style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            ImageBitmap.imageResource(TIER_SPRITES[s.tier.ordinal]), contentDescription = s.tier.label,
+                            filterQuality = FilterQuality.None, modifier = Modifier.size(48.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text((if (s.isCapital) "★ " else "") + s.name, style = MaterialTheme.typography.titleMedium)
+                    }
                     val peak = if (s.peakTier != s.tier) " (once a ${s.peakTier.label})" else ""
                     Text(s.tier.label + peak, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
                     Spacer(Modifier.height(6.dp))

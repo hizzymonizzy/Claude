@@ -5,6 +5,7 @@ A solo, no-competition fitness app where walking and running build a world. Road
 - [Concept](docs/concept.md)
 - [Design doc](docs/design.md)
 - [Alpha test guide](docs/alpha.md)
+- [Privacy & security](docs/security.md): run `tools/security_scan.sh` before adding any library or asset
 
 ## Project layout
 

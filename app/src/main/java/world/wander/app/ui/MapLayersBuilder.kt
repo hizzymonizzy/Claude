@@ -41,10 +41,21 @@ object MapLayersBuilder {
         layers.wild.map { (pts, level) -> Feature.fromGeometry(line(pts)).apply { addNumberProperty("level", level) } },
     )
 
-    fun landmarkLabels(layers: MapLayers): FeatureCollection = FeatureCollection.fromFeatures(
+    /** Sprite for a kind of place. */
+    fun placeIcon(kind: String?): String = when (kind) {
+        "park", "garden", "nature_reserve", "wood", "forest", "common", "recreation_ground", "village_green",
+        "meadow", "heath", "grassland", "dog_park", "golf_course", "playground", "wetland" -> "place_park"
+        "store" -> "place_store"
+        else -> "place_generic"
+    }
+
+    fun landmarkLabels(layers: MapLayers, kinds: Map<String, String> = emptyMap()): FeatureCollection = FeatureCollection.fromFeatures(
         layers.landmarks.map { (name, rings, _) ->
             val r = rings.maxBy { it.size }
-            Feature.fromGeometry(Point.fromLngLat(r.sumOf { it.lng } / r.size, r.sumOf { it.lat } / r.size)).apply { addStringProperty("name", name) }
+            Feature.fromGeometry(Point.fromLngLat(r.sumOf { it.lng } / r.size, r.sumOf { it.lat } / r.size)).apply {
+                addStringProperty("name", name)
+                addStringProperty("icon", placeIcon(kinds[name]))
+            }
         },
     )
 
@@ -65,6 +76,7 @@ object MapLayersBuilder {
             Feature.fromGeometry(Point.fromLngLat(s.position.lng, s.position.lat)).apply {
                 addStringProperty("label", (if (s.isCapital) "★ " else "") + s.name + "\n" + s.tier.label)
                 addNumberProperty("tier", s.tier.ordinal)
+                addStringProperty("icon", "tier_${s.tier.ordinal}")
                 addNumberProperty("liveliness", s.liveliness)
             }
         },
