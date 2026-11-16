@@ -47,6 +47,8 @@ data class WorldInput(
     /** Epoch day the world began (install day). */
     val startDay: Int,
     val homeAreaId: String?,
+    /** Exact home location: the capital sits here rather than at its area's centre. */
+    val homePoint: LatLng? = null,
     val edges: Map<String, EdgeInfo>,
     val coverage: List<EdgeCoverage>,
     val presence: List<CellPresence>,

@@ -56,7 +56,7 @@ object MapLayersBuilder {
         state?.waystones.orEmpty().map { w ->
             Feature.fromGeometry(Point.fromLngLat(w.center.lng, w.center.lat)).apply {
                 addStringProperty("label", if (w.great) "Great waystone" else "Waystone")
-                addNumberProperty("size", if (w.great) 0.8 else 0.55)
+                addStringProperty("icon", if (w.great) "medal_waystone_great" else "medal_waystone")
             }
         },
     )
@@ -108,6 +108,7 @@ object MapLayersBuilder {
                 addStringProperty("label", s.name + "\n" + (if (s.isCapital) "Capital · " else "") + s.tier.label)
                 addNumberProperty("tier", s.tier.ordinal)
                 addStringProperty("icon", "medal_tier_${s.tier.ordinal}")
+                addBooleanProperty("capital", s.isCapital)
                 addNumberProperty("liveliness", s.liveliness)
             }
         },

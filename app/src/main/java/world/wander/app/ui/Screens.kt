@@ -217,7 +217,7 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
                 val kind = if (st.great) "Great waystone" else "Waystone"
                 HitRow(
                     "$kind · ${w!!.regionName(st.regionId)}",
-                    "Found ${dayLabel(st.foundDay)} · ${st.trips} arrival${if (st.trips == 1) "" else "s"}", R.drawable.sprite_waystone,
+                    "Found ${dayLabel(st.foundDay)} · ${st.trips} arrival${if (st.trips == 1) "" else "s"}", if (st.great) R.drawable.medal_waystone_great else R.drawable.medal_waystone,
                 ) { go(st.center) }
             }
             val links = w!!.portals

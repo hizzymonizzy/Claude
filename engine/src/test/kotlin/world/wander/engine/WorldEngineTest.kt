@@ -53,6 +53,13 @@ class WorldEngineTest {
     }
 
     @Test
+    fun capitalSitsExactlyAtHome() {
+        val home = LatLng(40.7361, -74.1730)
+        val state = WorldEngine().build(baseInput(walk(homeCells, start, 20.0)).copy(homePoint = home), start)
+        assertEquals(home, state.settlements.single().position)
+    }
+
+    @Test
     fun campNeedsThreeFootDaysWithinAMonth() {
         val sparse = (0..2).flatMap { walk(parkCells, start + it * 20, 20.0) } // 20 days apart: too sparse
         assertTrue(WorldEngine().build(baseInput(sparse), start + 50).settlements.isEmpty())

@@ -58,10 +58,15 @@ GREEN = (98, 140, 76)
 GREEN_DARK = (48, 78, 40)
 
 
-def pattern(src: Path, size=256) -> Image.Image:
+def pattern(src: Path, size=256, lighten=1.0, warm=0.0) -> Image.Image:
     im = Image.open(src).convert("RGB")
     # Downscale the whole seamless tile so it stays seamless.
-    return im.resize((size, size), Image.LANCZOS)
+    im = im.resize((size, size), Image.LANCZOS)
+    if lighten != 1.0:
+        im = ImageEnhance.Brightness(im).enhance(lighten)
+    if warm:
+        im = Image.blend(im, Image.new("RGB", im.size, (214, 186, 140)), warm)
+    return im
 
 
 def medallion(src: Path, size: int, ruins=False, green=False, small=False) -> Image.Image:
@@ -95,8 +100,10 @@ def main():
     RES.mkdir(parents=True, exist_ok=True)
     rows = []
     for name, (f, src) in TERRAIN.items():
-        pattern(clean / f).save(RES / f"oad_{name}.png", optimize=True)
-        rows.append((f"oad_{name}.png", SRC_PREFIX + src, "resized to 256 px"))
+        # Dirt roads are lightened toward sandy earth so they read against grass.
+        lighten, warm = (1.45, 0.25) if name == "road_dirt" else (1.0, 0.0)
+        pattern(clean / f, lighten=lighten, warm=warm).save(RES / f"oad_{name}.png", optimize=True)
+        rows.append((f"oad_{name}.png", SRC_PREFIX + src, "resized to 256 px" + (", lightened and warmed" if warm else "")))
     for name, (f, src, opts) in MEDALLIONS.items():
         size = 96 if opts.get("small") else 128
         medallion(clean / f, size, ruins=opts.get("ruins", False), green=opts.get("green", False), small=opts.get("small", False)) \

@@ -99,6 +99,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             return t
         }
         fun placeSettlement(s: SettlementAcc, a: AreaAcc) {
+            if (s.capital && input.homePoint != null) { s.position = input.homePoint; return }
             val cells = a.cells.filter { (familiarity[it] ?: 0.0) > 0 }.ifEmpty { a.cells.toList() }
             if (cells.isEmpty()) return
             var wSum = 0.0; var lat = 0.0; var lng = 0.0

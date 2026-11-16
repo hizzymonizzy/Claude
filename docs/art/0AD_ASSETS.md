@@ -15,7 +15,7 @@ Source: official mirror `github.com/0ad/0ad`, branch `master`. Every file passed
 | `oad_ground_farm.png` | `binaries/data/mods/public/art/textures/terrain/types/temperate/farmland_01.png` | resized to 256 px |
 | `oad_ground_sand.png` | `binaries/data/mods/public/art/textures/terrain/types/sahara/sand_01.png` | resized to 256 px |
 | `oad_ground_snow.png` | `binaries/data/mods/public/art/textures/terrain/types/alpine_arctic/snow_01.png` | resized to 256 px |
-| `oad_road_dirt.png` | `binaries/data/mods/public/art/textures/terrain/types/temperate/mud_01.png` | resized to 256 px |
+| `oad_road_dirt.png` | `binaries/data/mods/public/art/textures/terrain/types/temperate/mud_01.png` | resized to 256 px, lightened and warmed |
 | `oad_road_cobble.png` | `binaries/data/mods/public/art/textures/terrain/types/temperate/paving_001.png` | resized to 256 px |
 | `oad_medal_tier_0.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/wall.png` | cropped to a circle, framed, weathered |
 | `oad_medal_tier_1.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/special_settlement.png` | cropped to a circle, framed |

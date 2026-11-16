@@ -229,6 +229,8 @@ class Repository(context: Context) {
                     db.runInTransaction {
                         dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
                         dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
+                        // Even a short stop marks where travel set you down.
+                        arrivalSincePrevious(seg, pts)?.let { dao.insertArrivals(listOf(ArrivalEntity(segmentId = seg.id, day = it.day, lat = it.lat, lng = it.lng))) }
                         dao.markProcessed(seg.id, true, "no walk: moving around a building, in a vehicle, or poor GPS")
                     }
                     continue
@@ -246,7 +248,7 @@ class Repository(context: Context) {
                 db.runInTransaction {
                     dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
                     dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
-                    dao.insertArrivals((r.arrivals + listOfNotNull(arrivalSincePrevious(seg, usable))).map {
+                    dao.insertArrivals((r.arrivals + listOfNotNull(arrivalSincePrevious(seg, pts))).map {
                         ArrivalEntity(segmentId = seg.id, day = it.day, lat = it.lat, lng = it.lng)
                     })
                     dao.insertWild(r.wildTrails.map { WildTrailEntity(segmentId = seg.id, day = it.day, geometry = Overpass.encode(it.points)) })
@@ -272,14 +274,14 @@ class Repository(context: Context) {
     }
 
     /**
-     * Did this walk start far (> 2 km) from where the previous recorded walk ended? Then you drove or
-     * flew in between, and its first point is an arrival.
+     * Did this recording start far (> 2 km) from where the previous one ended? Then you drove or flew in
+     * between, and its first decent fix is an arrival. Uses raw fixes on both sides, so a short or
+     * "moving around a building" recording still marks where you were.
      */
-    private fun arrivalSincePrevious(seg: SegmentEntity, usable: List<TrackPoint>): Arrival? {
-        val first = usable.firstOrNull() ?: return null
+    private fun arrivalSincePrevious(seg: SegmentEntity, pts: List<TrackPointEntity>): Arrival? {
+        val first = pts.firstOrNull { it.accuracyM <= 50f } ?: return null
         val prev = dao.previousSegment(seg.startMs, seg.id) ?: return null
-        val prevPts = TrackProcessor(zone).usablePoints(dao.points(prev.id).map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) })
-        val last = prevPts.lastOrNull() ?: return null
+        val last = dao.points(prev.id).lastOrNull { it.accuracyM <= 50f } ?: return null
         if (Geo.distanceM(last.lat, last.lng, first.lat, first.lng) < 2_000) return null
         return Arrival(TrackProcessor(zone).dayOf(first.timeMs), first.lat, first.lng)
     }
@@ -302,6 +304,7 @@ class Repository(context: Context) {
         val input = WorldInput(
             startDay = prefs.startDay,
             homeAreaId = prefs.homeAreaId,
+            homePoint = prefs.homeLat?.let { lat -> prefs.homeLng?.let { LatLng(lat, it) } },
             edges = edgeInfos,
             coverage = coverage.map { EdgeCoverage(it.edgeId, it.day, it.fromM, it.toM, Mode.valueOf(it.mode)) },
             presence = dao.allPresence().map { CellPresence(it.cell, it.day, it.seconds, Mode.valueOf(it.mode)) },
@@ -408,8 +411,11 @@ class Repository(context: Context) {
     }
 
     companion object {
-        /** v2: stretches that stay within 45 m (moving around a building) are no longer walks. */
-        const val PROCESSING_VERSION = 2
+        /**
+         * v2: stretches that stay within 45 m (moving around a building) are no longer walks.
+         * v3: arrivals compare raw fixes, so short stops still mark where travel set you down.
+         */
+        const val PROCESSING_VERSION = 3
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }

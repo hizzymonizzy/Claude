@@ -187,6 +187,43 @@ def waystone():
     return img
 
 
+def ring_medallion(inner_img, size, ring, edge, glow=None, double=False):
+    """Original medallion frame (no third-party art): a coloured ring around a sprite on a dark disc."""
+    from PIL import ImageFilter
+    pad = 10 if glow else 4
+    out = Image.new("RGBA", (size + 2 * pad, size + 2 * pad), (0, 0, 0, 0))
+    if glow:
+        g = Image.new("RGBA", out.size, (0, 0, 0, 0))
+        ImageDraw.Draw(g).ellipse([2, 2, size + 2 * pad - 3, size + 2 * pad - 3], fill=glow)
+        out = Image.alpha_composite(out, g.filter(ImageFilter.GaussianBlur(5)))
+    d = ImageDraw.Draw(out)
+    o = pad
+    d.ellipse([o + 2, o + 4, o + size + 1, o + size + 3], fill=(30, 22, 14, 160))          # shadow
+    d.ellipse([o, o, o + size - 1, o + size - 1], fill=ring, outline=edge, width=3)
+    w = max(6, size // 10)
+    d.ellipse([o + w, o + w, o + size - w - 1, o + size - w - 1], fill=(52, 46, 40, 255), outline=edge, width=2)
+    if double:
+        d.ellipse([o + 3, o + 3, o + size - 4, o + size - 4], outline=(225, 245, 255, 255), width=2)
+    inner = size - 2 * w - 4
+    sprite = inner_img.resize((inner, inner), Image.NEAREST)
+    out.alpha_composite(sprite, (o + w + 2, o + w + 2))
+    return out
+
+
+def capital_badge():
+    """Gold star badge shown on the capital's medallion."""
+    img = Image.new("RGBA", (24, 24), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    import math as m
+    pts = []
+    for i in range(10):
+        r = 11 if i % 2 == 0 else 5
+        a = -m.pi / 2 + i * m.pi / 5
+        pts.append((12 + r * m.cos(a), 12 + r * m.sin(a)))
+    d.polygon(pts, fill=(246, 200, 70, 255), outline=INK)
+    return img
+
+
 def parchment(size=64, seed=7):
     """Tileable fog texture: plain parchment with faint fibres (no blots, so it doesn't look patterned)."""
     rnd = random.Random(seed)
@@ -213,6 +250,11 @@ def main():
         img = img.resize((img.width * SCALE, img.height * SCALE), Image.NEAREST)
         img.save(OUT / f"sprite_{name}.png", optimize=True)
     parchment().resize((128, 128), Image.NEAREST).save(OUT / "fog_parchment.png", optimize=True)
+    stone = waystone()
+    ring_medallion(stone, 88, (90, 140, 190, 255), (30, 60, 100, 255)).save(OUT / "medal_waystone.png", optimize=True)
+    ring_medallion(stone, 112, (110, 170, 225, 255), (30, 60, 100, 255), glow=(120, 200, 255, 150), double=True) \
+        .save(OUT / "medal_waystone_great.png", optimize=True)
+    capital_badge().resize((48, 48), Image.NEAREST).save(OUT / "badge_capital.png", optimize=True)
     print(f"wrote {len(SPRITES) + 1} images to {OUT}", file=sys.stderr)
 
 

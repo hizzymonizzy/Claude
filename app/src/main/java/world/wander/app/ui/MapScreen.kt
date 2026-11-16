@@ -60,6 +60,10 @@ import org.maplibre.android.style.layers.PropertyFactory.circleRadius
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
 import org.maplibre.android.style.expressions.Expression.gte
+import org.maplibre.android.style.expressions.Expression.eq
+import org.maplibre.android.style.expressions.Expression.all
+import org.maplibre.android.style.layers.PropertyFactory.lineOffset
+import org.maplibre.android.style.layers.PropertyFactory.iconOffset
 import org.maplibre.android.style.expressions.Expression.lt
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
@@ -225,6 +229,12 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             }
         }
 
+        var showLegend by remember { mutableStateOf(false) }
+        if (showLegend) LegendDialog(onDismiss = { showLegend = false })
+        SmallFloatingActionButton(
+            onClick = { showLegend = true },
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 76.dp),
+        ) { Text("?") }
         SmallFloatingActionButton(
             onClick = {
                 scope.launch {
@@ -258,7 +268,8 @@ private suspend fun currentLocation(context: Context): WLatLng? = try {
 private fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
 private val OUR_LAYERS = listOf(
-    "explored", "green-places", "fog", "fog-edge", "peek", "roads-edge", "roads-dirt", "roads-cobble", "wild",
+    "explored", "green-places", "fog", "fog-edge", "peek", "roads-edge", "roads-trail", "roads-dirt", "roads-cobble",
+    "roads-trees-l", "roads-trees-r", "wild", "capital-badge",
     "landmark-icons", "landmark-names", "road-names", "track", "waypoints", "waypoint-labels", "waystones", "waystone-labels",
     "settlement-dots", "settlements", "settlement-labels", "me",
 )
@@ -289,36 +300,54 @@ private fun addWorldLayers(s: Style, problems: MutableList<String>) {
             lineColor(INK), lineOpacity(0.35f), lineWidth(1.5f), lineDasharray(arrayOf(1.5f, 2.5f)),
         ),
     )
-    // Charted roads: a dark edge, then a dirt (levels 1–3) or cobblestone (4–5) surface from 0 A.D. textures.
-    // Two filtered layers with fixed patterns (more widely supported than a data-driven pattern).
-    val roadWidth = interpolate(linear(), get("level"), stop(1, 3f), stop(3, 5f), stop(5, 8f))
-    s.addLayer(
-        LineLayer("roads-edge", "roads").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND), lineColor("#4A3A28"), lineOpacity(0.6f),
-            lineWidth(interpolate(linear(), get("level"), stop(1, 5f), stop(3, 7.5f), stop(5, 11f))),
-        ),
-    )
+    // Charted roads, five stages by distinct days walked (see the Legend):
+    // 1 Trail (dashed sand) · 2 Footpath (dirt) · 3 Lane (dirt + edge) · 4 Cobbled road · 5 Avenue (cobbles, tree-lined).
+    fun level(n: Int) = eq(get("level"), literal(n))
+    guard(problems, "roads-edge") {
+        s.addLayer(
+            LineLayer("roads-edge", "roads").withProperties(
+                lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND),
+                lineColor(match(get("level"), literal("#5E5A52"), stop(3, "#4A3A28"))), lineOpacity(0.75f),
+                lineWidth(match(get("level"), literal(11f), stop(3, 7.5f), stop(4, 9.5f))),
+            ).also { it.setFilter(gte(get("level"), literal(3))) },
+        )
+    }
+    guard(problems, "roads-trail") {
+        s.addLayer(
+            LineLayer("roads-trail", "roads").withProperties(
+                lineCap(Property.LINE_CAP_BUTT), lineColor("#E2CDA0"), lineWidth(2.5f), lineDasharray(arrayOf(1.6f, 1.2f)),
+            ).also { it.setFilter(level(1)) },
+        )
+    }
     guard(problems, "roads-dirt") {
         s.addLayer(
             LineLayer("roads-dirt", "roads").withProperties(
                 lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND),
-                lineColor("#A88A62"), linePattern("road_dirt"), lineWidth(roadWidth),
-            ).also { it.setFilter(lt(get("level"), literal(4))) },
+                lineColor("#D2B88A"), linePattern("road_dirt"), lineWidth(match(get("level"), literal(5f), stop(2, 3.5f))),
+            ).also { it.setFilter(all(gte(get("level"), literal(2)), lt(get("level"), literal(4)))) },
         )
     }
     guard(problems, "roads-cobble") {
         s.addLayer(
             LineLayer("roads-cobble", "roads").withProperties(
                 lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND),
-                lineColor("#8E8A80"), linePattern("road_cobble"), lineWidth(roadWidth),
+                lineColor("#8E8A80"), linePattern("road_cobble"), lineWidth(match(get("level"), literal(8.5f), stop(4, 6.5f))),
             ).also { it.setFilter(gte(get("level"), literal(4))) },
+        )
+    }
+    for ((id, offset) in listOf("roads-trees-l" to -9f, "roads-trees-r" to 9f)) guard(problems, id) {
+        s.addLayer(
+            LineLayer(id, "roads").withProperties(
+                lineCap(Property.LINE_CAP_ROUND), lineColor("#3A6832"), lineWidth(6f), lineOffset(offset),
+                lineDasharray(arrayOf(0.01f, 3.2f)),
+            ).also { it.setFilter(level(5)) },
         )
     }
     // Paths you made yourself: dashed footpaths that darken as they wear in.
     s.addLayer(
         LineLayer("wild", "wild").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineColor("#7A6046"), lineOpacity(0.8f),
-            lineDasharray(arrayOf(2f, 1.5f)),
+            lineCap(Property.LINE_CAP_BUTT), lineColor("#ECDEBA"), lineOpacity(0.95f),
+            lineDasharray(arrayOf(1.2f, 1.0f)),
             lineWidth(interpolate(linear(), get("level"), stop(1, 1.5f), stop(5, 4.5f))),
         ),
     )
@@ -346,7 +375,7 @@ private fun addWorldLayers(s: Style, problems: MutableList<String>) {
     // Waypoints: a signpost for every area you've walked in, readable from far out.
     s.addLayer(
         SymbolLayer("waypoints", "waypoints").withProperties(
-            iconImage("medal_waypoint"), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            iconImage("medal_waypoint"), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
             iconSize(interpolate(linear(), zoom(), stop(8, 0.25f), stop(13, 0.35f), stop(17, 0.5f))),
         ),
     )
@@ -361,14 +390,15 @@ private fun addWorldLayers(s: Style, problems: MutableList<String>) {
     }
     s.addLayer(
         SymbolLayer("waystones", "waystones").withProperties(
-            iconImage("waystone"), iconSize(get("size")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
+            iconSize(interpolate(linear(), zoom(), stop(9, 0.3f), stop(14, 0.45f), stop(17, 0.6f))),
         ).also { it.minZoom = 9f },
     )
     guard(problems, "waystone-labels") {
         s.addLayer(
             SymbolLayer("waystone-labels", "waystones").withProperties(
                 textField(get("label")), textFont(FONT), textSize(10f), textColor("#2E4A6B"), textHaloColor("#F4ECD8"), textHaloWidth(2f),
-                textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.2f)),
+                textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 1.6f)),
             ).also { it.minZoom = 12f },
         )
     }
@@ -376,21 +406,30 @@ private fun addWorldLayers(s: Style, problems: MutableList<String>) {
     s.addLayer(
         CircleLayer("settlement-dots", "settlements").withProperties(
             circleColor("#C4A052"), circleStrokeColor("#4A3A28"), circleStrokeWidth(2f),
-            circleRadius(interpolate(linear(), zoom(), stop(8, 4f), stop(16, 7f))),
+            circleRadius(interpolate(linear(), zoom(), stop(8, 3f), stop(16, 5f))),
         ),
     )
     s.addLayer(
         SymbolLayer("settlements", "settlements").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true),
             iconSize(interpolate(linear(), zoom(), stop(8, 0.3f), stop(14, 0.45f), stop(17, 0.65f))),
-            iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            iconAnchor(Property.ICON_ANCHOR_CENTER),
         ),
     )
+    guard(problems, "capital-badge") {
+        s.addLayer(
+            SymbolLayer("capital-badge", "settlements").withProperties(
+                iconImage("badge_capital"), iconAllowOverlap(true), iconIgnorePlacement(true),
+                iconSize(interpolate(linear(), zoom(), stop(8, 0.35f), stop(14, 0.5f), stop(17, 0.7f))),
+                iconOffset(arrayOf(42f, -42f)),
+            ).also { it.setFilter(eq(get("capital"), literal(true))) },
+        )
+    }
     guard(problems, "settlement-labels") { s.addLayer(
         SymbolLayer("settlement-labels", "settlements").withProperties(
             textField(get("label")), textFont(FONT), textSize(interpolate(linear(), zoom(), stop(10, 11f), stop(16, 15f))),
             textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f),
-            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.3f)),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.2f)),
         ),
     ) }
     s.addLayer(
@@ -417,6 +456,8 @@ private val SPRITES = mapOf(
     "road_dirt" to R.drawable.oad_road_dirt, "road_cobble" to R.drawable.oad_road_cobble,
     "wanderer" to R.drawable.sprite_wanderer, "fog_parchment" to R.drawable.fog_parchment,
     "waystone" to R.drawable.sprite_waystone,
+    "medal_waystone" to R.drawable.medal_waystone, "medal_waystone_great" to R.drawable.medal_waystone_great,
+    "badge_capital" to R.drawable.badge_capital,
 )
 
 private fun addSprites(s: Style, context: Context) {
