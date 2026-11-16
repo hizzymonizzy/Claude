@@ -94,7 +94,6 @@ fun ResourcePointers(
         if (right <= left || bottom <= top) return@BoxWithConstraints
         val cx = w / 2; val cy = (top + bottom) / 2
         for (t in targets) {
-            if (t.distanceM < 20) continue // you're there
             val (x, y) = project(t.point) ?: continue
             val icon = RESOURCE_ICONS[t.resource] ?: continue
             val onScreen = x in left..right && y in top..bottom

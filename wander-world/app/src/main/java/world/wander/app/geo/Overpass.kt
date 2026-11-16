@@ -109,10 +109,12 @@ object Overpass {
         val elements = org.json.JSONArray()
         for (i in 0 until first.length()) first.getJSONObject(i).let { if (it.getString("type") != "relation") elements.put(it) }
         if (small.isNotEmpty()) {
+            Thread.sleep(1_500) // the public server answers 429 to back-to-back requests
             val rel = JSONObject(postWithRetry(relationQuery(small))).getJSONArray("elements")
             for (i in 0 until rel.length()) elements.put(rel.getJSONObject(i))
         }
         val json = JSONObject().put("elements", elements).toString()
+        Thread.sleep(1_500)
         val coastal = try {
             JSONObject(postWithRetry(coastQuery(bbox))).getJSONArray("elements").length() > 0
         } catch (_: Exception) { false }

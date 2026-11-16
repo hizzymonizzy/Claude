@@ -43,6 +43,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -186,10 +187,16 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         targetsFrom = from to layers
         searching = true
         // A newer search may cancel this one (the world just rebuilt); let it, rather than blanking the pointers.
-        targets = try { repo.nearestSources(from) } catch (e: CancellationException) { targetsFrom = null; throw e }
-            catch (e: Exception) { repo.log("map", "Resource search failed: ${e.message}"); targets }
+        // If this spot's places haven't downloaded yet (the server is often busy), try again a few times.
+        for (attempt in 1..6) {
+            targets = try { repo.nearestSources(from) } catch (e: CancellationException) { targetsFrom = null; searching = false; throw e }
+                catch (e: Exception) { repo.log("map", "Resource search failed: ${e.message}"); targets }
+            repo.log("map", "Resource pointers: " + targets.joinToString { "${it.resource} ${formatDistance(it.distanceM)}" }.ifEmpty { "none nearby yet" })
+            if (repo.placesLoadedAt(from)) break
+            searching = false
+            delay(90_000)
+        }
         searching = false
-        repo.log("map", "Resource pointers: " + targets.joinToString { "${it.resource} ${formatDistance(it.distanceM)}" }.ifEmpty { "none nearby yet" })
     }
 
     Box(modifier.fillMaxSize()) {

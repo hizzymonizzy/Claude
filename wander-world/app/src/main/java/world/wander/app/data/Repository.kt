@@ -397,6 +397,9 @@ class Repository(context: Context) {
      * wood from woods and parks, food from water and beaches, metal from places you haven't discovered yet
      * (then ones you have), stone from the nearest street you haven't walked. Null where none is near.
      */
+    /** Whether places (wood, food, metal sources) have been downloaded for the tile at this point. */
+    suspend fun placesLoadedAt(p: LatLng): Boolean = withContext(Dispatchers.IO) { dao.landmarkTile(Cells.tile(p.lat, p.lng)) != null }
+
     suspend fun nearestSources(from: LatLng): List<ResourceTarget> = withContext(Dispatchers.IO) {
         // Map data for where you are now, even if you haven't walked here yet (one tile, same request a walk makes).
         val here = Cells.tile(from.lat, from.lng)
@@ -474,7 +477,7 @@ class Repository(context: Context) {
         buildString {
             appendLine("Wander World diagnostics · ${fmt.format(java.time.Instant.now())}")
             appendLine("App ${pkg.versionName} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
-            appendLine("World start: ${java.time.LocalDate.ofEpochDay(prefs.startDay.toLong())} · home area: ${prefs.homeAreaId} · tracking: ${if (prefs.autoTrackingEnabled) prefs.trackingMode else "off"} · resting: ${prefs.resting} · goal locked: ${prefs.goalLocked}")
+            appendLine("World start: ${java.time.LocalDate.ofEpochDay(prefs.startDay.toLong())} · home area: ${prefs.homeAreaId} · tracking: ${if (prefs.autoTrackingEnabled) prefs.trackingMode else "off"} · resting: ${prefs.resting} · goal locked: ${prefs.goalLocked} · resource pointers: ${if (prefs.resourcePointers) "on" else "off"}")
             extra.forEach { appendLine(it) }
             appendLine()
             appendLine("== World ==")

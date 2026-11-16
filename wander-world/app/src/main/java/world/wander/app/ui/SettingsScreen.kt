@@ -98,9 +98,9 @@ fun SettingsScreen(repo: Repository) {
         refresh++
     }
 
-    @Suppress("UNUSED_EXPRESSION") refresh
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item {
+            ReadPrefs(refresh)
             Spacer(Modifier.height(12.dp))
             message?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
 
@@ -230,6 +230,7 @@ fun SettingsScreen(repo: Repository) {
             SectionTitle("Recent captures")
         }
         item {
+            ReadPrefs(refresh)
             var segs by remember { mutableStateOf(emptyList<SegmentEntity>()) }
             LaunchedEffect(refresh, logs.size) { segs = withContext(Dispatchers.IO) { repo.dao.recentSegments(8) } }
             Column {
@@ -305,12 +306,22 @@ private fun PermRow(label: String, granted: Boolean, onGrant: () -> Unit) {
 
 @Composable
 private fun ToggleRow(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
+    // Shows the new position the moment it's tapped, and follows the saved value if it changes elsewhere.
+    var checked by remember(value) { mutableStateOf(value) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         // The label takes what's left, so the switch is never pushed off screen.
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 12.dp))
-        Switch(checked = value, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = { checked = it; onChange(it) })
     }
 }
+
+/**
+ * Settings live in SharedPreferences, which Compose can't observe. Each list item calls this with the
+ * change counter so it re-reads them after any toggle; without it an item only redrew when something
+ * else on screen changed.
+ */
+@Composable
+private fun ReadPrefs(@Suppress("UNUSED_PARAMETER") version: Int) {}
 
 /** Shown by Health Connect when you ask why the app wants your data. */
 class PrivacyActivity : ComponentActivity() {
