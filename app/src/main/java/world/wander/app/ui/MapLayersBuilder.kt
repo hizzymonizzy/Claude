@@ -61,17 +61,23 @@ object MapLayersBuilder {
         },
     )
 
-    private val WOODED = setOf("wood", "forest", "nature_reserve", "wetland", "heath")
-    private val GREEN = setOf("park", "garden", "common", "recreation_ground", "village_green", "meadow", "grassland",
-        "dog_park", "golf_course", "playground", "cemetery")
+    private val WOODED = MapIcons.WOODED
+    private val GREEN = MapIcons.GREEN
 
     /** Medallion for a kind of place. */
-    fun placeIcon(kind: String?): String = when (kind) {
-        in WOODED -> "medal_place_wood"
-        in GREEN -> "medal_place_park"
-        "store" -> "medal_place_store"
-        else -> "medal_place_generic"
-    }
+    fun placeIcon(kind: String?): String = MapIcons.placeIcon(kind)
+
+    /** Discovered beaches and sand, drawn with a sand texture (under the fog). */
+    fun sandPlaces(layers: MapLayers, kinds: Map<String, String>): FeatureCollection = FeatureCollection.fromFeatures(
+        layers.landmarks.filter { kinds[it.first] == "beach" }.mapNotNull { (_, rings, _) ->
+            placePolygon(rings)?.let { g -> polygons(g).map { Feature.fromGeometry(toGeo(it)) } }
+        }.flatten(),
+    )
+
+    /** Water routes you've paddled, with their wear level. */
+    fun water(layers: MapLayers): FeatureCollection = FeatureCollection.fromFeatures(
+        layers.water.map { (pts, level) -> Feature.fromGeometry(line(pts)).apply { addNumberProperty("level", level) } },
+    )
 
     /** Discovered parks and woods, drawn with a forest-floor texture (under the fog). */
     fun greenPlaces(layers: MapLayers, kinds: Map<String, String>): FeatureCollection = FeatureCollection.fromFeatures(
@@ -122,6 +128,7 @@ object MapLayersBuilder {
         val revealed = layers.discovered.mapNotNull { (e, st) -> bufferedLatLng(Overpass.decode(e.geometry), REVEAL_BY_LEVEL_M[st.level.coerceIn(1, 5)]) } +
             layers.trails.mapNotNull { bufferedLatLng(it, TRAIL_RADIUS_M) } +
             layers.wild.mapNotNull { (pts, level) -> bufferedLatLng(pts, maxOf(TRAIL_RADIUS_M, REVEAL_BY_LEVEL_M[level.coerceIn(1, 5)] - 5)) } +
+            layers.water.mapNotNull { (pts, level) -> bufferedLatLng(pts, REVEAL_BY_LEVEL_M[level.coerceIn(1, 5)] + 20) } +
             layers.landmarks.filter { it.third <= CLEAR_PLACES_UNDER_M2 }.mapNotNull { (_, rings, _) -> placePolygon(rings) }
         val explored: Geometry? = if (revealed.isEmpty()) null else try { fillSmallHoles(UnaryUnionOp.union(revealed)) } catch (_: Exception) { null }
         val fog: Geometry = explored?.let { try { world.difference(it) } catch (_: Exception) { world } } ?: world

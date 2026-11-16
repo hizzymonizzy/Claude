@@ -62,23 +62,66 @@ object Overpass {
         throw IllegalStateException(errors.joinToString(" | "))
     }
 
+    /** Named places worth discovering. `nwr` lines are fetched as ways, relations and points. */
     private const val AREA_FILTERS = """
-        nwr["leisure"~"^(park|garden|playground|nature_reserve|dog_park|golf_course|common|recreation_ground|marina)$"]["name"](BBOX);
+        nwr["leisure"~"^(park|garden|playground|nature_reserve|dog_park|golf_course|common|recreation_ground|marina|stadium|sports_centre)$"]["name"](BBOX);
         nwr["landuse"~"^(recreation_ground|cemetery|forest|village_green|meadow)$"]["name"](BBOX);
-        nwr["natural"~"^(beach|wood|wetland|heath|grassland)$"]["name"](BBOX);
-        nwr["tourism"~"^(zoo|theme_park|attraction|camp_site)$"]["name"](BBOX);
-        nwr["amenity"~"^(university|college|marketplace)$"]["name"](BBOX);
+        nwr["natural"~"^(beach|wood|wetland|heath|grassland|water|sand)$"]["name"](BBOX);
+        nwr["tourism"~"^(zoo|theme_park|attraction|camp_site|museum)$"]["name"](BBOX);
+        nwr["amenity"~"^(university|college|school|kindergarten|marketplace|hospital|clinic|townhall|courthouse|police|fire_station|post_office|library|place_of_worship|theatre|arts_centre|cinema|community_centre|bus_station|ferry_terminal)$"]["name"](BBOX);
+        nwr["office"="government"]["name"](BBOX);
+        nwr["railway"="station"]["name"](BBOX);
+        nwr["man_made"="lighthouse"](BBOX);
+        nwr["historic"~"^(monument|memorial|castle|fort|ruins|archaeological_site|battlefield|building)$"]["name"](BBOX);
         way["shop"]["name"]["building"](BBOX);
     """
 
-    /** Named areas in a tile: parks, woods, beaches, campuses, big stores. Small shops are dropped. */
+    /** Points of interest mapped as a single point get a small circle you can walk through. */
+    private const val POINT_RADIUS_M = 35.0
+
+    /** Named places in a tile: parks, woods, beaches, lakes, civic buildings, big stores. Small shops are dropped. */
     fun fetchLandmarks(tile: String): List<LandmarkEntity> {
         val boundary = Cells.boundary(tile)
         val bbox = "${boundary.minOf { it.lat }},${boundary.minOf { it.lng }},${boundary.maxOf { it.lat }},${boundary.maxOf { it.lng }}"
-        val query = "[out:json][timeout:90];(" + AREA_FILTERS.replace("BBOX", bbox).replace("nwr[", "way[") +
-            AREA_FILTERS.replace("BBOX", bbox).lines().filter { it.trim().startsWith("nwr[") }.joinToString("\n") { it.replace("nwr[", "relation[") } +
-            ");out body geom;"
+        val lines = AREA_FILTERS.replace("BBOX", bbox).lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val parts = lines.flatMap { l ->
+            if (l.startsWith("nwr[")) listOf(l.replaceFirst("nwr[", "way["), l.replaceFirst("nwr[", "relation["), l.replaceFirst("nwr[", "node["))
+            else listOf(l)
+        }
+        val query = "[out:json][timeout:90];(" + parts.joinToString("") + ");out body geom;"
         return parseLandmarks(postWithRetry(query), tile)
+    }
+
+    /** Our category for a place, from its OpenStreetMap tags. Drives its medallion and legend entry. */
+    internal fun categorize(t: JSONObject): String {
+        fun tag(k: String) = t.optString(k)
+        val amenity = tag("amenity"); val leisure = tag("leisure"); val natural = tag("natural")
+        return when {
+            amenity in setOf("hospital", "clinic") -> "hospital"
+            amenity in setOf("townhall", "courthouse") || tag("office") == "government" -> "government"
+            amenity in setOf("police", "fire_station") -> "emergency"
+            amenity in setOf("post_office", "community_centre", "marketplace") -> "civic"
+            amenity in setOf("school", "college", "university", "kindergarten") -> "school"
+            amenity == "library" -> "library"
+            amenity == "place_of_worship" -> "worship"
+            amenity in setOf("theatre", "arts_centre", "cinema") || tag("tourism") == "museum" -> "culture"
+            leisure in setOf("stadium", "sports_centre") -> "sports"
+            amenity in setOf("bus_station", "ferry_terminal") || tag("railway") == "station" -> "transport"
+            leisure == "marina" -> "harbour"
+            tag("man_made") == "lighthouse" -> "lighthouse"
+            tag("historic").isNotBlank() -> "historic"
+            natural in setOf("beach", "sand") -> "beach"
+            natural == "water" -> "water"
+            tag("shop").isNotBlank() -> "store"
+            else -> listOf("leisure", "landuse", "natural", "tourism").firstNotNullOfOrNull { k -> tag(k).takeIf { it.isNotBlank() } } ?: "place"
+        }
+    }
+
+    private fun circle(lat: Double, lng: Double, radiusM: Double): List<LatLng> {
+        val dLat = radiusM / 110_540.0
+        val dLng = radiusM / (111_320.0 * Math.cos(Math.toRadians(lat)))
+        val ring = (0 until 16).map { i -> val a = 2 * Math.PI * i / 16; LatLng(lat + dLat * Math.sin(a), lng + dLng * Math.cos(a)) }
+        return ring + ring.first()
     }
 
     internal fun parseLandmarks(json: String, tile: String): List<LandmarkEntity> {
@@ -87,11 +130,10 @@ object Overpass {
         for (i in 0 until elements.length()) {
             val el = elements.getJSONObject(i)
             val tags = el.optJSONObject("tags") ?: continue
-            val name = tags.optString("name").takeIf { it.isNotBlank() } ?: continue
-            val kind = listOf("leisure", "landuse", "natural", "tourism", "amenity", "shop").firstNotNullOfOrNull { k ->
-                tags.optString(k).takeIf { it.isNotBlank() }?.let { if (k == "shop") "store" else it }
-            } ?: "place"
+            val kind = categorize(tags)
+            val name = tags.optString("name").takeIf { it.isNotBlank() } ?: if (kind == "lighthouse") "Lighthouse" else continue
             val rings: List<List<LatLng>> = when (el.getString("type")) {
+                "node" -> listOf(circle(el.getDouble("lat"), el.getDouble("lon"), POINT_RADIUS_M))
                 "way" -> {
                     val g = el.optJSONArray("geometry") ?: continue
                     val pts = (0 until g.length()).map { val o = g.getJSONObject(it); LatLng(o.getDouble("lat"), o.getDouble("lon")) }

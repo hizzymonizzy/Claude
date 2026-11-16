@@ -90,6 +90,7 @@ Third-party images go through this before use:
   - building portraits (good as markers)
   - resource icons
 - **Not useful for a top-down map:** 3D models. Those would need rendering.
+- **0.6.0 addition:** 5 more portraits (palace, gymnasium, stoa, archery range, fish). They passed intake (58 of 59 files accepted overall).
 - **Status:** in use since alpha 0.4.0. There are 24 adapted files (`oad_*`), built by `tools/build_0ad_assets.py` from intake-cleaned copies. Provenance for each file is in `docs/art/0AD_ASSETS.md`, with credits in `CREDITS.md` and in Settings → Credits & licenses.
 
 ## 7. Art

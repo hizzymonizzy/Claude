@@ -130,7 +130,8 @@ class TrackingService : LifecycleService() {
             segmentId = repo.dao.insertSegment(SegmentEntity(startMs = start, source = "phone", modeHint = mode))
         }
         repo.log("track", "Capture started (${if (manual) "manual" else "auto"}, mode=${mode ?: "?"})")
-        repo.trackingStatus.value = "Charting your walk"
+        repo.captureMode.value = mode ?: "FOOT"
+        repo.trackingStatus.value = if (mode == "WATER") "Paddling" else "Charting your walk"
         startIdleWatch()
         updateNotification()
     }
@@ -163,7 +164,7 @@ class TrackingService : LifecycleService() {
         if (anchor == null || Geo.distanceM(anchor, p) > 25) { lastMovePoint = p; lastMoveMs = System.currentTimeMillis() }
         buffer += TrackPointEntity(segmentId = id, timeMs = timeMs, lat = lat, lng = lng, accuracyM = acc)
         if (buffer.size >= 10) flush()
-        repo.trackingStatus.value = "Charting · %.2f km".format(distanceM / 1000)
+        repo.trackingStatus.value = (if (modeHint == "WATER") "Paddling" else "Charting") + " · %.2f km".format(distanceM / 1000)
         updateNotification()
     }
 
@@ -205,6 +206,7 @@ class TrackingService : LifecycleService() {
         segmentId = null
         val end = System.currentTimeMillis()
         repo.log("track", "Capture ended ($reason), %.2f km".format(distanceM / 1000))
+        repo.captureMode.value = null
         repo.trackingStatus.value = if (allDay) "Waiting for movement" else "Idle"
         lifecycleScope.launch(Dispatchers.IO) {
             if (id != null) repo.dao.endSegment(id, end)
@@ -235,7 +237,7 @@ class TrackingService : LifecycleService() {
     private fun buildNotification(): Notification {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val text = when {
-            capturing -> "Charting your walk · %.2f km".format(distanceM / 1000)
+            capturing -> (if (modeHint == "WATER") "Paddling" else "Charting your walk") + " · %.2f km".format(distanceM / 1000)
             allDay -> "Waiting for you to start moving"
             else -> "Ready"
         }

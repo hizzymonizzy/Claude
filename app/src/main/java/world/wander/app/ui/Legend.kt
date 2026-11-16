@@ -26,7 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import world.wander.app.R
 
-/** One row of the legend; a null image makes it a section header. Mirrors tools/gen_legend.py. */
+/** One row of the legend; a null image makes it a section header. Generated from tools/gen_legend.py's LEGEND list. */
 private data class LegendItem(val image: Int?, val title: String, val description: String = "", val wide: Boolean = false)
 
 private val LEGEND = listOf(
@@ -34,14 +34,27 @@ private val LEGEND = listOf(
     LegendItem(R.drawable.legend_ground_fog, "Fog", "Unexplored. Walk to clear it.", wide = true),
     LegendItem(R.drawable.oad_legend_ground_explored, "Explored ground", "Cleared by your walks; worn roads clear wider.", wide = true),
     LegendItem(R.drawable.oad_legend_ground_woods, "Woods & parks", "Named green places you've discovered.", wide = true),
+    LegendItem(R.drawable.oad_legend_ground_sand, "Sand & beaches", "Beaches and dunes you've discovered.", wide = true),
+    LegendItem(R.drawable.legend_ground_water, "Water", "Lakes, rivers and sea.", wide = true),
     LegendItem(null, "Roads"),
     LegendItem(R.drawable.oad_legend_road_1, "Trail", "Walked on 1 day.", wide = true),
     LegendItem(R.drawable.oad_legend_road_2, "Footpath", "3 days.", wide = true),
     LegendItem(R.drawable.oad_legend_road_3, "Lane", "10 days.", wide = true),
     LegendItem(R.drawable.oad_legend_road_4, "Cobbled road", "30 days.", wide = true),
     LegendItem(R.drawable.oad_legend_road_5, "Avenue", "100 days. Tree-lined.", wide = true),
-    LegendItem(R.drawable.oad_legend_road_wild, "Your own path", "Off the map's roads; wears in the same way.", wide = true),
     LegendItem(R.drawable.legend_road_peek, "Unwalked street", "Glimpsed at the edge of the fog.", wide = true),
+    LegendItem(null, "Your own paths"),
+    LegendItem(R.drawable.legend_wild_1, "Faint track", "Off the map's roads, 1 day.", wide = true),
+    LegendItem(R.drawable.legend_wild_2, "Trodden path", "3 days.", wide = true),
+    LegendItem(R.drawable.oad_legend_wild_3, "Dirt track", "10 days.", wide = true),
+    LegendItem(R.drawable.oad_legend_wild_4, "Gravel trail", "30 days.", wide = true),
+    LegendItem(R.drawable.oad_legend_wild_5, "Ranger trail", "100 days. Cairns mark the way.", wide = true),
+    LegendItem(null, "Water routes"),
+    LegendItem(R.drawable.legend_water_1, "Wake", "Paddled on 1 day.", wide = true),
+    LegendItem(R.drawable.legend_water_2, "Paddle line", "3 days.", wide = true),
+    LegendItem(R.drawable.legend_water_3, "Paddle route", "10 days.", wide = true),
+    LegendItem(R.drawable.legend_water_4, "Marked route", "30 days. Buoys.", wide = true),
+    LegendItem(R.drawable.legend_water_5, "Waterway", "100 days.", wide = true),
     LegendItem(null, "Settlements"),
     LegendItem(R.drawable.oad_medal_tier_1, "Camp", "3 visit-days in a month."),
     LegendItem(R.drawable.oad_medal_tier_2, "Hamlet", "10 visit-days."),
@@ -55,11 +68,29 @@ private val LEGEND = listOf(
     LegendItem(R.drawable.oad_medal_waypoint, "Waypoint", "Any area you've walked in."),
     LegendItem(R.drawable.medal_waystone, "Waystone", "Where a drive set you down, away from known ground."),
     LegendItem(R.drawable.medal_waystone_great, "Great waystone", "Arrival in a new region; links regions."),
-    LegendItem(R.drawable.oad_medal_place_park, "Park", "Discovered green space."),
-    LegendItem(R.drawable.oad_medal_place_wood, "Woods", "Discovered woodland."),
+    LegendItem(null, "Places"),
+    LegendItem(R.drawable.oad_medal_place_park, "Park", "Green space."),
+    LegendItem(R.drawable.oad_medal_place_wood, "Woods", "Woodland, reserves, wetland."),
+    LegendItem(R.drawable.oad_medal_place_beach, "Beach", "Sand by the water."),
+    LegendItem(R.drawable.oad_medal_place_water, "Lake or river", "Named water."),
+    LegendItem(R.drawable.medal_poi_hospital, "Hospital", "Hospitals and clinics."),
+    LegendItem(R.drawable.oad_medal_poi_government, "Government", "Town hall, courthouse, offices."),
+    LegendItem(R.drawable.oad_medal_poi_emergency, "Police & fire", "Stations."),
+    LegendItem(R.drawable.oad_medal_poi_civic, "Civic", "Post office, community centre, market."),
+    LegendItem(R.drawable.oad_medal_poi_school, "School", "Schools, colleges, universities."),
+    LegendItem(R.drawable.oad_medal_poi_library, "Library", ""),
+    LegendItem(R.drawable.oad_medal_poi_worship, "Place of worship", ""),
+    LegendItem(R.drawable.oad_medal_poi_culture, "Culture", "Museums, theatres, cinemas."),
+    LegendItem(R.drawable.oad_medal_poi_sports, "Sports", "Stadiums and sports centres."),
+    LegendItem(R.drawable.oad_medal_poi_transport, "Station", "Train, bus and ferry."),
+    LegendItem(R.drawable.oad_medal_poi_harbour, "Harbour", "Marinas."),
+    LegendItem(R.drawable.oad_medal_poi_lighthouse, "Lighthouse", ""),
+    LegendItem(R.drawable.oad_medal_poi_historic, "Historic", "Monuments, memorials, ruins."),
     LegendItem(R.drawable.oad_medal_place_store, "Store", "A big store you've walked through."),
     LegendItem(R.drawable.oad_medal_place_generic, "Place", "Other named places."),
-    LegendItem(R.drawable.sprite_wanderer, "You"),
+    LegendItem(null, "You"),
+    LegendItem(R.drawable.sprite_wanderer, "Walking", ""),
+    LegendItem(R.drawable.sprite_wanderer_paddle, "Paddling", ""),
 )
 
 @Composable

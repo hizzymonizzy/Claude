@@ -47,6 +47,8 @@ data class MapLayers(
     val wild: List<Pair<List<LatLng>, Int>> = emptyList(),
     /** Discovered named areas: name, rings, area. */
     val landmarks: List<Triple<String, List<List<LatLng>>, Double>> = emptyList(),
+    /** Water routes you've paddled, with a wear level 1–5. */
+    val water: List<Pair<List<LatLng>, Int>> = emptyList(),
 )
 
 /** Everything the UI, the tracking service and the daily worker share. */
@@ -71,6 +73,8 @@ class Repository(context: Context) {
     /** Set by the Atlas / search to fly the map somewhere; the map clears it after moving. */
     val focus = MutableStateFlow<LatLng?>(null)
     val trackingStatus = MutableStateFlow("Idle")
+    /** The mode of the recording in progress ("FOOT", "CYCLE", "WATER"), or null when not recording. */
+    val captureMode = MutableStateFlow<String?>(null)
 
     val zone: ZoneId get() = ZoneId.systemDefault()
     fun today(): Int = LocalDate.now(zone).toEpochDay().toInt()
@@ -229,6 +233,7 @@ class Repository(context: Context) {
                     db.runInTransaction {
                         dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
                         dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
+                        dao.deleteWaterTrails(seg.id); dao.deleteWake(seg.id)
                         // Even a short stop marks where travel set you down.
                         arrivalSincePrevious(seg, pts)?.let { dao.insertArrivals(listOf(ArrivalEntity(segmentId = seg.id, day = it.day, lat = it.lat, lng = it.lng))) }
                         dao.markProcessed(seg.id, true, "no walk: moving around a building, in a vehicle, or poor GPS")
@@ -248,6 +253,9 @@ class Repository(context: Context) {
                 db.runInTransaction {
                     dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
                     dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
+                    dao.deleteWaterTrails(seg.id); dao.deleteWake(seg.id)
+                    dao.insertWaterTrails(r.waterTrails.filter { it.points.size >= 2 }.map { WaterTrailEntity(segmentId = seg.id, day = it.day, geometry = Overpass.encode(it.points)) })
+                    dao.insertWake(r.wake.map { WakeEntity(segmentId = seg.id, cell = it.cell, day = it.day) })
                     dao.insertArrivals((r.arrivals + listOfNotNull(arrivalSincePrevious(seg, pts))).map {
                         ArrivalEntity(segmentId = seg.id, day = it.day, lat = it.lat, lng = it.lng)
                     })
@@ -257,7 +265,7 @@ class Repository(context: Context) {
                     dao.insertTrails(r.trails.filter { it.points.size >= 2 }.map { TrailEntity(segmentId = seg.id, day = it.day, geometry = Overpass.encode(it.points)) })
                     dao.insertCoverage(r.coverage.map { EdgeCoverageEntity(segmentId = seg.id, edgeId = it.edgeId, day = it.day, fromM = it.fromM, toM = it.toM, mode = it.mode.name) })
                     dao.insertPresence(r.presence.map { CellPresenceEntity(segmentId = seg.id, cell = it.cell, day = it.day, seconds = it.seconds, mode = it.mode.name) })
-                    dao.insertMovement(r.movement.map { DayMovementEntity(segmentId = seg.id, day = it.day, footMeters = it.footMeters, cycleMeters = it.cycleMeters) })
+                    dao.insertMovement(r.movement.map { DayMovementEntity(segmentId = seg.id, day = it.day, footMeters = it.footMeters, cycleMeters = it.cycleMeters, waterMeters = it.waterMeters) })
                     assignAreas(r.presence.map { it.cell }.toSet())
                     dao.markProcessed(
                         seg.id, true,
@@ -309,15 +317,16 @@ class Repository(context: Context) {
             coverage = coverage.map { EdgeCoverage(it.edgeId, it.day, it.fromM, it.toM, Mode.valueOf(it.mode)) },
             presence = dao.allPresence().map { CellPresence(it.cell, it.day, it.seconds, Mode.valueOf(it.mode)) },
             intensity = dao.allIntensity().map { DayIntensity(it.day, it.moderateMin, it.vigorousMin) },
-            movement = dao.allMovement().map { DayMovement(it.day, it.footMeters, it.cycleMeters) },
+            movement = dao.allMovement().map { DayMovement(it.day, it.footMeters, it.cycleMeters, it.waterMeters) },
             cellArea = dao.allCellAreas().associate { it.cell to it.areaId },
             areas = dao.allAreas().associate { it.id to AreaInfo(it.id, it.name, it.placeType) },
             restPeriods = rest,
             goalLocked = prefs.goalLocked,
-            landmarks = landmarkEntities.mapValues { (_, l) -> LandmarkInfo(l.id, l.name, l.kind, l.areaM2) },
+            landmarks = landmarkEntities.mapValues { (_, l) -> LandmarkInfo(l.id, l.name, l.kind, l.areaM2, pointLike = l.id.startsWith("n")) },
             landmarkVisits = visits.map { LandmarkVisit(it.landmarkId, it.day, it.seconds) },
             trodden = dao.allTrodden().map { TroddenCell(it.cell, it.day) },
             arrivals = dao.allArrivals().map { Arrival(it.day, it.lat, it.lng) },
+            wake = dao.allWake().map { TroddenCell(it.cell, it.day) },
         )
         val state = engine.build(input, today)
         // Freeze fallback names the first time an unnamed area earns one.
@@ -337,7 +346,12 @@ class Repository(context: Context) {
         val shownLandmarks = state.landmarks.mapNotNull { l ->
             landmarkEntities[l.id]?.let { Triple(l.name, Overpass.decodeRings(it.geometry), l.areaM2) }
         }
-        _layers.value = MapLayers(discoveredEntities, peek, trails, wild, shownLandmarks)
+        val water = dao.allWaterTrails().map { w ->
+            val pts = Overpass.decode(w.geometry)
+            val wear = pts.map { state.wakeWear[Cells.cellAt(it.lat, it.lng, Cells.TRODDEN_RES)] ?: 1.0 }.average()
+            pts to state.levelFor(wear)
+        }
+        _layers.value = MapLayers(discoveredEntities, peek, trails, wild, shownLandmarks, water)
         _world.value = state
         state
     }
@@ -414,8 +428,9 @@ class Repository(context: Context) {
         /**
          * v2: stretches that stay within 45 m (moving around a building) are no longer walks.
          * v3: arrivals compare raw fixes, so short stops still mark where travel set you down.
+         * v4: paddling (water routes) and wider place categories.
          */
-        const val PROCESSING_VERSION = 3
+        const val PROCESSING_VERSION = 4
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }

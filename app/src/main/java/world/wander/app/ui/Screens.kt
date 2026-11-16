@@ -235,12 +235,7 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
                 val hit = index.firstOrNull { it.kind == "Place" && it.name == l.name }
                 HitRow(
                     l.name, "${l.kind.replace('_', ' ')} · ${l.visitDays} visit-day${if (l.visitDays == 1) "" else "s"} · since ${dayLabel(l.discoveredDay)}",
-                    when (MapLayersBuilder.placeIcon(l.kind)) {
-                        "medal_place_store" -> R.drawable.oad_medal_place_store
-                        "medal_place_wood" -> R.drawable.oad_medal_place_wood
-                        "medal_place_park" -> R.drawable.oad_medal_place_park
-                        else -> R.drawable.oad_medal_place_generic
-                    },
+                    MapIcons.drawable(MapIcons.placeIcon(l.kind)),
                 ) { hit?.let { go(it.where) } }
             }
         }

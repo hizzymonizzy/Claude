@@ -28,12 +28,14 @@ object DispatchWriter {
         // Movement.
         val km = (summary?.footMeters ?: 0.0) / 1000.0
         val cycleKm = (summary?.cycleMeters ?: 0.0) / 1000.0
+        val waterKm = (summary?.waterMeters ?: 0.0) / 1000.0
         val roads = events.filterIsInstance<WorldEvent.RoadsCharted>().flatMap { it.edgeIds }
         val roadNames = roads.mapNotNull { state.edges[it]?.name }.filter { it.isNotBlank() }.distinct()
-        if (km >= 0.05 || cycleKm >= 0.05) {
+        if (km >= 0.05 || cycleKm >= 0.05 || waterKm >= 0.05) {
             val parts = mutableListOf<String>()
             if (km >= 0.05) parts += "You walked %.1f km".format(km)
             if (cycleKm >= 0.05) parts += (if (parts.isEmpty()) "You rode" else "rode") + " %.1f km".format(cycleKm)
+            if (waterKm >= 0.05) parts += (if (parts.isEmpty()) "You paddled" else "paddled") + " %.1f km".format(waterKm)
             var line = parts.joinToString(" and ") + "."
             if (roads.isNotEmpty()) {
                 val shown = roadNames.take(3)

@@ -24,6 +24,9 @@ data class TrackResult(
     val landmarkVisits: List<LandmarkVisit>,
     /** Where walking resumed after vehicle-speed travel within this track. */
     val arrivals: List<Arrival> = emptyList(),
+    /** Water routes (paddling): no roads or settlements, but they clear fog and wear in. */
+    val waterTrails: List<Trail> = emptyList(),
+    val wake: List<TroddenCell> = emptyList(),
     /** Fixes in stretches that never went anywhere (moving around a building). */
     val stationaryPoints: Int = 0,
     val presence: List<CellPresence>,
@@ -125,11 +128,27 @@ class TrackProcessor(
         val wild = mutableListOf<Trail>()
         val trodden = HashSet<TroddenCell>()
         val visits = HashMap<Pair<String, Int>, Double>()
+        val waterTrails = mutableListOf<Trail>()
+        val wake = HashSet<TroddenCell>()
 
         for (run in runs) {
             kept += run.size
             val mode = modeHint ?: inferMode(run)
-            trails += Trail(dayOf(run.first().timeMs), simplify(run.map { LatLng(it.lat, it.lng) }, 4.0))
+            val line = run.map { LatLng(it.lat, it.lng) }
+            if (mode == Mode.WATER) {
+                // On the water: chart the route, clear fog, find beaches and lakes; no roads, no settlements.
+                val day = dayOf(run.first().timeMs)
+                waterTrails += Trail(day, simplify(line, 6.0))
+                sample(line, 15.0).forEach { wake += TroddenCell(Cells.cellAt(it.lat, it.lng, Cells.TRODDEN_RES), day) }
+                for (k in 1 until run.size) {
+                    val a = run[k - 1]; val b = run[k]
+                    val d = dayOf(a.timeMs)
+                    for (lm in landmarks) if (lm.contains(a.lat, a.lng)) visits.merge(lm.id to d, (b.timeMs - a.timeMs) / 1000.0, Double::plus)
+                    movement.getOrPut(d) { DoubleArray(3) }[2] += Geo.distanceM(a.lat, a.lng, b.lat, b.lng)
+                }
+                continue
+            }
+            trails += Trail(dayOf(run.first().timeMs), simplify(line, 4.0))
             // Cell time and distance, per leg.
             for (k in 1 until run.size) {
                 val a = run[k - 1]; val b = run[k]
@@ -138,7 +157,7 @@ class TrackProcessor(
                 val cell = Cells.cell(a.lat, a.lng)
                 for (lm in landmarks) if (lm.contains(a.lat, a.lng)) visits.merge(lm.id to day, dt, Double::plus)
                 presence.merge(Triple(cell, day, mode), dt, Double::plus)
-                val m = movement.getOrPut(day) { DoubleArray(2) }
+                val m = movement.getOrPut(day) { DoubleArray(3) }
                 m[if (mode == Mode.FOOT) 0 else 1] += Geo.distanceM(a.lat, a.lng, b.lat, b.lng)
             }
             if (matcher != null) {
@@ -174,7 +193,9 @@ class TrackProcessor(
             arrivals = split.arrivals.map { Arrival(dayOf(it.timeMs), it.lat, it.lng) },
             stationaryPoints = split.stationary,
             presence = presence.map { (k, v) -> CellPresence(k.first, k.second, v, k.third) },
-            movement = movement.map { (d, v) -> DayMovement(d, v[0], v[1]) },
+            movement = movement.map { (d, v) -> DayMovement(d, v[0], v[1], v[2]) },
+            waterTrails = waterTrails,
+            wake = wake.toList(),
             keptPoints = kept,
             droppedPoints = dropped,
             matchedPoints = matched,

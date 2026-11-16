@@ -1,7 +1,10 @@
 package world.wander.engine
 
-/** How you were moving. Only on-foot movement establishes settlements; cycling is for discovery. */
-enum class Mode { FOOT, CYCLE }
+/**
+ * How you were moving. Only on-foot movement establishes settlements; cycling is for discovery;
+ * WATER (paddleboard, canoe, kayak, rowing, open-water swimming) charts water routes and clears fog over water.
+ */
+enum class Mode { FOOT, CYCLE, WATER }
 
 enum class Tier(val label: String) {
     RUINS("Ruins"), CAMP("Camp"), HAMLET("Hamlet"), VILLAGE("Village"),
@@ -39,7 +42,7 @@ data class CellPresence(val cell: String, val day: Int, val seconds: Double, val
 data class DayIntensity(val day: Int, val moderateMin: Double, val vigorousMin: Double)
 
 /** Outdoor distance moved per day, for the dispatch. */
-data class DayMovement(val day: Int, val footMeters: Double, val cycleMeters: Double)
+data class DayMovement(val day: Int, val footMeters: Double, val cycleMeters: Double, val waterMeters: Double = 0.0)
 
 data class AreaInfo(val id: String, val name: String?, val placeType: String?)
 
@@ -66,6 +69,8 @@ data class WorldInput(
     val trodden: List<TroddenCell> = emptyList(),
     /** Where you started walking after a car ride or flight. */
     val arrivals: List<Arrival> = emptyList(),
+    /** Fine cells paddled on a given day, for water-route wear. */
+    val wake: List<TroddenCell> = emptyList(),
 )
 
 /** The first walking point after travelling by vehicle or plane. */
@@ -111,6 +116,8 @@ data class WorldParams(
     val wearLevels: List<Double> = listOf(1.0, 3.0, 10.0, 30.0, 100.0),
     /** Seconds inside a named area on one day to discover it. */
     val landmarkSeconds: Double = 60.0,
+    /** Points of interest are small circles; walking past one for this long discovers it. */
+    val pointLandmarkSeconds: Double = 15.0,
     /** Places this far apart belong to different regions. */
     val regionRadiusM: Double = 100_000.0,
     /** A region other than home goes dormant after this many days without a visit. */
@@ -218,6 +225,7 @@ data class DaySummary(
     val footMeters: Double,
     val cycleMeters: Double,
     val intensityMinutes: Double,
+    val waterMeters: Double = 0.0,
     val ratio: Double,
     val protection: Protection,
     val goal: Int,
@@ -235,6 +243,8 @@ data class WorldState(
     val landmarks: List<LandmarkState> = emptyList(),
     /** Wear on your own paths, per fine cell. */
     val troddenWear: Map<String, Double> = emptyMap(),
+    /** Wear on water routes you paddle, per fine cell. */
+    val wakeWear: Map<String, Double> = emptyMap(),
     val exploredAreas: List<AreaState> = emptyList(),
     val regions: List<RegionState> = emptyList(),
     val waystones: List<WaystoneState> = emptyList(),

@@ -59,7 +59,32 @@ def roads():
             d.ellipse([x - 6, yy - 6, x + 6, yy + 6], fill=(58, 104, 50), outline=(36, 66, 30), width=2)
             d.ellipse([x - 3, yy - 4, x + 1, yy], fill=(96, 146, 70))
     out["oad_legend_road_5"] = av
-    out["oad_legend_road_wild"] = textured_line(grass(), (236, 222, 186), 4, y, dash=6, edge=(110, 86, 56), edge_extra=0)
+    # Your own paths, five stages.
+    sandtex = tile("oad_ground_sand", (W, H))
+    out["legend_wild_1"] = textured_line(grass(), (242, 232, 204), 3, y, dash=3)
+    out["legend_wild_2"] = textured_line(grass(), (230, 211, 168), 5, y, dash=9)
+    out["oad_legend_wild_3"] = textured_line(grass(), dirt, 6, y)
+    out["oad_legend_wild_4"] = textured_line(grass(), sandtex, 7, y, edge=(110, 86, 56), edge_extra=4)
+    w5 = textured_line(grass(), sandtex, 8, y, edge=(110, 86, 56), edge_extra=4)
+    d5 = ImageDraw.Draw(w5)
+    for x in range(22, W - 14, 30):           # cairns
+        for yy in (y - 13, y + 13):
+            d5.ellipse([x - 4, yy - 4, x + 4, yy + 4], fill=(141, 138, 132), outline=(80, 78, 74))
+    out["oad_legend_wild_5"] = w5
+    # Water routes, five stages, on water.
+    water = lambda: tile("water_ripple", (W, H))
+    out["legend_water_1"] = textured_line(water(), (228, 243, 249), 3, y, dash=4)
+    out["legend_water_2"] = textured_line(water(), (203, 230, 242), 4, y, dash=10)
+    out["legend_water_3"] = textured_line(water(), (166, 211, 232), 5, y, edge=(62, 127, 163), edge_extra=4)
+    w4 = textured_line(water(), (166, 211, 232), 6, y, edge=(62, 127, 163), edge_extra=4)
+    for x in range(22, W - 14, 34):
+        ImageDraw.Draw(w4).ellipse([x - 4, y + 12, x + 4, y + 20], fill=(232, 131, 58), outline=(120, 60, 20))
+    out["legend_water_4"] = w4
+    w5w = textured_line(water(), (166, 211, 232), 9, y, edge=(62, 127, 163), edge_extra=5)
+    for x in range(22, W - 14, 34):
+        for yy in (y - 16, y + 16):
+            ImageDraw.Draw(w5w).ellipse([x - 4, yy - 4, x + 4, yy + 4], fill=(232, 131, 58), outline=(120, 60, 20))
+    out["legend_water_5"] = w5w
     peek = Image.new("RGB", (W, H), (233, 223, 199))
     pd = ImageDraw.Draw(peek)
     for x in range(14, W - 14, 14):
@@ -68,6 +93,8 @@ def roads():
     out["legend_ground_fog"] = Image.open(RES / "fog_parchment.png").convert("RGB").resize((W, H))
     out["oad_legend_ground_explored"] = grass()
     out["oad_legend_ground_woods"] = tile("oad_ground_forest", (W, H))
+    out["oad_legend_ground_sand"] = tile("oad_ground_sand", (W, H))
+    out["legend_ground_water"] = tile("water_ripple", (W, H))
     return out
 
 
@@ -77,14 +104,27 @@ LEGEND = [
     ("legend_ground_fog", "Fog", "Unexplored. Walk to clear it."),
     ("oad_legend_ground_explored", "Explored ground", "Cleared by your walks; worn roads clear wider."),
     ("oad_legend_ground_woods", "Woods & parks", "Named green places you've discovered."),
+    ("oad_legend_ground_sand", "Sand & beaches", "Beaches and dunes you've discovered."),
+    ("legend_ground_water", "Water", "Lakes, rivers and sea."),
     ("Roads", None, None),
     ("oad_legend_road_1", "Trail", "Walked on 1 day."),
     ("oad_legend_road_2", "Footpath", "3 days."),
     ("oad_legend_road_3", "Lane", "10 days."),
     ("oad_legend_road_4", "Cobbled road", "30 days."),
     ("oad_legend_road_5", "Avenue", "100 days. Tree-lined."),
-    ("oad_legend_road_wild", "Your own path", "Off the map's roads; wears in the same way."),
     ("legend_road_peek", "Unwalked street", "Glimpsed at the edge of the fog."),
+    ("Your own paths", None, None),
+    ("legend_wild_1", "Faint track", "Off the map's roads, 1 day."),
+    ("legend_wild_2", "Trodden path", "3 days."),
+    ("oad_legend_wild_3", "Dirt track", "10 days."),
+    ("oad_legend_wild_4", "Gravel trail", "30 days."),
+    ("oad_legend_wild_5", "Ranger trail", "100 days. Cairns mark the way."),
+    ("Water routes", None, None),
+    ("legend_water_1", "Wake", "Paddled on 1 day."),
+    ("legend_water_2", "Paddle line", "3 days."),
+    ("legend_water_3", "Paddle route", "10 days."),
+    ("legend_water_4", "Marked route", "30 days. Buoys."),
+    ("legend_water_5", "Waterway", "100 days."),
     ("Settlements", None, None),
     ("oad_medal_tier_1", "Camp", "3 visit-days in a month."),
     ("oad_medal_tier_2", "Hamlet", "10 visit-days."),
@@ -98,11 +138,29 @@ LEGEND = [
     ("oad_medal_waypoint", "Waypoint", "Any area you've walked in."),
     ("medal_waystone", "Waystone", "Where a drive set you down, away from known ground."),
     ("medal_waystone_great", "Great waystone", "Arrival in a new region; links regions."),
-    ("oad_medal_place_park", "Park", "Discovered green space."),
-    ("oad_medal_place_wood", "Woods", "Discovered woodland."),
+    ("Places", None, None),
+    ("oad_medal_place_park", "Park", "Green space."),
+    ("oad_medal_place_wood", "Woods", "Woodland, reserves, wetland."),
+    ("oad_medal_place_beach", "Beach", "Sand by the water."),
+    ("oad_medal_place_water", "Lake or river", "Named water."),
+    ("medal_poi_hospital", "Hospital", "Hospitals and clinics."),
+    ("oad_medal_poi_government", "Government", "Town hall, courthouse, offices."),
+    ("oad_medal_poi_emergency", "Police & fire", "Stations."),
+    ("oad_medal_poi_civic", "Civic", "Post office, community centre, market."),
+    ("oad_medal_poi_school", "School", "Schools, colleges, universities."),
+    ("oad_medal_poi_library", "Library", ""),
+    ("oad_medal_poi_worship", "Place of worship", ""),
+    ("oad_medal_poi_culture", "Culture", "Museums, theatres, cinemas."),
+    ("oad_medal_poi_sports", "Sports", "Stadiums and sports centres."),
+    ("oad_medal_poi_transport", "Station", "Train, bus and ferry."),
+    ("oad_medal_poi_harbour", "Harbour", "Marinas."),
+    ("oad_medal_poi_lighthouse", "Lighthouse", ""),
+    ("oad_medal_poi_historic", "Historic", "Monuments, memorials, ruins."),
     ("oad_medal_place_store", "Store", "A big store you've walked through."),
     ("oad_medal_place_generic", "Place", "Other named places."),
-    ("sprite_wanderer", "You", ""),
+    ("You", None, None),
+    ("sprite_wanderer", "Walking", ""),
+    ("sprite_wanderer_paddle", "Paddling", ""),
 ]
 
 

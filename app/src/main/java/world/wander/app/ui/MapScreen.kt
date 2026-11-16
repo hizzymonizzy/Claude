@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
@@ -178,6 +180,8 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         val kinds = world?.landmarks.orEmpty().associate { it.name to it.kind }
         val counts = linkedMapOf(
             "green" to update("green-places") { MapLayersBuilder.greenPlaces(layers, kinds) },
+            "sand" to update("sand-places") { MapLayersBuilder.sandPlaces(layers, kinds) },
+            "water" to update("water") { MapLayersBuilder.water(layers) },
             "roads" to update("roads") { MapLayersBuilder.roads(layers) },
             "peek" to update("peek") { MapLayersBuilder.peeks(layers) },
             "wild" to update("wild") { MapLayersBuilder.wild(layers) },
@@ -197,6 +201,11 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         m.animateCamera(CameraUpdateFactory.newLatLngZoom(MlLatLng(f.lat, f.lng), 15.5), 1200)
         centered = true
         repo.focus.value = null
+    }
+    // The wanderer paddles while you're on the water.
+    val captureMode by repo.captureMode.collectAsState()
+    LaunchedEffect(style, captureMode) {
+        style?.getLayerAs<SymbolLayer>("me")?.setProperties(iconImage(if (captureMode == "WATER") "wanderer_paddle" else "wanderer"))
     }
     LaunchedEffect(style, track) { style?.source("track")?.setGeoJson(MapLayersBuilder.track(track)) }
     LaunchedEffect(style, me) {
@@ -247,13 +256,23 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
         ) { Text("◎") }
 
-        val walking = status.startsWith("Charting")
-        ExtendedFloatingActionButton(
-            onClick = {
-                TrackingService.start(context, if (walking) TrackingService.ACTION_STOP_MANUAL else TrackingService.ACTION_START_MANUAL)
-            },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        ) { Text(if (walking) "Stop walk" else "Start a walk") }
+        val recording = captureMode != null
+        var chooser by remember { mutableStateOf(false) }
+        Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
+            ExtendedFloatingActionButton(
+                onClick = {
+                    if (recording) TrackingService.start(context, TrackingService.ACTION_STOP_MANUAL) else chooser = true
+                },
+            ) { Text(if (recording) (if (captureMode == "WATER") "Stop paddle" else "Stop walk") else "Start") }
+            DropdownMenu(expanded = chooser, onDismissRequest = { chooser = false }) {
+                DropdownMenuItem(text = { Text("Walk or run") }, onClick = {
+                    chooser = false; TrackingService.start(context, TrackingService.ACTION_START_MANUAL)
+                })
+                DropdownMenuItem(text = { Text("Paddle (SUP, canoe, kayak)") }, onClick = {
+                    chooser = false; TrackingService.start(context, TrackingService.ACTION_START_MANUAL, "WATER")
+                })
+            }
+        }
     }
 }
 
@@ -269,22 +288,24 @@ private fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
 private val OUR_LAYERS = listOf(
     "explored", "green-places", "fog", "fog-edge", "peek", "roads-edge", "roads-trail", "roads-dirt", "roads-cobble",
-    "roads-trees-l", "roads-trees-r", "wild", "capital-badge",
+    "roads-trees-l", "roads-trees-r", "wild-1", "wild-2", "wild-3", "wild-gravel", "wild-cairns-l", "wild-cairns-r",
+    "sand-places", "water-route", "water-light", "capital-badge",
     "landmark-icons", "landmark-names", "road-names", "track", "waypoints", "waypoint-labels", "waystones", "waystone-labels",
     "settlement-dots", "settlements", "settlement-labels", "me",
 )
 
 private fun addWorldLayers(s: Style, problems: MutableList<String>) {
     val empty = FeatureCollection.fromFeatures(emptyList())
-    for (id in listOf("explored", "green-places", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
+    for (id in listOf("explored", "green-places", "sand-places", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
 
     // Explored ground: real terrain texture (0 A.D. grass / forest floor), slipped under the base map's
     // water, roads and buildings so those still show where you've been.
     val ground = FillLayer("explored", "explored").withProperties(fillPattern("ground_grass"), fillOpacity(0.92f))
     val woods = FillLayer("green-places", "green-places").withProperties(fillPattern("ground_forest"), fillOpacity(0.85f))
     val waterId = s.layers.firstOrNull { it is FillLayer && "water" in it.id.lowercase() }?.id
-    if (waterId != null) { s.addLayerBelow(ground, waterId); s.addLayerAbove(woods, "explored") }
-    else { s.addLayer(ground); s.addLayer(woods) }
+    val sand = FillLayer("sand-places", "sand-places").withProperties(fillPattern("ground_sand"), fillOpacity(0.9f))
+    if (waterId != null) { s.addLayerBelow(ground, waterId); s.addLayerAbove(woods, "explored"); s.addLayerAbove(sand, "green-places") }
+    else { s.addLayer(ground); s.addLayer(woods); s.addLayer(sand) }
 
     // Fog: parchment you can see the land through, thicker when zoomed out so explored areas pop.
     s.addLayer(
@@ -343,14 +364,70 @@ private fun addWorldLayers(s: Style, problems: MutableList<String>) {
             ).also { it.setFilter(level(5)) },
         )
     }
-    // Paths you made yourself: dashed footpaths that darken as they wear in.
-    s.addLayer(
-        LineLayer("wild", "wild").withProperties(
-            lineCap(Property.LINE_CAP_BUTT), lineColor("#ECDEBA"), lineOpacity(0.95f),
-            lineDasharray(arrayOf(1.2f, 1.0f)),
-            lineWidth(interpolate(linear(), get("level"), stop(1, 1.5f), stop(5, 4.5f))),
-        ),
-    )
+    // Your own paths, five stages: 1 faint track · 2 trodden path · 3 dirt track · 4 gravel trail · 5 ranger trail.
+    fun wildLevel(n: Int) = eq(get("level"), literal(n))
+    guard(problems, "wild-edge") {
+        s.addLayer(LineLayer("wild-edge", "wild").withProperties(
+            lineCap(Property.LINE_CAP_ROUND), lineColor("#6E5638"), lineOpacity(0.6f), lineWidth(match(get("level"), literal(6f), stop(4, 5.5f))),
+        ).also { it.setFilter(gte(get("level"), literal(4))) })
+    }
+    guard(problems, "wild-1") {
+        s.addLayer(LineLayer("wild-1", "wild").withProperties(
+            lineCap(Property.LINE_CAP_ROUND), lineColor("#F2E8CC"), lineWidth(1.6f), lineDasharray(arrayOf(0.4f, 1.8f)),
+        ).also { it.setFilter(wildLevel(1)) })
+    }
+    guard(problems, "wild-2") {
+        s.addLayer(LineLayer("wild-2", "wild").withProperties(
+            lineCap(Property.LINE_CAP_BUTT), lineColor("#E6D3A8"), lineWidth(2.4f), lineDasharray(arrayOf(1.4f, 1.0f)),
+        ).also { it.setFilter(wildLevel(2)) })
+    }
+    guard(problems, "wild-3") {
+        s.addLayer(LineLayer("wild-3", "wild").withProperties(
+            lineCap(Property.LINE_CAP_ROUND), lineColor("#C8AC7E"), linePattern("road_dirt"), lineWidth(3f),
+        ).also { it.setFilter(wildLevel(3)) })
+    }
+    guard(problems, "wild-gravel") {
+        s.addLayer(LineLayer("wild-gravel", "wild").withProperties(
+            lineCap(Property.LINE_CAP_ROUND), lineColor("#D8C9A6"), linePattern("ground_sand"), lineWidth(match(get("level"), literal(4f), stop(4, 3.5f))),
+        ).also { it.setFilter(gte(get("level"), literal(4))) })
+    }
+    for ((id, offset) in listOf("wild-cairns-l" to -6f, "wild-cairns-r" to 6f)) guard(problems, id) {
+        s.addLayer(LineLayer(id, "wild").withProperties(
+            lineCap(Property.LINE_CAP_ROUND), lineColor("#8D8A84"), lineWidth(4f), lineOffset(offset), lineDasharray(arrayOf(0.01f, 5f)),
+        ).also { it.setFilter(wildLevel(5)) })
+    }
+
+    // Water routes you paddle, five stages: 1 wake · 2 paddle line · 3 paddle route · 4 marked route (buoys) · 5 waterway.
+    guard(problems, "water-edge") {
+        s.addLayer(LineLayer("water-edge", "water").withProperties(
+            lineCap(Property.LINE_CAP_ROUND), lineColor("#3E7FA3"), lineOpacity(0.7f), lineWidth(match(get("level"), literal(7f), stop(3, 4.5f), stop(4, 5.5f))),
+        ).also { it.setFilter(gte(get("level"), literal(3))) })
+    }
+    guard(problems, "water-route") {
+        s.addLayer(LineLayer("water-route", "water").withProperties(
+            lineCap(Property.LINE_CAP_ROUND),
+            lineColor(match(get("level"), literal("#A6D3E8"), stop(1, "#E4F3F9"), stop(2, "#CBE6F2"))),
+            lineWidth(match(get("level"), literal(4.5f), stop(1, 1.6f), stop(2, 2f), stop(3, 2.5f), stop(4, 3.2f))),
+        ).also { it.setFilter(gte(get("level"), literal(3))) })
+    }
+    guard(problems, "water-light") {
+        s.addLayer(LineLayer("water-light", "water").withProperties(
+            lineCap(Property.LINE_CAP_BUTT),
+            lineColor(match(get("level"), literal("#CBE6F2"), stop(1, "#E4F3F9"))),
+            lineWidth(match(get("level"), literal(2f), stop(1, 1.6f))),
+            lineDasharray(arrayOf(1f, 1.6f)),
+        ).also { it.setFilter(lt(get("level"), literal(3))) })
+    }
+    guard(problems, "water-buoys-r") {
+        s.addLayer(LineLayer("water-buoys-r", "water").withProperties(
+            lineCap(Property.LINE_CAP_ROUND), lineColor("#E8833A"), lineWidth(5f), lineOffset(8f), lineDasharray(arrayOf(0.01f, 6f)),
+        ).also { it.setFilter(gte(get("level"), literal(4))) })
+    }
+    guard(problems, "water-buoys-l") {
+        s.addLayer(LineLayer("water-buoys-l", "water").withProperties(
+            lineCap(Property.LINE_CAP_ROUND), lineColor("#E8833A"), lineWidth(5f), lineOffset(-8f), lineDasharray(arrayOf(0.01f, 6f)),
+        ).also { it.setFilter(wildLevel(5)) })
+    }
     s.addLayer(
         SymbolLayer("landmark-icons", "landmarks").withProperties(
             iconImage(get("icon")), iconSize(interpolate(linear(), zoom(), stop(10, 0.3f), stop(16, 0.5f))),
@@ -434,8 +511,8 @@ private fun addWorldLayers(s: Style, problems: MutableList<String>) {
     ) }
     s.addLayer(
         SymbolLayer("me", "me").withProperties(
-            iconImage("wanderer"), iconSize(0.6f), iconAllowOverlap(true), iconIgnorePlacement(true),
-            iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            iconImage("wanderer"), iconSize(interpolate(linear(), zoom(), stop(10, 0.3f), stop(16, 0.45f), stop(18, 0.6f))),
+            iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
         ),
     )
 }
@@ -445,20 +522,7 @@ private inline fun guard(problems: MutableList<String>, what: String, block: () 
     try { block() } catch (e: Exception) { problems += "$what: ${e.javaClass.simpleName} ${e.message}" }
 }
 
-private val SPRITES = mapOf(
-    "medal_tier_0" to R.drawable.oad_medal_tier_0, "medal_tier_1" to R.drawable.oad_medal_tier_1,
-    "medal_tier_2" to R.drawable.oad_medal_tier_2, "medal_tier_3" to R.drawable.oad_medal_tier_3,
-    "medal_tier_4" to R.drawable.oad_medal_tier_4, "medal_tier_5" to R.drawable.oad_medal_tier_5,
-    "medal_tier_6" to R.drawable.oad_medal_tier_6, "medal_waypoint" to R.drawable.oad_medal_waypoint,
-    "medal_place_park" to R.drawable.oad_medal_place_park, "medal_place_wood" to R.drawable.oad_medal_place_wood,
-    "medal_place_store" to R.drawable.oad_medal_place_store, "medal_place_generic" to R.drawable.oad_medal_place_generic,
-    "ground_grass" to R.drawable.oad_ground_grass, "ground_forest" to R.drawable.oad_ground_forest,
-    "road_dirt" to R.drawable.oad_road_dirt, "road_cobble" to R.drawable.oad_road_cobble,
-    "wanderer" to R.drawable.sprite_wanderer, "fog_parchment" to R.drawable.fog_parchment,
-    "waystone" to R.drawable.sprite_waystone,
-    "medal_waystone" to R.drawable.medal_waystone, "medal_waystone_great" to R.drawable.medal_waystone_great,
-    "badge_capital" to R.drawable.badge_capital,
-)
+private val SPRITES: Map<String, Int> get() = MapIcons.images
 
 private fun addSprites(s: Style, context: Context) {
     val opts = BitmapFactory.Options().apply { inScaled = false }
@@ -476,7 +540,8 @@ private fun restyleBasemap(s: Style) {
         when (layer) {
             is BackgroundLayer -> layer.setProperties(backgroundColor("#EFE6CF"))
             is FillLayer -> when {
-                "water" in id -> layer.setProperties(fillColor("#A9C4C7"))
+                "water" in id -> layer.setProperties(fillColor("#A9C4C7"), fillPattern("water_ripple"))
+                "sand" in id || "beach" in id -> layer.setProperties(fillPattern("ground_sand"))
                 listOf("park", "wood", "grass", "landcover", "forest", "garden").any { it in id } -> layer.setProperties(fillColor("#D3DEB0"))
                 "building" in id -> layer.setProperties(fillColor("#E0CFAE"))
                 "landuse" in id -> layer.setProperties(fillColor("#E9DEC2"))

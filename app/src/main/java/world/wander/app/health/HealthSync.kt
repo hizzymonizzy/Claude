@@ -134,6 +134,10 @@ class HealthSync(private val context: Context, private val dao: WanderDao, priva
             ExerciseSessionRecord.EXERCISE_TYPE_RUNNING to "FOOT",
             ExerciseSessionRecord.EXERCISE_TYPE_HIKING to "FOOT",
             ExerciseSessionRecord.EXERCISE_TYPE_BIKING to "CYCLE",
+            ExerciseSessionRecord.EXERCISE_TYPE_PADDLING to "WATER",
+            ExerciseSessionRecord.EXERCISE_TYPE_ROWING to "WATER",
+            ExerciseSessionRecord.EXERCISE_TYPE_SURFING to "WATER",
+            ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER to "WATER",
         )
         val sessions = client.readRecords(
             ReadRecordsRequest(ExerciseSessionRecord::class, TimeRangeFilter.between(start, end)),

@@ -42,6 +42,21 @@ class MapMatcherTest {
     }
 
     @Test
+    fun paddlingChartsAWaterRouteButNoRoadsOrSettlements() {
+        val zone = ZoneId.of("America/New_York")
+        val t0 = 1_767_600_000_000L
+        // Paddle 400 m along y = 40 (parallel to Twilight, well within matching distance of nothing else).
+        val paddle = (0..40).map { TrackPoint(t0 + it * 8_000L, at(it * 10.0, 40.0).lat, at(it * 10.0, 40.0).lng, 6f) }
+        val r = TrackProcessor(zone).process(paddle, Mode.WATER, edges)
+        assertTrue(r.coverage.isEmpty())
+        assertTrue(r.presence.isEmpty())
+        assertTrue(r.trails.isEmpty())
+        assertEquals(1, r.waterTrails.size)
+        assertTrue(r.wake.size >= 5)
+        assertEquals(400.0, r.movement.sumOf { it.waterMeters }, 20.0)
+    }
+
+    @Test
     fun potteringAroundTheHouseEarnsNothing() {
         val zone = ZoneId.of("America/New_York")
         val t0 = 1_767_600_000_000L

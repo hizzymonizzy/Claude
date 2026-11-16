@@ -59,6 +59,8 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
         val landmarkDays = HashMap<String, Int>()
         val landmarkLast = HashMap<String, Int>()
         val trodden = HashMap<String, Double>()
+        val wakeByDay = input.wake.groupBy { it.day }
+        val wake = HashMap<String, Double>()
 
         // Regions, dormancy and waystones.
         val regions = mutableListOf<RegionAcc>()
@@ -204,7 +206,9 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
 
             // 1b. Named places walked through, and your own paths.
             visitsByDay[day]?.groupBy { it.landmarkId }?.forEach { (id, vs) ->
-                if (id !in input.landmarks || vs.sumOf { it.seconds } < p.landmarkSeconds) return@forEach
+                val info = input.landmarks[id] ?: return@forEach
+                val need = if (info.pointLike) p.pointLandmarkSeconds else p.landmarkSeconds
+                if (vs.sumOf { it.seconds } < need) return@forEach
                 landmarkDays.merge(id, 1, Int::plus)
                 landmarkLast[id] = day
                 if (id !in landmarkFirst) {
@@ -213,6 +217,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                 }
             }
             troddenByDay[day]?.map { it.cell }?.distinct()?.forEach { trodden.merge(it, 1.0, Double::plus) }
+            wakeByDay[day]?.map { it.cell }?.distinct()?.forEach { wake.merge(it, 1.0, Double::plus) }
 
             // 2. Cells and areas: familiarity and development.
             val footByArea = HashMap<String, Double>()
@@ -313,6 +318,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                         e.wear = max(1.0, e.wear - e.wear * p.wearDecayWeekly / 7.0 * m)
                     }
                     for (c in trodden.keys) trodden[c] = max(1.0, trodden.getValue(c) * (1 - p.wearDecayWeekly / 7.0 * m))
+                    for (c in wake.keys) wake[c] = max(1.0, wake.getValue(c) * (1 - p.wearDecayWeekly / 7.0 * m))
                 }
             }
 
@@ -346,6 +352,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                 day = day,
                 footMeters = mv?.sumOf { it.footMeters } ?: 0.0,
                 cycleMeters = mv?.sumOf { it.cycleMeters } ?: 0.0,
+                waterMeters = mv?.sumOf { it.waterMeters } ?: 0.0,
                 intensityMinutes = intensityByDay[day] ?: 0.0,
                 ratio = ratio,
                 protection = protection,
@@ -421,6 +428,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                 LandmarkState(id, info.name, info.kind, info.areaM2, first, landmarkDays[id] ?: 0, landmarkLast[id] ?: first)
             },
             troddenWear = trodden,
+            wakeWear = wake,
             regions = regions.map { r ->
                 val homeId = homeRegion ?: 0
                 RegionState(

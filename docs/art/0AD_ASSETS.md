@@ -29,6 +29,20 @@ Source: official mirror `github.com/0ad/0ad`, branch `master`. Every file passed
 | `oad_medal_place_wood.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/flora_tree_pine.png` | cropped to a circle, framed |
 | `oad_medal_place_store.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/storehouse.png` | cropped to a circle, framed |
 | `oad_medal_place_generic.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/monument.png` | cropped to a circle, framed |
+| `oad_medal_poi_government.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/palace.png` | cropped to a circle, framed |
+| `oad_medal_poi_emergency.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/sentry_tower.png` | cropped to a circle, framed |
+| `oad_medal_poi_civic.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/stoa.png` | cropped to a circle, framed |
+| `oad_medal_poi_school.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/gymnasium.png` | cropped to a circle, framed |
+| `oad_medal_poi_library.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/library_scroll.png` | cropped to a circle, framed |
+| `oad_medal_poi_worship.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/temple.png` | cropped to a circle, framed |
+| `oad_medal_poi_culture.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/theater.png` | cropped to a circle, framed |
+| `oad_medal_poi_sports.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/range.png` | cropped to a circle, framed |
+| `oad_medal_poi_transport.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/corral.png` | cropped to a circle, framed |
+| `oad_medal_poi_harbour.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/dock.png` | cropped to a circle, framed |
+| `oad_medal_poi_lighthouse.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/lighthouse.png` | cropped to a circle, framed |
+| `oad_medal_poi_historic.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/statue.png` | cropped to a circle, framed |
+| `oad_medal_place_water.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/fauna_fish.png` | cropped to a circle, framed |
+| `oad_medal_place_beach.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/flora_tree_date_palm.png` | cropped to a circle, framed |
 | `oad_res_food.png` | `binaries/data/mods/public/art/textures/ui/session/icons/resources/food.png` | re-encoded |
 | `oad_res_wood.png` | `binaries/data/mods/public/art/textures/ui/session/icons/resources/wood.png` | re-encoded |
 | `oad_res_stone.png` | `binaries/data/mods/public/art/textures/ui/session/icons/resources/stone.png` | re-encoded |

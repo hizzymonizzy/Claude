@@ -210,6 +210,118 @@ def ring_medallion(inner_img, size, ring, edge, glow=None, double=False):
     return out
 
 
+def hospital():
+    """Red cross on white: hospital / clinic (original)."""
+    img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rectangle([1, 1, 14, 14], fill=(246, 244, 238, 255))
+    d.rectangle([6, 3, 9, 12], fill=(200, 40, 40, 255))
+    d.rectangle([3, 6, 12, 9], fill=(200, 40, 40, 255))
+    return img
+
+
+# ---- The wanderer (avatar): hand-placed 24x24 pixel art ----
+AVATAR_PALETTE = {
+    "K": (43, 29, 20, 255),      # outline
+    "H": (63, 94, 58, 255),      # hood / cloak (forest green)
+    "h": (96, 132, 82, 255),     # hood highlight
+    "G": (44, 70, 42, 255),      # cloak shadow
+    "S": (232, 185, 142, 255),   # skin
+    "s": (201, 146, 106, 255),   # skin shade
+    "E": (43, 29, 20, 255),      # eyes
+    "T": (168, 67, 47, 255),     # tunic (madder red)
+    "t": (126, 47, 34, 255),     # tunic shade
+    "B": (107, 68, 35, 255),     # belt / straps
+    "Y": (226, 188, 90, 255),    # buckle
+    "P": (84, 72, 60, 255),      # trousers
+    "O": (58, 42, 30, 255),      # boots
+    "R": (201, 164, 106, 255),   # bedroll
+    "r": (160, 127, 72, 255),    # bedroll shade
+    "W": (138, 106, 68, 255),    # staff
+    "w": (176, 141, 94, 255),    # staff highlight
+    "L": (255, 214, 107, 255),   # lantern glow
+    "l": (90, 70, 48, 255),      # lantern frame
+}
+
+AVATAR = [
+    "........................",
+    "..........KKKK......lll.",
+    ".........KhhhhK....lLLLl",
+    "........KhhHHhhK...lLLLl",
+    "........KhHSSHhK....lll.",
+    "........KHSESEHK.....W..",
+    "........KHSssSHK.....w..",
+    ".......KRKHSSHKRK....W..",
+    "......KRrKGHHGKrRK..KW..",
+    "......KRrGHTTTHGRK.KSK..",
+    ".....KGGHHTtTtTHHGKSSK..",
+    ".....KGHHKTTYTTKHHGKWK..",
+    ".....KGHKBBBYBBBKHGK.W..",
+    ".....KGHKTtTTTtTKHGK.w..",
+    ".....KGHKTTTTTTTKHGK.W..",
+    "......KGKTtTTTtTKGK..W..",
+    "......KGGKPPPPPKGGK..W..",
+    ".......KKKPPKPPKKK...W..",
+    ".........KPPKPPK.....W..",
+    ".........KPPKPPK.....w..",
+    ".........KOOKOOK.....W..",
+    "........KOOOKOOOK....W..",
+    "........KKKK.KKKK....K..",
+    "........................",
+]
+
+
+def render_grid(rows, palette):
+    img = Image.new("RGBA", (len(rows[0]), len(rows)), (0, 0, 0, 0))
+    px = img.load()
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch in palette:
+                px[x, y] = palette[ch]
+    return img
+
+
+def avatar_walk():
+    fig = render_grid(AVATAR, AVATAR_PALETTE)
+    out = Image.new("RGBA", (28, 28), (0, 0, 0, 0))
+    d = ImageDraw.Draw(out)
+    d.ellipse([5, 22, 23, 27], fill=(30, 22, 14, 90))          # ground shadow
+    d.ellipse([18, 0, 27, 8], fill=(255, 214, 107, 60))        # lantern glow
+    out.alpha_composite(fig, (2, 2))
+    return out
+
+
+def avatar_paddle():
+    """The wanderer standing on a paddleboard, paddle in hand."""
+    fig = render_grid([r[:20] for r in AVATAR[:18]], AVATAR_PALETTE)   # no staff, upper body + legs
+    out = Image.new("RGBA", (32, 28), (0, 0, 0, 0))
+    d = ImageDraw.Draw(out)
+    for y in (24, 26):                                          # ripples
+        d.line([(1, y), (6, y)], fill=(225, 242, 250, 200)); d.line([(25, y), (31, y)], fill=(225, 242, 250, 200))
+    d.ellipse([3, 19, 29, 26], fill=(43, 29, 20, 255))         # board outline
+    d.ellipse([4, 20, 28, 25], fill=(64, 178, 186, 255))       # board (turquoise)
+    d.line([(7, 22), (25, 22)], fill=(160, 226, 228, 255))     # board highlight
+    out.alpha_composite(fig, (4, 3))
+    d.line([(26, 2), (19, 22)], fill=(43, 29, 20, 255), width=2)   # paddle shaft
+    d.line([(26, 2), (20, 20)], fill=(176, 141, 94, 255), width=1)
+    d.polygon([(18, 20), (21, 21), (19, 26), (16, 25)], fill=(232, 120, 60, 255), outline=(43, 29, 20, 255))  # blade
+    return out
+
+
+def water_ripple(size=64, seed=9):
+    """Tileable water texture: calm blue with soft ripple strokes (original)."""
+    rnd = random.Random(seed)
+    img = Image.new("RGBA", (size, size), (126, 178, 196, 255))
+    d = ImageDraw.Draw(img)
+    for _ in range(14):
+        x, y = rnd.randrange(size), rnd.randrange(size)
+        w = rnd.randrange(5, 11)
+        for dx in (-size, 0, size):
+            for dy in (-size, 0, size):
+                d.arc([x + dx - w, y + dy - 2, x + dx + w, y + dy + 3], 200, 340, fill=(196, 228, 238, 255))
+    return img
+
+
 def capital_badge():
     """Gold star badge shown on the capital's medallion."""
     img = Image.new("RGBA", (24, 24), (0, 0, 0, 0))
@@ -239,7 +351,7 @@ def parchment(size=64, seed=7):
 
 SPRITES = {
     # Settlement, waypoint and place markers now use 0 A.D. medallions (tools/build_0ad_assets.py).
-    "wanderer": wanderer, "waystone": waystone,
+    "waystone": waystone,
 }
 
 
@@ -255,6 +367,10 @@ def main():
     ring_medallion(stone, 112, (110, 170, 225, 255), (30, 60, 100, 255), glow=(120, 200, 255, 150), double=True) \
         .save(OUT / "medal_waystone_great.png", optimize=True)
     capital_badge().resize((48, 48), Image.NEAREST).save(OUT / "badge_capital.png", optimize=True)
+    avatar_walk().resize((112, 112), Image.NEAREST).save(OUT / "sprite_wanderer.png", optimize=True)
+    avatar_paddle().resize((128, 112), Image.NEAREST).save(OUT / "sprite_wanderer_paddle.png", optimize=True)
+    water_ripple().resize((128, 128), Image.NEAREST).save(OUT / "water_ripple.png", optimize=True)
+    ring_medallion(hospital(), 96, (196, 160, 82, 255), (110, 80, 40, 255)).save(OUT / "medal_poi_hospital.png", optimize=True)
     print(f"wrote {len(SPRITES) + 1} images to {OUT}", file=sys.stderr)
 
 

@@ -1,6 +1,7 @@
 package world.wander.app.data
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -70,6 +71,24 @@ data class DayMovementEntity(
     val day: Int,
     val footMeters: Double,
     val cycleMeters: Double,
+    @ColumnInfo(defaultValue = "0") val waterMeters: Double = 0.0,
+)
+
+/** A route paddled on the water (paddleboard, canoe, kayak, rowing, open-water swim). */
+@Entity(tableName = "water_trail", indices = [Index("segmentId")])
+data class WaterTrailEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val day: Int,
+    val geometry: String,
+)
+
+@Entity(tableName = "wake", indices = [Index("segmentId")])
+data class WakeEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val cell: String,
+    val day: Int,
 )
 
 /** The path actually walked (simplified), kept for good: fog clears along it. */
@@ -233,6 +252,12 @@ interface WanderDao {
     @Insert fun insertVisits(v: List<LandmarkVisitEntity>)
     @Query("DELETE FROM landmark_visit WHERE segmentId = :segmentId") fun deleteVisits(segmentId: Long)
     @Query("SELECT * FROM landmark_visit") fun allVisits(): List<LandmarkVisitEntity>
+    @Insert fun insertWaterTrails(t: List<WaterTrailEntity>)
+    @Query("DELETE FROM water_trail WHERE segmentId = :segmentId") fun deleteWaterTrails(segmentId: Long)
+    @Query("SELECT * FROM water_trail") fun allWaterTrails(): List<WaterTrailEntity>
+    @Insert fun insertWake(t: List<WakeEntity>)
+    @Query("DELETE FROM wake WHERE segmentId = :segmentId") fun deleteWake(segmentId: Long)
+    @Query("SELECT * FROM wake") fun allWake(): List<WakeEntity>
     @Insert fun insertArrivals(a: List<ArrivalEntity>)
     @Query("DELETE FROM arrival WHERE segmentId = :segmentId") fun deleteArrivals(segmentId: Long)
     @Query("SELECT * FROM arrival") fun allArrivals(): List<ArrivalEntity>
@@ -274,9 +299,9 @@ interface WanderDao {
         DayMovementEntity::class, DailyIntensityEntity::class, GeoTileEntity::class, EdgeEntity::class,
         PlaceEntity::class, CellAreaEntity::class, AreaEntity::class, DispatchEntity::class, DiagEntity::class,
         TrailEntity::class, WildTrailEntity::class, TroddenEntity::class, LandmarkEntity::class,
-        LandmarkTileEntity::class, LandmarkVisitEntity::class, ArrivalEntity::class,
+        LandmarkTileEntity::class, LandmarkVisitEntity::class, ArrivalEntity::class, WaterTrailEntity::class, WakeEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class WanderDb : RoomDatabase() {
@@ -317,7 +342,22 @@ abstract class WanderDb : RoomDatabase() {
             }
         }
 
+        /** v5: paddling (water routes, wake, paddled distance); places re-fetched for the new categories. */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `water_trail` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `day` INTEGER NOT NULL, `geometry` TEXT NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_water_trail_segmentId` ON `water_trail` (`segmentId`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `wake` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `cell` TEXT NOT NULL, `day` INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_wake_segmentId` ON `wake` (`segmentId`)")
+                db.execSQL("ALTER TABLE `day_movement` ADD COLUMN `waterMeters` REAL NOT NULL DEFAULT 0")
+                db.execSQL("DELETE FROM `landmark_tile`")
+                db.execSQL("DELETE FROM `landmark`")
+                db.execSQL("UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL")
+            }
+        }
+
         fun create(context: Context): WanderDb =
-            Room.databaseBuilder(context, WanderDb::class.java, "wander.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+            Room.databaseBuilder(context, WanderDb::class.java, "wander.db")
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
     }
 }

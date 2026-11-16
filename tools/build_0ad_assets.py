@@ -48,6 +48,21 @@ MEDALLIONS = {  # our name -> (clean file, source, options)
     "place_wood": ("gaia/flora_tree_pine.png", PORTRAIT + "gaia/flora_tree_pine.png", {"small": True, "green": True}),
     "place_store": ("structures/storehouse.png", PORTRAIT + "structures/storehouse.png", {"small": True}),
     "place_generic": ("structures/monument.png", PORTRAIT + "structures/monument.png", {"small": True}),
+    # Points of interest (ring colour by family: gold civic, green nature, blue water, sand beach).
+    "poi_government": ("structures/palace.png", PORTRAIT + "structures/palace.png", {"small": True}),
+    "poi_emergency": ("structures/sentry_tower.png", PORTRAIT + "structures/sentry_tower.png", {"small": True}),
+    "poi_civic": ("structures/stoa.png", PORTRAIT + "structures/stoa.png", {"small": True}),
+    "poi_school": ("structures/gymnasium.png", PORTRAIT + "structures/gymnasium.png", {"small": True}),
+    "poi_library": ("structures/library_scroll.png", PORTRAIT + "structures/library_scroll.png", {"small": True}),
+    "poi_worship": ("structures/temple.png", PORTRAIT + "structures/temple.png", {"small": True}),
+    "poi_culture": ("structures/theater.png", PORTRAIT + "structures/theater.png", {"small": True}),
+    "poi_sports": ("structures/range.png", PORTRAIT + "structures/range.png", {"small": True}),
+    "poi_transport": ("structures/corral.png", PORTRAIT + "structures/corral.png", {"small": True}),
+    "poi_harbour": ("structures/dock.png", PORTRAIT + "structures/dock.png", {"small": True, "ring": "blue"}),
+    "poi_lighthouse": ("structures/lighthouse.png", PORTRAIT + "structures/lighthouse.png", {"small": True, "ring": "blue"}),
+    "poi_historic": ("structures/statue.png", PORTRAIT + "structures/statue.png", {"small": True}),
+    "place_water": ("gaia/fauna_fish.png", PORTRAIT + "gaia/fauna_fish.png", {"small": True, "ring": "blue"}),
+    "place_beach": ("gaia/flora_tree_date_palm.png", PORTRAIT + "gaia/flora_tree_date_palm.png", {"small": True, "ring": "sand"}),
 }
 
 RESOURCES = {n: (f"resources/{n}.png", f"ui/session/icons/resources/{n}.png") for n in ("food", "wood", "stone", "metal")}
@@ -56,6 +71,8 @@ GOLD = (196, 160, 82)
 GOLD_DARK = (110, 80, 40)
 GREEN = (98, 140, 76)
 GREEN_DARK = (48, 78, 40)
+RINGS = {"gold": (GOLD, GOLD_DARK), "green": (GREEN, GREEN_DARK),
+         "blue": ((90, 140, 190), (30, 60, 100)), "sand": ((222, 196, 140), (130, 100, 60))}
 
 
 def pattern(src: Path, size=256, lighten=1.0, warm=0.0) -> Image.Image:
@@ -69,7 +86,7 @@ def pattern(src: Path, size=256, lighten=1.0, warm=0.0) -> Image.Image:
     return im
 
 
-def medallion(src: Path, size: int, ruins=False, green=False, small=False) -> Image.Image:
+def medallion(src: Path, size: int, ruins=False, green=False, small=False, ring_name=None) -> Image.Image:
     ring = 10 if not small else 7
     inner = size - 2 * ring
     p = Image.open(src).convert("RGBA").resize((inner, inner), Image.LANCZOS)
@@ -86,7 +103,7 @@ def medallion(src: Path, size: int, ruins=False, green=False, small=False) -> Im
     out.putalpha(shadow.filter(ImageFilter.GaussianBlur(3)))
     out = Image.composite(Image.new("RGBA", out.size, (30, 22, 14, 255)), Image.new("RGBA", out.size, (0, 0, 0, 0)), out.getchannel("A"))
     d = ImageDraw.Draw(out)
-    face, edge = (GREEN, GREEN_DARK) if green else (GOLD, GOLD_DARK)
+    face, edge = RINGS[ring_name or ("green" if green else "gold")]
     d.ellipse([1, 1, size - 1, size - 1], fill=face, outline=edge, width=3)
     d.ellipse([ring - 2, ring - 2, size - ring + 1, size - ring + 1], outline=edge, width=2)
     out.paste(p, (ring, ring), mask)
@@ -106,7 +123,8 @@ def main():
         rows.append((f"oad_{name}.png", SRC_PREFIX + src, "resized to 256 px" + (", lightened and warmed" if warm else "")))
     for name, (f, src, opts) in MEDALLIONS.items():
         size = 96 if opts.get("small") else 128
-        medallion(clean / f, size, ruins=opts.get("ruins", False), green=opts.get("green", False), small=opts.get("small", False)) \
+        medallion(clean / f, size, ruins=opts.get("ruins", False), green=opts.get("green", False), small=opts.get("small", False),
+                  ring_name=opts.get("ring")) \
             .save(RES / f"oad_medal_{name}.png", optimize=True)
         rows.append((f"oad_medal_{name}.png", SRC_PREFIX + src, "cropped to a circle, framed" + (", weathered" if opts.get("ruins") else "")))
     for name, (f, src) in RESOURCES.items():
