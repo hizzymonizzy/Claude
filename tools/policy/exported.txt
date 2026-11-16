@@ -1,0 +1,5 @@
+# Components other apps may reach (exported). Adding one needs a reason in docs/security.md.
+androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE
+world.wander.app.ViewPermissionUsageActivity
+world.wander.app.ui.MainActivity
+world.wander.app.ui.PrivacyActivity

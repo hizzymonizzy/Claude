@@ -16,7 +16,7 @@ class EconomyTest {
         presence = (0 until days).flatMap { d -> (0 until 4).map { CellPresence(home[(d + it) % home.size], start + d, 30 * 60 / 4.0, Mode.FOOT) } },
         intensity = (0 until days).map { DayIntensity(start + it, minutesPerDay, 0.0) },
         movement = (0 until days).map { DayMovement(start + it, kmPerDay * 1000, 0.0) },
-        cellArea = home.associateWith { "home" }, areas = mapOf("home" to AreaInfo("home", "North Middletown", null)),
+        cellArea = home.associateWith { "home" }, areas = mapOf("home" to AreaInfo("home", "Oakdale", null)),
         decisions = decisions,
     )
 

@@ -1,0 +1,9 @@
+# Every https host that appears in our own code. The first group is contacted by the app; the second are
+# links the player can choose to open in a browser (credits). A new host needs a row in docs/security.md §2.
+# -- contacted
+https://overpass-api.de
+https://tiles.openfreemap.org
+# -- links opened only by the player
+https://creativecommons.org
+https://play0ad.com
+https://www.openstreetmap.org

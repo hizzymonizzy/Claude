@@ -28,6 +28,11 @@ Unofficial Overpass mirrors were removed in 0.2.0, because each request reveals 
 
 ## 3. Intake review for any new library, SDK or asset
 
+`tools/check.sh` enforces the outcome on every commit and in CI: the merged manifest's permissions and exported
+components, and every https host in our code, must match `tools/policy/*.txt` exactly. Risky APIs must be
+absent, backups off and cleartext traffic off. To change any of these, update the policy file and this document
+in the same commit. The `security-reviewer` agent (`.claude/agents/`) reviews such changes.
+
 Before adding anything third-party:
 
 | Check | Pass criteria |

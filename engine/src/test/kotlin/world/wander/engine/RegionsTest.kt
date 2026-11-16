@@ -22,8 +22,8 @@ class RegionsTest {
         presence = presence, intensity = intensity, movement = emptyList(),
         cellArea = home.associateWith { "home" } + park.associateWith { "park" } + hnl.associateWith { "hnl" },
         areas = mapOf(
-            "home" to AreaInfo("home", "North Middletown", null),
-            "park" to AreaInfo("park", "Holmdel", null),
+            "home" to AreaInfo("home", "Oakdale", null),
+            "park" to AreaInfo("park", "Riverside", null),
             "hnl" to AreaInfo("hnl", "Waikīkī", null),
         ),
         arrivals = arrivals,
@@ -47,7 +47,7 @@ class RegionsTest {
         assertEquals(2, s.regions.size)
         val homeRegion = s.regions.single { it.isHome }
         val hnlRegion = s.regions.single { !it.isHome }
-        assertEquals("North Middletown", homeRegion.name)
+        assertEquals("Oakdale", homeRegion.name)
         assertEquals("Waikīkī", hnlRegion.name)
         val ws = s.waystones.single()
         assertTrue(ws.great)
