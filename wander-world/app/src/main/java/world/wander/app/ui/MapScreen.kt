@@ -95,7 +95,8 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
                 m.addOnCameraIdleListener { cameraTick++ }
                 m.uiSettings.isCompassEnabled = true
                 m.uiSettings.isAttributionEnabled = true
-                m.cameraPosition = CameraPosition.Builder().target(MlLatLng(40.73, -74.17)).zoom(13.0).build()
+                // A neutral whole-world view until your location (or home) arrives; no place is baked into the app.
+                m.cameraPosition = CameraPosition.Builder().target(MlLatLng(20.0, 0.0)).zoom(1.5).build()
                 m.setStyle(Style.Builder().fromUri(STYLE_URL)) { s ->
                     val problems = mutableListOf<String>()
                     try { addSprites(s, context) } catch (e: Exception) { problems += "sprites: $e" }
