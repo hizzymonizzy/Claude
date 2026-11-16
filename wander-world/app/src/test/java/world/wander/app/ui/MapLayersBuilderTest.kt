@@ -119,4 +119,17 @@ class MapLayersBuilderTest {
             "school", "library", "worship", "culture", "sports", "transport", "harbour", "lighthouse", "historic", "zoo")
         for (k in kinds) assertTrue(k, MapIcons.images.containsKey(MapIcons.placeIcon(k)))
     }
+
+    @Test
+    fun resourcePointersArePinnedMapPointsWithKnownIcons() {
+        // Alpha 0.9.4: they were a screen overlay that didn't follow the map; now they're map features.
+        val targets = listOf("wood", "food", "stone", "metal").map {
+            world.wander.app.data.ResourceTarget(it, "x", at(100.0, 0.0), 100.0)
+        }
+        val fc = MapLayersBuilder.resources(targets).features()!!
+        assertEquals(4, fc.size)
+        fc.forEach { assertTrue(MapIcons.images.containsKey(it.getStringProperty("icon"))) }
+        val p = fc.first().geometry() as org.maplibre.geojson.Point
+        assertEquals(at(100.0, 0.0).lng, p.longitude(), 1e-9)
+    }
 }

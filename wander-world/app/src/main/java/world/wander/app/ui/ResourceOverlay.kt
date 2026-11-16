@@ -70,11 +70,12 @@ fun InventoryBar(t: Treasury, targets: List<ResourceTarget>, onPick: (ResourceTa
 }
 
 /**
- * Pointers to the nearest source of each resource. On screen, a small marker sits on the spot; off screen,
- * a chip waits at the edge of the map pointing the way, with the distance.
+ * Arrows at the edge of the map toward resources that are off screen, with the distance. (On-screen resources
+ * are drawn inside the map itself, in MapStyle, so they stay pinned to the ground.)
  *
- * [project] turns a map position into pixels on the map view (null if the map isn't ready);
- * [topInsetPx] keeps edge chips clear of the cards at the top.
+ * [project] turns a map position into pixels on the map view (null if the map isn't ready); [cameraTick]
+ * changes whenever the map moves and is read below so the arrows follow the camera; [topInsetPx] keeps them
+ * clear of the cards at the top.
  */
 @Composable
 fun ResourcePointers(
@@ -82,10 +83,12 @@ fun ResourcePointers(
     project: (LatLng) -> Pair<Float, Float>?,
     topInsetPx: Float,
     onPick: (ResourceTarget) -> Unit,
-    @Suppress("UNUSED_PARAMETER") cameraTick: Int,
+    cameraTick: Int,
 ) {
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
+        // Reading the tick here makes this block redraw on every camera move.
+        if (cameraTick < 0) return@BoxWithConstraints
         val w = with(density) { maxWidth.toPx() }
         val h = with(density) { maxHeight.toPx() }
         val chip = with(density) { 30.dp.toPx() }
@@ -96,42 +99,30 @@ fun ResourcePointers(
         for (t in targets) {
             val (x, y) = project(t.point) ?: continue
             val icon = RESOURCE_ICONS[t.resource] ?: continue
-            val onScreen = x in left..right && y in top..bottom
-            if (onScreen) {
-                Box(
-                    Modifier.offset { IntOffset((x - chip / 2).roundToInt(), (y - chip / 2).roundToInt()) }
-                        .size(30.dp).clickable { onPick(t) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Surface(shape = CircleShape, color = Color(0xCCF4ECD8), border = BorderStroke(2.dp, Color(0xFFC4A052))) {
+            if (x in 0f..w && y in 0f..h) continue // on screen: the map draws it
+            // Clamp the line from the middle of the map to the target onto the safe rectangle.
+            val dx = x - cx; val dy = y - cy
+            val sx = if (dx == 0f) Float.MAX_VALUE else ((if (dx > 0) right else left) - cx) / dx
+            val sy = if (dy == 0f) Float.MAX_VALUE else ((if (dy > 0) bottom else top) - cy) / dy
+            val k = minOf(abs(sx), abs(sy))
+            val ex = cx + dx * k; val ey = cy + dy * k
+            val angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+            val half = with(density) { 26.dp.toPx() }
+            Column(
+                Modifier.offset { IntOffset((ex - half).roundToInt(), (ey - half).roundToInt()) }.clickable { onPick(t) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(Modifier.size(52.dp, 34.dp), contentAlignment = Alignment.Center) {
+                    Surface(shape = CircleShape, color = Color(0xE6F4ECD8), border = BorderStroke(2.dp, Color(0xFF8A6A3A))) {
                         Image(ImageBitmap.imageResource(icon), contentDescription = t.resource, filterQuality = FilterQuality.Medium, modifier = Modifier.padding(3.dp).size(22.dp))
                     }
+                    Text(
+                        "➤", color = Color(0xFF5B4636), fontSize = 14.sp,
+                        modifier = Modifier.align(Alignment.Center).rotate(angle).offset(x = 24.dp),
+                    )
                 }
-            } else {
-                // Clamp the line from the middle of the map to the target onto the safe rectangle.
-                val dx = x - cx; val dy = y - cy
-                val sx = if (dx == 0f) Float.MAX_VALUE else ((if (dx > 0) right else left) - cx) / dx
-                val sy = if (dy == 0f) Float.MAX_VALUE else ((if (dy > 0) bottom else top) - cy) / dy
-                val k = minOf(abs(sx), abs(sy))
-                val ex = cx + dx * k; val ey = cy + dy * k
-                val angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
-                val half = with(density) { 26.dp.toPx() }
-                Column(
-                    Modifier.offset { IntOffset((ex - half).roundToInt(), (ey - half).roundToInt()) }.clickable { onPick(t) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box(Modifier.size(52.dp, 34.dp), contentAlignment = Alignment.Center) {
-                        Surface(shape = CircleShape, color = Color(0xE6F4ECD8), border = BorderStroke(2.dp, Color(0xFF8A6A3A))) {
-                            Image(ImageBitmap.imageResource(icon), contentDescription = t.resource, filterQuality = FilterQuality.Medium, modifier = Modifier.padding(3.dp).size(22.dp))
-                        }
-                        Text(
-                            "➤", color = Color(0xFF5B4636), fontSize = 14.sp,
-                            modifier = Modifier.align(Alignment.Center).rotate(angle).offset(x = 24.dp),
-                        )
-                    }
-                    Surface(shape = RoundedCornerShape(6.dp), color = Color(0xE6F4ECD8)) {
-                        Text(formatDistance(t.distanceM) + if (t.note == "new") " · new" else "", fontSize = 10.sp, color = Color(0xFF5B4636), modifier = Modifier.padding(horizontal = 4.dp))
-                    }
+                Surface(shape = RoundedCornerShape(6.dp), color = Color(0xE6F4ECD8)) {
+                    Text(formatDistance(t.distanceM) + if (t.note == "new") " · new" else "", fontSize = 10.sp, color = Color(0xFF5B4636), modifier = Modifier.padding(horizontal = 4.dp))
                 }
             }
         }

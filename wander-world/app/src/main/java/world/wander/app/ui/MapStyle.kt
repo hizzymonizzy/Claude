@@ -59,6 +59,12 @@ import org.maplibre.android.style.layers.PropertyFactory.textHaloWidth
 import org.maplibre.android.style.layers.PropertyFactory.textOffset
 import org.maplibre.android.style.layers.PropertyFactory.textSize
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.layers.PropertyFactory.circleRadius
+import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
+import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
+import org.maplibre.android.style.layers.PropertyFactory.circleOpacity
+import org.maplibre.android.style.layers.PropertyFactory.circleColor
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.FeatureCollection
 
@@ -75,12 +81,13 @@ internal val OUR_LAYERS = listOf(
     "explored", "green-places", "fog", "fog-edge", "peek", "roads-edge", "roads-trail", "roads-dirt", "roads-cobble",
     "roads-trees-l", "roads-trees-r", "wild-1", "wild-2", "wild-3", "wild-gravel", "wild-cairns-l", "wild-cairns-r",
     "sand-places", "water-route", "water-light",
-    "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels", "me",
+    "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
+    "resource-rings", "resource-icons", "me",
 )
 
 internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     val empty = FeatureCollection.fromFeatures(emptyList())
-    for (id in listOf("explored", "green-places", "sand-places", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
+    for (id in listOf("explored", "green-places", "sand-places", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "resources", "me")) s.addSource(GeoJsonSource(id, empty))
 
     // Explored ground: real terrain texture (0 A.D. grass / forest floor), slipped under the base map's
     // water, roads and buildings so those still show where you've been.
@@ -258,6 +265,19 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
             textField(get("label")), textFont(FONT), textSize(interpolate(linear(), zoom(), stop(10, 11f), stop(16, 15f))),
             textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f), textAllowOverlap(true), textIgnorePlacement(false),
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.4f)),
+        ),
+    ) }
+    // Nearest resources: drawn in the map so they stay pinned to the ground (gold ring + resource icon).
+    guard(problems, "resource-rings") { s.addLayer(
+        CircleLayer("resource-rings", "resources").withProperties(
+            circleColor("#F4ECD8"), circleOpacity(0.85f), circleStrokeColor("#C4A052"), circleStrokeWidth(2.5f),
+            circleRadius(interpolate(linear(), zoom(), stop(10, 10f), stop(16, 15f))),
+        ),
+    ) }
+    guard(problems, "resource-icons") { s.addLayer(
+        SymbolLayer("resource-icons", "resources").withProperties(
+            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
+            iconSize(interpolate(linear(), zoom(), stop(10, 0.28f), stop(16, 0.4f))),
         ),
     ) }
     s.addLayer(

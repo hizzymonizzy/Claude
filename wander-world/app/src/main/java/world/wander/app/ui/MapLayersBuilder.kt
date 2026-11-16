@@ -100,6 +100,16 @@ object MapLayersBuilder {
         layers.peek.map { Feature.fromGeometry(line(Overpass.decode(it.geometry))) },
     )
 
+    /** Resource pointers as map points, so they stay pinned to the ground while you pan and zoom. */
+    fun resources(targets: List<world.wander.app.data.ResourceTarget>): FeatureCollection = FeatureCollection.fromFeatures(
+        targets.map { t ->
+            Feature.fromGeometry(Point.fromLngLat(t.point.lng, t.point.lat)).apply {
+                addStringProperty("icon", "res_${t.resource}")
+                addStringProperty("name", t.name)
+            }
+        },
+    )
+
     fun track(points: List<LatLng>): FeatureCollection =
         if (points.size < 2) FeatureCollection.fromFeatures(emptyList())
         else FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(line(points))))

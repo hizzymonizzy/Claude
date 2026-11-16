@@ -136,8 +136,9 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             val src = s.source(id) ?: throw IllegalStateException("source missing")
             src.setGeoJson(fc)
             fc.features()?.size ?: 0
-        } catch (e: Exception) { errors += "$id: ${e.javaClass.simpleName} ${e.message}"; -1 }
-        val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogAndExplored(layers, world?.waystones.orEmpty().map { it.center }) } } catch (e: Exception) { errors += "fog: $e"; null }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "$id: ${e.javaClass.simpleName} ${e.message}"; -1 }
+        val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogAndExplored(layers, world?.waystones.orEmpty().map { it.center }) } }
+            catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "fog: $e"; null }
         if (fe != null) { update("fog") { fe.first }; update("explored") { fe.second } }
         val kinds = world?.landmarks.orEmpty().associate { it.name to it.kind }
         val counts = linkedMapOf(
@@ -168,6 +169,9 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     val captureMode by repo.captureMode.collectAsState()
     LaunchedEffect(style, captureMode) {
         style?.getLayerAs<SymbolLayer>("me")?.setProperties(iconImage(if (captureMode == "WATER") "wanderer_paddle" else "wanderer"))
+    }
+    LaunchedEffect(style, targets, showPointers) {
+        style?.source("resources")?.setGeoJson(MapLayersBuilder.resources(if (showPointers) targets else emptyList()))
     }
     LaunchedEffect(style, track) { style?.source("track")?.setGeoJson(MapLayersBuilder.track(track)) }
     LaunchedEffect(style, me) {
