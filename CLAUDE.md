@@ -25,7 +25,11 @@ rules): `docs/design.md`. Decisions: `docs/decisions/`.
 
 ## Layout
 - `engine/`: pure Kotlin/JVM, no Android. `WorldEngine.build(input, today)` replays observations day by day
-  (ADR 0003). Track processing, map matching, economy (`Economy.kt`), dispatch text. All rules are unit-tested here.
+  (ADR 0003). The replay is in `engine/.../sim/`: `Simulation.kt` holds the state and the **order of a day's
+  steps** (that order is part of the rules); each step has its own file (`Regions`, `RoadsAndPlaces`,
+  `Settlements`, `Goal`, `Economy`), and `Snapshot.kt` builds the immutable `WorldState`. Track processing, map
+  matching, economy tables (`Economy.kt`), dispatch text. All rules are unit-tested here; `RandomHistoryTest`
+  checks determinism and invariants over busy random histories.
 - `app/`: Android (Compose, MapLibre, Room, WorkManager, Health Connect, H3). `data/Repository.kt` is the hub;
   `ui/MapScreen.kt` draws the map; `ui/MapIcons.kt` names every image; `ui/Legend.kt` is generated.
 - `tools/`: `check.sh` (the gate), `policy/` (allowed permissions, exported components, hosts),
@@ -56,6 +60,5 @@ Commit message: `Alpha X.Y.Z: summary` plus bullets. Report to the player what w
 - Tunable numbers live in `WorldParams` / `HarvestParams`, not inline.
 
 ## Known technical debt (pay down before it grows)
-- `WorldEngine.build` is one long function; split it into roads / places / settlements / regions / economy steps.
 - `MapScreen.kt` mixes layer styling with UI; move style layers to their own file.
 - No tests for Room migrations, Overpass parsing, or `MapLayersBuilder`.

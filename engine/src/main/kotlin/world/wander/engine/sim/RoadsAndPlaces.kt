@@ -1,0 +1,73 @@
+package world.wander.engine.sim
+
+import world.wander.engine.Mode
+import world.wander.engine.WorldEngine.Companion.mergeIntervals
+import world.wander.engine.WorldEngine.Companion.mergedLength
+import world.wander.engine.WorldEvent
+import world.wander.engine.Yields
+import kotlin.math.max
+import kotlin.math.min
+
+/** 1. Roads: discovery and wear, and stone from walking them. */
+internal fun Simulation.roads(d: Simulation.Day) {
+    val day = d.day
+    val newlyDiscovered = mutableListOf<String>()
+    coverageByDay[day]?.groupBy { it.edgeId }?.forEach { (edgeId, covs) ->
+        val info = input.edges[edgeId] ?: return@forEach
+        val e = edges.getOrPut(edgeId) { EdgeAcc(info) }
+        val len = info.lengthM.coerceAtLeast(1.0)
+        val footLen = mergedLength(covs.filter { it.mode == Mode.FOOT }.map { it.fromM to it.toM })
+        val cycleLen = mergedLength(covs.filter { it.mode == Mode.CYCLE }.map { it.fromM to it.toM })
+        d.roadStone += harvest.take("e:$edgeId", day, footLen / 1000.0)
+        val wearNeed = min(p.wearDayFraction * len, p.wearDayMaxM)
+        when {
+            footLen >= wearNeed -> e.wear += 1.0
+            cycleLen >= wearNeed -> e.wear += p.cyclingWeight
+        }
+        e.intervals += covs.map { it.fromM to it.toM }
+        e.coveredM = mergedLength(e.intervals)
+        compact(e)
+        if (e.discoveredDay == null && e.coveredM >= min(p.discoveryFraction * len, p.discoveryMaxM)) {
+            e.discoveredDay = day
+            e.wear = max(e.wear, 1.0)
+            newlyDiscovered += edgeId
+        }
+    }
+    if (newlyDiscovered.isNotEmpty()) events += WorldEvent.RoadsCharted(day, newlyDiscovered)
+}
+
+/** 1b. Named places walked through (wood, food, metal; discovery), your own paths and paddled water. */
+internal fun Simulation.places(d: Simulation.Day) {
+    val day = d.day
+    visitsByDay[day]?.groupBy { it.landmarkId }?.forEach { (id, vs) ->
+        val info = input.landmarks[id] ?: return@forEach
+        val secs = vs.sumOf { it.seconds }
+        if (info.kind in Yields.WOOD_KINDS) d.wood += harvestPlace(id, day, secs / 300.0)
+        if (info.kind in Yields.FOOD_KINDS) d.food += harvestPlace(id, day, secs / 600.0)
+        val need = if (info.pointLike) p.pointLandmarkSeconds else p.landmarkSeconds
+        if (secs < need) return@forEach
+        landmarkDays.merge(id, 1, Int::plus)
+        landmarkLast[id] = day
+        if (info.kind in Yields.METAL_KINDS) d.metal += harvest.take("m:$id", day, 1.5)
+        if (id !in landmarkFirst) {
+            landmarkFirst[id] = day
+            events += WorldEvent.LandmarkDiscovered(day, id)
+        }
+    }
+    troddenByDay[day]?.map { it.cell }?.distinct()?.forEach { trodden.merge(it, 1.0, Double::plus) }
+    wakeByDay[day]?.map { it.cell }?.distinct()?.forEach { wake.merge(it, 1.0, Double::plus) }
+}
+
+/** Harvest from a named place; notes when a favourite spot starts to thin. */
+private fun Simulation.harvestPlace(id: String, day: Int, base: Double): Double {
+    val before = harvest.abundance("l:$id", day)
+    val got = harvest.take("l:$id", day, base)
+    if (before >= 0.5 && harvest.abundance("l:$id", day) < 0.5) events += WorldEvent.SourceThinning(day, id)
+    return got
+}
+
+private fun compact(e: EdgeAcc) {
+    if (e.intervals.size < 16) return
+    val merged = mergeIntervals(e.intervals)
+    e.intervals.clear(); e.intervals += merged
+}
