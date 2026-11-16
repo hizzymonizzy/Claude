@@ -57,13 +57,24 @@ object MapLayersBuilder {
         },
     )
 
-    /** Sprite for a kind of place. */
+    private val WOODED = setOf("wood", "forest", "nature_reserve", "wetland", "heath")
+    private val GREEN = setOf("park", "garden", "common", "recreation_ground", "village_green", "meadow", "grassland",
+        "dog_park", "golf_course", "playground", "cemetery")
+
+    /** Medallion for a kind of place. */
     fun placeIcon(kind: String?): String = when (kind) {
-        "park", "garden", "nature_reserve", "wood", "forest", "common", "recreation_ground", "village_green",
-        "meadow", "heath", "grassland", "dog_park", "golf_course", "playground", "wetland" -> "place_park"
-        "store" -> "place_store"
-        else -> "place_generic"
+        in WOODED -> "medal_place_wood"
+        in GREEN -> "medal_place_park"
+        "store" -> "medal_place_store"
+        else -> "medal_place_generic"
     }
+
+    /** Discovered parks and woods, drawn with a forest-floor texture (under the fog). */
+    fun greenPlaces(layers: MapLayers, kinds: Map<String, String>): FeatureCollection = FeatureCollection.fromFeatures(
+        layers.landmarks.filter { kinds[it.first] in WOODED || kinds[it.first] in GREEN }.mapNotNull { (_, rings, _) ->
+            placePolygon(rings)?.let { g -> polygons(g).map { Feature.fromGeometry(toGeo(it)) } }
+        }.flatten(),
+    )
 
     fun landmarkLabels(layers: MapLayers, kinds: Map<String, String> = emptyMap()): FeatureCollection = FeatureCollection.fromFeatures(
         layers.landmarks.map { (name, rings, _) ->
@@ -92,29 +103,30 @@ object MapLayersBuilder {
             Feature.fromGeometry(Point.fromLngLat(s.position.lng, s.position.lat)).apply {
                 addStringProperty("label", (if (s.isCapital) "★ " else "") + s.name + "\n" + s.tier.label)
                 addNumberProperty("tier", s.tier.ordinal)
-                addStringProperty("icon", "tier_${s.tier.ordinal}")
+                addStringProperty("icon", "medal_tier_${s.tier.ordinal}")
                 addNumberProperty("liveliness", s.liveliness)
             }
         },
     )
 
-    /** The whole world in fog, with holes around every road you've walked. */
-    fun fog(layers: MapLayers): FeatureCollection {
+    /** The whole world in fog, and the explored ground (holes in the fog) as its own layer. */
+    fun fogAndExplored(layers: MapLayers): Pair<FeatureCollection, FeatureCollection> {
         val world = gf.createPolygon(
             arrayOf(Coordinate(-180.0, -85.0), Coordinate(180.0, -85.0), Coordinate(180.0, 85.0), Coordinate(-180.0, 85.0), Coordinate(-180.0, -85.0)),
         )
         val revealed = layers.discovered.mapNotNull { (e, _) -> bufferedLatLng(Overpass.decode(e.geometry), REVEAL_RADIUS_M) } +
             layers.trails.mapNotNull { bufferedLatLng(it, TRAIL_RADIUS_M) } +
             layers.landmarks.filter { it.third <= CLEAR_PLACES_UNDER_M2 }.mapNotNull { (_, rings, _) -> placePolygon(rings) }
-        val fog: Geometry = if (revealed.isEmpty()) world else try {
-            world.difference(fillSmallHoles(UnaryUnionOp.union(revealed)))
-        } catch (_: Exception) { world }
-        val polys = when (fog) {
-            is Polygon -> listOf(fog)
-            is MultiPolygon -> (0 until fog.numGeometries).map { fog.getGeometryN(it) as Polygon }
-            else -> emptyList()
-        }
-        return FeatureCollection.fromFeatures(polys.map { Feature.fromGeometry(toGeo(it)) })
+        val explored: Geometry? = if (revealed.isEmpty()) null else try { fillSmallHoles(UnaryUnionOp.union(revealed)) } catch (_: Exception) { null }
+        val fog: Geometry = explored?.let { try { world.difference(it) } catch (_: Exception) { world } } ?: world
+        fun fc(g: Geometry?) = FeatureCollection.fromFeatures(polygons(g).map { Feature.fromGeometry(toGeo(it)) })
+        return fc(fog) to fc(explored)
+    }
+
+    private fun polygons(g: Geometry?): List<Polygon> = when (g) {
+        is Polygon -> listOf(g)
+        is MultiPolygon -> (0 until g.numGeometries).map { g.getGeometryN(it) as Polygon }
+        else -> emptyList()
     }
 
     private fun placePolygon(rings: List<List<LatLng>>): Geometry? = try {

@@ -49,8 +49,8 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 private val TIER_SPRITES = listOf(
-    R.drawable.sprite_tier_0, R.drawable.sprite_tier_1, R.drawable.sprite_tier_2, R.drawable.sprite_tier_3,
-    R.drawable.sprite_tier_4, R.drawable.sprite_tier_5, R.drawable.sprite_tier_6,
+    R.drawable.oad_medal_tier_0, R.drawable.oad_medal_tier_1, R.drawable.oad_medal_tier_2, R.drawable.oad_medal_tier_3,
+    R.drawable.oad_medal_tier_4, R.drawable.oad_medal_tier_5, R.drawable.oad_medal_tier_6,
 )
 
 private val dateFmt = DateTimeFormatter.ofPattern("MMM d, yyyy")
@@ -182,7 +182,7 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
                             ImageBitmap.imageResource(TIER_SPRITES[s.tier.ordinal]), contentDescription = s.tier.label,
-                            filterQuality = FilterQuality.None, modifier = Modifier.size(48.dp),
+                            filterQuality = FilterQuality.Medium, modifier = Modifier.size(52.dp),
                         )
                         Spacer(Modifier.width(12.dp))
                         Text((if (s.isCapital) "★ " else "") + s.name, style = MaterialTheme.typography.titleMedium)
@@ -206,7 +206,7 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
         if (waypoints.isNotEmpty()) {
             item { SectionTitle("Waypoints") }
             items(waypoints, key = { "wp-" + it.id }) { a ->
-                HitRow(a.name, "${a.cells} block${if (a.cells == 1) "" else "s"} · last ${dayLabel(a.lastVisitDay)}", R.drawable.sprite_waypoint) { go(a.center) }
+                HitRow(a.name, "${a.cells} block${if (a.cells == 1) "" else "s"} · last ${dayLabel(a.lastVisitDay)}", R.drawable.oad_medal_waypoint) { go(a.center) }
             }
         }
 
@@ -235,7 +235,12 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
                 val hit = index.firstOrNull { it.kind == "Place" && it.name == l.name }
                 HitRow(
                     l.name, "${l.kind.replace('_', ' ')} · ${l.visitDays} visit-day${if (l.visitDays == 1) "" else "s"} · since ${dayLabel(l.discoveredDay)}",
-                    if (l.kind == "store") R.drawable.sprite_place_store else R.drawable.sprite_place_park,
+                    when (MapLayersBuilder.placeIcon(l.kind)) {
+                        "medal_place_store" -> R.drawable.oad_medal_place_store
+                        "medal_place_wood" -> R.drawable.oad_medal_place_wood
+                        "medal_place_park" -> R.drawable.oad_medal_place_park
+                        else -> R.drawable.oad_medal_place_generic
+                    },
                 ) { hit?.let { go(it.where) } }
             }
         }
@@ -248,7 +253,7 @@ private fun HitRow(title: String, subtitle: String, sprite: Int? = null, onClick
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (sprite != null) {
-                Image(ImageBitmap.imageResource(sprite), contentDescription = null, filterQuality = FilterQuality.None, modifier = Modifier.size(32.dp))
+                Image(ImageBitmap.imageResource(sprite), contentDescription = null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(40.dp))
                 Spacer(Modifier.width(10.dp))
             }
             Column(Modifier.weight(1f)) {

@@ -67,6 +67,7 @@ import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.PropertyFactory.lineBlur
 import org.maplibre.android.style.layers.PropertyFactory.visibility
 import org.maplibre.android.style.layers.PropertyFactory.textOptional
+import org.maplibre.android.style.layers.PropertyFactory.linePattern
 import org.maplibre.android.style.layers.PropertyFactory.fillColor
 import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
@@ -141,8 +142,10 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     // World layers (fog is computed off the main thread).
     LaunchedEffect(style, layers, world) {
         val s = style ?: return@LaunchedEffect
-        val fog = withContext(Dispatchers.Default) { MapLayersBuilder.fog(layers) }
+        val (fog, explored) = withContext(Dispatchers.Default) { MapLayersBuilder.fogAndExplored(layers) }
         s.source("fog")?.setGeoJson(fog)
+        s.source("explored")?.setGeoJson(explored)
+        s.source("green-places")?.setGeoJson(MapLayersBuilder.greenPlaces(layers, world?.landmarks.orEmpty().associate { it.name to it.kind }))
         s.source("roads")?.setGeoJson(MapLayersBuilder.roads(layers))
         s.source("peek")?.setGeoJson(MapLayersBuilder.peeks(layers))
         s.source("wild")?.setGeoJson(MapLayersBuilder.wild(layers))
@@ -226,7 +229,15 @@ private fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
 private fun addWorldLayers(s: Style) {
     val empty = FeatureCollection.fromFeatures(emptyList())
-    for (id in listOf("fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
+    for (id in listOf("explored", "green-places", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
+
+    // Explored ground: real terrain texture (0 A.D. grass / forest floor), slipped under the base map's
+    // water, roads and buildings so those still show where you've been.
+    val ground = FillLayer("explored", "explored").withProperties(fillPattern("ground_grass"), fillOpacity(0.92f))
+    val woods = FillLayer("green-places", "green-places").withProperties(fillPattern("ground_forest"), fillOpacity(0.85f))
+    val waterId = s.layers.firstOrNull { it is FillLayer && "water" in it.id.lowercase() }?.id
+    if (waterId != null) { s.addLayerBelow(ground, waterId); s.addLayerAbove(woods, "explored") }
+    else { s.addLayer(ground); s.addLayer(woods) }
 
     // Fog: parchment you can see the land through, thicker when zoomed out so explored areas pop.
     s.addLayer(
@@ -242,26 +253,32 @@ private fun addWorldLayers(s: Style) {
             lineColor(INK), lineOpacity(0.35f), lineWidth(1.5f), lineDasharray(arrayOf(1.5f, 2.5f)),
         ),
     )
+    // Charted roads: a dark edge, then a dirt (levels 1–3) or cobblestone (4–5) surface from 0 A.D. textures.
+    val roadWidth = interpolate(linear(), get("level"), stop(1, 3f), stop(3, 5f), stop(5, 8f))
+    s.addLayer(
+        LineLayer("roads-edge", "roads").withProperties(
+            lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND), lineColor("#4A3A28"), lineOpacity(0.55f),
+            lineWidth(interpolate(linear(), get("level"), stop(1, 5f), stop(3, 7.5f), stop(5, 11f))),
+        ),
+    )
     s.addLayer(
         LineLayer("roads", "roads").withProperties(
             lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND),
-            // Faint trail → path → cobblestone → road → lit avenue.
-            lineColor(match(get("level"), literal("#A1887F"),
-                stop(1, "#BCAAA4"), stop(2, "#A1887F"), stop(3, "#8D6E63"), stop(4, "#6D4C41"), stop(5, "#E0A100"))),
-            lineWidth(interpolate(linear(), get("level"), stop(1, 1.5f), stop(3, 3.5f), stop(5, 6f))),
+            linePattern(match(get("level"), literal("road_dirt"), stop(4, "road_cobble"), stop(5, "road_cobble"))),
+            lineWidth(roadWidth),
         ),
     )
     // Paths you made yourself: dashed footpaths that darken as they wear in.
     s.addLayer(
         LineLayer("wild", "wild").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineColor("#8D6E63"), lineOpacity(0.85f),
+            lineCap(Property.LINE_CAP_ROUND), lineColor("#7A6046"), lineOpacity(0.8f),
             lineDasharray(arrayOf(2f, 1.5f)),
             lineWidth(interpolate(linear(), get("level"), stop(1, 1.5f), stop(5, 4.5f))),
         ),
     )
     s.addLayer(
         SymbolLayer("landmark-names", "landmarks").withProperties(
-            iconImage(get("icon")), iconSize(0.5f), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            iconImage(get("icon")), iconSize(interpolate(linear(), zoom(), stop(10, 0.3f), stop(16, 0.5f))), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
             textField(get("name")), textSize(12f), textColor("#2E5E3A"), textHaloColor("#F4ECD8"), textHaloWidth(2f),
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.2f)),
         ),
@@ -276,8 +293,8 @@ private fun addWorldLayers(s: Style) {
     // Waypoints: a signpost for every area you've walked in, readable from far out.
     s.addLayer(
         SymbolLayer("waypoints", "waypoints").withProperties(
-            iconImage("waypoint"), iconAllowOverlap(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
-            iconSize(interpolate(linear(), zoom(), stop(8, 0.3f), stop(13, 0.45f), stop(17, 0.7f))),
+            iconImage("medal_waypoint"), iconAllowOverlap(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            iconSize(interpolate(linear(), zoom(), stop(8, 0.25f), stop(13, 0.35f), stop(17, 0.5f))),
             textField(get("name")), textSize(interpolate(linear(), zoom(), stop(8, 10f), stop(15, 13f))),
             textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f),
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.2f)), textOptional(true),
@@ -293,7 +310,7 @@ private fun addWorldLayers(s: Style) {
     s.addLayer(
         SymbolLayer("settlements", "settlements").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true),
-            iconSize(interpolate(linear(), zoom(), stop(8, 0.35f), stop(14, 0.6f), stop(17, 1.0f))),
+            iconSize(interpolate(linear(), zoom(), stop(8, 0.3f), stop(14, 0.45f), stop(17, 0.65f))),
             iconAnchor(Property.ICON_ANCHOR_BOTTOM),
         ),
     )
@@ -312,13 +329,18 @@ private fun addWorldLayers(s: Style) {
     )
 }
 
+/** Map images. oad_* are adapted from 0 A.D. (© Wildfire Games, CC BY-SA 3.0); see Settings → Credits. */
 private val SPRITES = mapOf(
-    "tier_0" to R.drawable.sprite_tier_0, "tier_1" to R.drawable.sprite_tier_1, "tier_2" to R.drawable.sprite_tier_2,
-    "tier_3" to R.drawable.sprite_tier_3, "tier_4" to R.drawable.sprite_tier_4, "tier_5" to R.drawable.sprite_tier_5,
-    "tier_6" to R.drawable.sprite_tier_6, "place_park" to R.drawable.sprite_place_park,
-    "place_store" to R.drawable.sprite_place_store, "place_generic" to R.drawable.sprite_place_generic,
+    "medal_tier_0" to R.drawable.oad_medal_tier_0, "medal_tier_1" to R.drawable.oad_medal_tier_1,
+    "medal_tier_2" to R.drawable.oad_medal_tier_2, "medal_tier_3" to R.drawable.oad_medal_tier_3,
+    "medal_tier_4" to R.drawable.oad_medal_tier_4, "medal_tier_5" to R.drawable.oad_medal_tier_5,
+    "medal_tier_6" to R.drawable.oad_medal_tier_6, "medal_waypoint" to R.drawable.oad_medal_waypoint,
+    "medal_place_park" to R.drawable.oad_medal_place_park, "medal_place_wood" to R.drawable.oad_medal_place_wood,
+    "medal_place_store" to R.drawable.oad_medal_place_store, "medal_place_generic" to R.drawable.oad_medal_place_generic,
+    "ground_grass" to R.drawable.oad_ground_grass, "ground_forest" to R.drawable.oad_ground_forest,
+    "road_dirt" to R.drawable.oad_road_dirt, "road_cobble" to R.drawable.oad_road_cobble,
     "wanderer" to R.drawable.sprite_wanderer, "fog_parchment" to R.drawable.fog_parchment,
-    "waypoint" to R.drawable.sprite_waypoint, "waystone" to R.drawable.sprite_waystone,
+    "waystone" to R.drawable.sprite_waystone,
 )
 
 private fun addSprites(s: Style, context: Context) {

@@ -201,10 +201,8 @@ def parchment(size=64, seed=7):
 
 
 SPRITES = {
-    "tier_0": ruins, "tier_1": camp, "tier_2": hamlet, "tier_3": village,
-    "tier_4": town, "tier_5": city, "tier_6": metropolis,
-    "place_park": place_park, "place_store": place_store, "place_generic": place_generic,
-    "wanderer": wanderer, "waypoint": waypoint, "waystone": waystone,
+    # Settlement, waypoint and place markers now use 0 A.D. medallions (tools/build_0ad_assets.py).
+    "wanderer": wanderer, "waystone": waystone,
 }
 
 

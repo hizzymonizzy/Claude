@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -211,6 +212,20 @@ fun SettingsScreen(repo: Repository) {
                 }
             }) { Text("Share diagnostics") }
 
+            SectionTitle("Credits & licenses")
+            Text(
+                "Map art (terrain, settlement, place and resource images) is adapted from 0 A.D. by Wildfire Games, " +
+                    "licensed CC BY-SA 3.0. The adapted images are shared under the same license.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            LinkRow("0 A.D. · play0ad.com", "https://play0ad.com", ctx)
+            LinkRow("CC BY-SA 3.0 license", "https://creativecommons.org/licenses/by-sa/3.0/", ctx)
+            Text("Roads, paths and place names © OpenStreetMap contributors (ODbL).", style = MaterialTheme.typography.bodySmall)
+            LinkRow("openstreetmap.org/copyright", "https://www.openstreetmap.org/copyright", ctx)
+            Text("Base map tiles: OpenFreeMap. Map rendering: MapLibre (BSD). Hex grid: H3 by Uber (Apache 2.0). " +
+                "Geometry: JTS (EPL/EDL). Wanderer and waystone sprites, parchment fog: original to Wander World.",
+                style = MaterialTheme.typography.bodySmall)
+
             SectionTitle("Recent captures")
         }
         item {
@@ -265,6 +280,17 @@ private suspend fun shareDiagnostics(ctx: Context, report: String) {
         .putExtra(Intent.EXTRA_SUBJECT, file.name)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     ctx.startActivity(Intent.createChooser(send, "Share diagnostics"))
+}
+
+@Composable
+private fun LinkRow(label: String, url: String, ctx: Context) {
+    // Opens the browser only when tapped; nothing is fetched by the app itself.
+    Text(
+        label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(vertical = 2.dp).clickable {
+            try { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (_: Exception) {}
+        },
+    )
 }
 
 @Composable
