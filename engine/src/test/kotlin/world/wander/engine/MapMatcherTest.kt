@@ -57,6 +57,21 @@ class MapMatcherTest {
     }
 
     @Test
+    fun paddlingIsDetectedFromBeingOnWater() {
+        val zone = ZoneId.of("America/New_York")
+        val t0 = 1_767_600_000_000L
+        // A pond north of the grid; paddle across it with no hint at all.
+        val pond = Landmark("pond", "Mill Pond", "water", listOf(listOf(at(0.0, 300.0), at(400.0, 300.0), at(400.0, 600.0), at(0.0, 600.0), at(0.0, 300.0))))
+        val paddle = (0..30).map { TrackPoint(t0 + it * 8_000L, at(20.0 + it * 12.0, 450.0).lat, at(20.0 + it * 12.0, 450.0).lng, 6f) }
+        val r = TrackProcessor(zone).process(paddle, null, edges, water = listOf(pond))
+        assertEquals(1, r.waterTrails.size)
+        assertTrue(r.presence.isEmpty())
+        // The same track with no water mapped is just a walk.
+        val asWalk = TrackProcessor(zone).process(paddle, null, edges)
+        assertTrue(asWalk.waterTrails.isEmpty())
+    }
+
+    @Test
     fun potteringAroundTheHouseEarnsNothing() {
         val zone = ZoneId.of("America/New_York")
         val t0 = 1_767_600_000_000L

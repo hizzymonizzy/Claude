@@ -115,6 +115,7 @@ object MapLayersBuilder {
                 addNumberProperty("tier", s.tier.ordinal)
                 addStringProperty("icon", "medal_tier_${s.tier.ordinal}")
                 addBooleanProperty("capital", s.isCapital)
+                addBooleanProperty("monument", s.isCapital && state?.monuments?.isNotEmpty() == true)
                 addNumberProperty("liveliness", s.liveliness)
             }
         },

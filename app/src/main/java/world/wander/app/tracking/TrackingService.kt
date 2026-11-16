@@ -53,6 +53,7 @@ class TrackingService : LifecycleService() {
     private var distanceM = 0.0
     private var lastMoveMs = 0L
     private var lastMovePoint: LatLng? = null
+    private var fixCount = 0
     private var lastFixMs = 0L
     private var lastFix: LatLng? = null
     private var vehicleSinceMs: Long? = null
@@ -78,6 +79,11 @@ class TrackingService : LifecycleService() {
                 stillJob?.cancel()
                 val now = System.currentTimeMillis()
                 when {
+                    capturing && modeHint == "PROBE" && now - lastVehicleMs >= VEHICLE_COOLDOWN_MS -> {
+                        // Walking after the probe: this is a real walk now, so record it as one.
+                        endCapture("walking after a vehicle probe")
+                        startCapture(intent.getStringExtra(EXTRA_MODE))
+                    }
                     capturing -> {}
                     now - lastVehicleMs < VEHICLE_COOLDOWN_MS -> {
                         repo.log("track", "Ignoring movement right after a vehicle was detected")
@@ -87,6 +93,12 @@ class TrackingService : LifecycleService() {
                 }
             }
             ACTION_STILL -> if (capturing && !manual) scheduleStillStop()
+            ACTION_PROBE -> if (!capturing) {
+                // "In vehicle" can mean a car or a paddleboard. Record briefly: car speeds end it within
+                // 45 s (vehicle guard); paddling speeds keep going and are recognised as water later.
+                repo.log("track", "Vehicle detected: probing GPS in case this is a paddle")
+                startCapture("PROBE")
+            } else maybeStop()
             null -> {
                 // Restarted by the system after being killed: resume all-day idling if it was on.
                 allDay = repo.prefs.autoTrackingEnabled && repo.prefs.trackingMode == "allday"
@@ -130,7 +142,7 @@ class TrackingService : LifecycleService() {
             segmentId = repo.dao.insertSegment(SegmentEntity(startMs = start, source = "phone", modeHint = mode))
         }
         repo.log("track", "Capture started (${if (manual) "manual" else "auto"}, mode=${mode ?: "?"})")
-        repo.captureMode.value = mode ?: "FOOT"
+        repo.captureMode.value = mode?.takeIf { it != "PROBE" } ?: "FOOT"
         repo.trackingStatus.value = if (mode == "WATER") "Paddling" else "Charting your walk"
         startIdleWatch()
         updateNotification()
@@ -148,6 +160,7 @@ class TrackingService : LifecycleService() {
                 if (vehicleSinceMs == null) vehicleSinceMs = timeMs
                 if (!manual && timeMs - vehicleSinceMs!! > 45_000) {
                     lastVehicleMs = System.currentTimeMillis()
+                    lastVehicleEndMs = lastVehicleMs
                     endCapture("vehicle speed for 45 s")
                     maybeStop()
                     return
@@ -163,6 +176,7 @@ class TrackingService : LifecycleService() {
         val anchor = lastMovePoint
         if (anchor == null || Geo.distanceM(anchor, p) > 25) { lastMovePoint = p; lastMoveMs = System.currentTimeMillis() }
         buffer += TrackPointEntity(segmentId = id, timeMs = timeMs, lat = lat, lng = lng, accuracyM = acc)
+        if (++fixCount % 6 == 0 && acc <= 30f) checkWater(p)
         if (buffer.size >= 10) flush()
         repo.trackingStatus.value = (if (modeHint == "WATER") "Paddling" else "Charting") + " · %.2f km".format(distanceM / 1000)
         updateNotification()
@@ -172,6 +186,18 @@ class TrackingService : LifecycleService() {
         if (buffer.isEmpty()) return
         val batch = buffer.toList(); buffer.clear()
         lifecycleScope.launch(Dispatchers.IO) { repo.dao.insertPoints(batch) }
+    }
+
+    /** Show the paddling wanderer while you're over mapped water (the walk is classified properly when processed). */
+    private fun checkWater(p: LatLng) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val tile = world.wander.engine.Cells.tile(p.lat, p.lng)
+            val onWater = repo.dao.waterAreasInTiles(listOf(tile)).any { w ->
+                try { world.wander.engine.Landmark(w.id, "", "water", world.wander.app.geo.Overpass.decodeRings(w.geometry)).contains(p.lat, p.lng) } catch (_: Exception) { false }
+            }
+            repo.captureMode.value = if (onWater) "WATER" else (modeHint?.takeIf { it != "PROBE" } ?: "FOOT")
+            repo.trackingStatus.value = (if (onWater) "Paddling" else "Charting") + " · %.2f km".format(distanceM / 1000)
+        }
     }
 
     /** When not moving for a while, end the capture (unless it's a manual session). */
@@ -192,7 +218,8 @@ class TrackingService : LifecycleService() {
         stillJob?.cancel()
         stillJob = lifecycleScope.launch {
             delay(2 * 60_000)
-            if (capturing && !manual) { endCapture("still for 2 min"); maybeStop() }
+            // Phones often say "still" on the water; only stop if GPS agrees nothing has moved.
+            if (capturing && !manual && System.currentTimeMillis() - lastMoveMs > 2 * 60_000) { endCapture("still for 2 min"); maybeStop() }
         }
     }
 
@@ -263,6 +290,7 @@ class TrackingService : LifecycleService() {
         const val ACTION_STOP_ALLDAY = "stop_allday"
         const val ACTION_MOVING = "moving"
         const val ACTION_STILL = "still"
+        const val ACTION_PROBE = "probe"
         const val EXTRA_MODE = "mode"
 
         @Volatile var running = false
@@ -270,6 +298,8 @@ class TrackingService : LifecycleService() {
 
         /** Last time a vehicle was detected (by activity recognition or speed). */
         @Volatile var lastVehicleMs = 0L
+        /** When the vehicle guard last ended a recording; no new probe for 20 minutes after. */
+        @Volatile var lastVehicleEndMs = 0L
         private const val VEHICLE_COOLDOWN_MS = 90_000L
         private const val VEHICLE_SPEED_MPS = 7.0
 

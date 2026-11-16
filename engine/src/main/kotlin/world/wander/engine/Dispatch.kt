@@ -78,9 +78,21 @@ object DispatchWriter {
             else "A new land: ${state.regionName(e.regionId)}."
             is WorldEvent.RegionWoke -> lines += "${state.regionName(e.regionId)} stirs. The townspeople remember you."
             is WorldEvent.WaystoneFound, is WorldEvent.WaystoneReturned -> {} // summarized below
+            is WorldEvent.ProjectBuilt, is WorldEvent.MonumentRaised, is WorldEvent.ProjectProposed -> {} // economy, below
             is WorldEvent.GoalChanged -> lines += if (e.to > e.from)
                 "You've been steady. Your weekly goal rises to ${e.to} minutes."
             else "Your weekly goal eases to ${e.to} minutes. Rest is part of the journey."
+            else -> {}
+        }
+
+        // The economy.
+        summary?.earned?.takeIf { !it.isEmpty }?.let { lines += "Earned $it." }
+        for (e in events) when (e) {
+            is WorldEvent.ProjectBuilt -> Projects.byId(e.projectId)?.let { lines += "Built: ${it.name.lowercase().replaceFirstChar(Char::uppercase)} in ${name(e.areaId)}." }
+            is WorldEvent.MonumentRaised -> Monuments.byId(e.monumentId).let { lines += "A monument rises at your capital: ${it.name}. ${it.description}" }
+            is WorldEvent.ProjectProposed -> Projects.byId(e.projectId)?.let {
+                lines += "Proposal: ${name(e.areaId)} asks for a ${it.name.lowercase()} (${it.cost}). Approve or decline in the Atlas."
+            }
             else -> {}
         }
 

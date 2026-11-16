@@ -62,6 +62,8 @@ MEDALLIONS = {  # our name -> (clean file, source, options)
     "poi_lighthouse": ("structures/lighthouse.png", PORTRAIT + "structures/lighthouse.png", {"small": True, "ring": "blue"}),
     "poi_historic": ("structures/statue.png", PORTRAIT + "structures/statue.png", {"small": True}),
     "place_water": ("gaia/fauna_fish.png", PORTRAIT + "gaia/fauna_fish.png", {"small": True, "ring": "blue"}),
+    "gold": ("gaia/special_treasure.png", PORTRAIT + "gaia/special_treasure.png", {"small": True}),
+    "monument": ("gaia/special_obelisk.png", PORTRAIT + "gaia/special_obelisk.png", {}),
     "place_beach": ("gaia/flora_tree_date_palm.png", PORTRAIT + "gaia/flora_tree_date_palm.png", {"small": True, "ring": "sand"}),
 }
 

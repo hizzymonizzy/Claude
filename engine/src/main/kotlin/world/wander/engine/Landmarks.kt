@@ -99,7 +99,10 @@ class Landmark(
 }
 
 /** [pointLike]: mapped as a single point (we give it a small circle), so walking past it should count. */
-data class LandmarkInfo(val id: String, val name: String, val kind: String, val areaM2: Double, val pointLike: Boolean = false)
+data class LandmarkInfo(
+    val id: String, val name: String, val kind: String, val areaM2: Double,
+    val pointLike: Boolean = false, val center: LatLng? = null,
+)
 data class LandmarkVisit(val landmarkId: String, val day: Int, val seconds: Double)
 
 /** A resolution-11 cell (~25 m) walked off the mapped network on a given day. */

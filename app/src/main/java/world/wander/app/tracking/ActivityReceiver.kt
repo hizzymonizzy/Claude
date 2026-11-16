@@ -30,8 +30,13 @@ class ActivityReceiver : BroadcastReceiver() {
                 DetectedActivity.WALKING, DetectedActivity.RUNNING, DetectedActivity.ON_FOOT ->
                     send(context, repo, TrackingService.ACTION_MOVING, "FOOT")
                 DetectedActivity.ON_BICYCLE -> send(context, repo, TrackingService.ACTION_MOVING, "CYCLE")
-                DetectedActivity.STILL, DetectedActivity.IN_VEHICLE ->
+                DetectedActivity.STILL ->
                     if (TrackingService.running) send(context, repo, TrackingService.ACTION_STILL, null)
+                DetectedActivity.IN_VEHICLE -> when {
+                    TrackingService.running -> send(context, repo, TrackingService.ACTION_STILL, null)
+                    System.currentTimeMillis() - TrackingService.lastVehicleEndMs > 20 * 60_000 ->
+                        send(context, repo, TrackingService.ACTION_PROBE, null)
+                }
             }
         }
     }

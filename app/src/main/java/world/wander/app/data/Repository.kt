@@ -28,6 +28,8 @@ import world.wander.engine.LandmarkInfo
 import world.wander.engine.LandmarkVisit
 import world.wander.engine.TroddenCell
 import world.wander.engine.Arrival
+import world.wander.engine.ProjectDecision
+import world.wander.engine.Proposal
 import world.wander.engine.Geo
 import world.wander.engine.Mode
 import world.wander.engine.Place
@@ -131,8 +133,11 @@ class Repository(context: Context) {
             val retry = tileRetry[key]
             if (retry != null && System.currentTimeMillis() < retry.first) continue
             try {
-                val lms = Overpass.fetchLandmarks(tile)
+                val extras = Overpass.fetchLandmarks(tile)
+                val lms = extras.landmarks
                 dao.upsertLandmarks(lms)
+                dao.upsertWaterAreas(extras.water)
+                dao.upsertWaterTile(WaterTileEntity(tile, extras.coastal))
                 dao.upsertLandmarkTile(LandmarkTileEntity(tile, System.currentTimeMillis(), lms.size))
                 tileRetry.remove(key)
                 val again = dao.allPresenceCells().filter { Cells.parent(it.cell, Cells.TILE_RES) == tile }.map { it.segmentId }.toSet()
@@ -245,11 +250,22 @@ class Repository(context: Context) {
                 val graph = dao.edgesInTiles(tiles.toList()).map {
                     GraphEdge(it.id, it.name, it.startNode, it.endNode, Overpass.decode(it.geometry))
                 }
-                val hint = seg.modeHint?.let { Mode.valueOf(it) }
+                // A vehicle probe only counts if it turned out to be on the water.
+                val probe = seg.modeHint == "PROBE"
+                val hint = seg.modeHint?.takeIf { !probe }?.let { Mode.valueOf(it) }
                 val landmarks = dao.landmarksInTiles(tiles.toList()).distinctBy { it.id }.mapNotNull {
                     try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
                 }
-                val r = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks)
+                val water = dao.waterAreasInTiles(tiles.toList()).distinctBy { it.id }.mapNotNull {
+                    try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
+                }
+                val coastal = dao.waterTiles(tiles.toList()).any { it.coastal }
+                val r0 = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks, water, coastal)
+                val r = if (!probe) r0 else r0.copy(
+                    coverage = emptyList(), presence = emptyList(), trails = emptyList(), wildTrails = emptyList(),
+                    trodden = emptyList(), arrivals = emptyList(),
+                    movement = r0.movement.map { it.copy(footMeters = 0.0, cycleMeters = 0.0) },
+                )
                 db.runInTransaction {
                     dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
                     dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
@@ -322,7 +338,14 @@ class Repository(context: Context) {
             areas = dao.allAreas().associate { it.id to AreaInfo(it.id, it.name, it.placeType) },
             restPeriods = rest,
             goalLocked = prefs.goalLocked,
-            landmarks = landmarkEntities.mapValues { (_, l) -> LandmarkInfo(l.id, l.name, l.kind, l.areaM2, pointLike = l.id.startsWith("n")) },
+            landmarks = landmarkEntities.mapValues { (_, l) ->
+                val ring = Overpass.decodeRings(l.geometry).maxByOrNull { it.size }
+                LandmarkInfo(
+                    l.id, l.name, l.kind, l.areaM2, pointLike = l.id.startsWith("n"),
+                    center = ring?.let { r -> LatLng(r.sumOf { it.lat } / r.size, r.sumOf { it.lng } / r.size) },
+                )
+            },
+            decisions = dao.allDecisions().map { ProjectDecision(it.day, it.areaId, it.projectId, it.approve) },
             landmarkVisits = visits.map { LandmarkVisit(it.landmarkId, it.day, it.seconds) },
             trodden = dao.allTrodden().map { TroddenCell(it.cell, it.day) },
             arrivals = dao.allArrivals().map { Arrival(it.day, it.lat, it.lng) },
@@ -358,6 +381,13 @@ class Repository(context: Context) {
 
     fun dispatchFor(state: WorldState, day: Int): Dispatch = DispatchWriter.write(state, day)
 
+    /** Approve or decline the current project proposal. Recorded as a player decision and replayed. */
+    suspend fun decide(proposal: Proposal, approve: Boolean) = withContext(Dispatchers.IO) {
+        dao.insertDecision(ProjectDecisionEntity(day = today(), areaId = proposal.areaId, projectId = proposal.projectId, approve = approve, madeMs = System.currentTimeMillis()))
+        log("economy", "${if (approve) "Approved" else "Declined"} ${proposal.projectId} for ${proposal.areaId}")
+        rebuild()
+    }
+
     /** The daily routine: sync health, process captures, rebuild, and write yesterday's dispatch. */
     suspend fun dailyRun(): DispatchEntity? = withContext(Dispatchers.IO) {
         try { health.sync(prefs.startDay) } catch (e: Exception) { log("health", "Sync failed: ${e.message}") }
@@ -391,6 +421,7 @@ class Repository(context: Context) {
             if (w != null) {
                 appendLine("Roads charted: ${w.discoveredCount} · cells known: ${w.cellFamiliarity.size} · own-path cells: ${w.troddenWear.size}")
                 appendLine("Regions: " + w.regions.joinToString { "${it.name}${if (it.isHome) " (home)" else ""}${if (it.dormant) " (dormant)" else ""}" })
+                appendLine("Treasury: ${w.treasury.toString().ifEmpty { "empty" }} · proposal: ${w.proposal?.let { "${it.projectId} for ${it.areaId}" } ?: "none"} · monuments: ${w.monuments.joinToString { it.id }.ifEmpty { "none" }}")
                 appendLine("Waystones: ${w.waystones.size} (${w.waystones.count { it.great }} great) · portals: ${w.portals.size}")
                 appendLine("Places discovered: " + w.landmarks.joinToString { "${it.name} (${it.kind}, ${it.visitDays}d)" }.ifEmpty { "none" })
                 appendLine("Goal: %.0f / %d min (ratio %.2f, %s)".format(w.goal.trailing7Minutes, w.goal.goal, w.goal.ratio, w.goal.protection))
@@ -429,8 +460,9 @@ class Repository(context: Context) {
          * v2: stretches that stay within 45 m (moving around a building) are no longer walks.
          * v3: arrivals compare raw fixes, so short stops still mark where travel set you down.
          * v4: paddling (water routes) and wider place categories.
+         * v5: paddling detected from being on water (water areas, coast).
          */
-        const val PROCESSING_VERSION = 4
+        const val PROCESSING_VERSION = 5
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }

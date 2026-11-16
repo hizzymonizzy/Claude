@@ -99,6 +99,27 @@ class MapMatcher(
         return best.values.sortedBy { it.distM }.take(maxCandidates)
     }
 
+    /** Distance to the nearest mapped road within [maxM], or null if there is none that close. */
+    fun nearestRoadM(p: LatLng, maxM: Double): Double? {
+        val px = proj.x(p); val py = proj.y(p)
+        var best: Double? = null
+        for (gx in floor((px - maxM) / gridM).toInt()..floor((px + maxM) / gridM).toInt()) {
+            for (gy in floor((py - maxM) / gridM).toInt()..floor((py + maxM) / gridM).toInt()) {
+                val list = grid[key(gx, gy)] ?: continue
+                for ((e, i) in list) {
+                    val ax = proj.x(e.points[i - 1]); val ay = proj.y(e.points[i - 1])
+                    val bx = proj.x(e.points[i]); val by = proj.y(e.points[i])
+                    val dx = bx - ax; val dy = by - ay
+                    val len2 = dx * dx + dy * dy
+                    val t = if (len2 == 0.0) 0.0 else (((px - ax) * dx + (py - ay) * dy) / len2).coerceIn(0.0, 1.0)
+                    val d = hypot(ax + t * dx - px, ay + t * dy - py)
+                    if (d <= maxM && (best == null || d < best)) best = d
+                }
+            }
+        }
+        return best
+    }
+
     /** On-road distance between two candidates, or null if they aren't on the same or adjacent edges. */
     private fun routeDistance(a: Candidate, b: Candidate): Double? {
         if (a.edge === b.edge) return abs(b.alongM - a.alongM)

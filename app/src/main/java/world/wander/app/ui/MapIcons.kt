@@ -32,6 +32,10 @@ object MapIcons {
         "ground_sand" to R.drawable.oad_ground_sand, "water_ripple" to R.drawable.water_ripple,
         "road_dirt" to R.drawable.oad_road_dirt, "road_cobble" to R.drawable.oad_road_cobble,
         "fog_parchment" to R.drawable.fog_parchment,
+        // Economy
+        "medal_gold" to R.drawable.oad_medal_gold, "medal_monument" to R.drawable.oad_medal_monument,
+        "res_wood" to R.drawable.oad_res_wood, "res_food" to R.drawable.oad_res_food,
+        "res_stone" to R.drawable.oad_res_stone, "res_metal" to R.drawable.oad_res_metal,
         // You
         "wanderer" to R.drawable.sprite_wanderer, "wanderer_paddle" to R.drawable.sprite_wanderer_paddle,
     )

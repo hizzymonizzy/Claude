@@ -21,6 +21,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
     }
 
     private class SettlementAcc(val areaId: String, val capital: Boolean, val foundedDay: Int) {
+        var lastVisit = foundedDay
         var d = 0.0
         var peakD = 0.0
         var tier = Tier.CAMP
@@ -72,6 +73,16 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
         val centerCache = HashMap<String, LatLng>()
         var lastRegion: Int? = null
         var homeRegion: Int? = null
+
+        // Economy.
+        var treasury = Treasury()
+        val built = HashMap<String, MutableList<String>>()          // areaId -> project ids
+        val declinedOn = HashMap<Pair<String, String>, Int>()       // (areaId, projectId) -> day
+        var pending: Proposal? = null
+        val decisionsByDay = input.decisions.groupBy { it.day }
+        val monuments = LinkedHashMap<String, Int>()
+        var totalKm = 0.0
+        var paddledEver = false
 
         val edges = HashMap<String, EdgeAcc>()
         val familiarity = HashMap<String, Double>()
@@ -151,6 +162,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             r.lastPresence = day
             lastRegion = rid
         }
+        fun raise(id: String, day: Int) { if (id !in monuments) { monuments[id] = day; events += WorldEvent.MonumentRaised(day, id) } }
         fun announceRegion(rid: Int, day: Int, from: Int?) {
             if (rid > 0 && from != null) events += WorldEvent.RegionFounded(day, rid, from)
         }
@@ -182,12 +194,14 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
 
             // 1. Roads: discovery and wear.
             val newlyDiscovered = mutableListOf<String>()
+            var roadFootM = 0.0
             coverageByDay[day]?.groupBy { it.edgeId }?.forEach { (edgeId, covs) ->
                 val info = input.edges[edgeId] ?: return@forEach
                 val e = edges.getOrPut(edgeId) { EdgeAcc(info) }
                 val len = info.lengthM.coerceAtLeast(1.0)
                 val footLen = mergedLength(covs.filter { it.mode == Mode.FOOT }.map { it.fromM to it.toM })
                 val cycleLen = mergedLength(covs.filter { it.mode == Mode.CYCLE }.map { it.fromM to it.toM })
+                roadFootM += footLen
                 val wearNeed = min(p.wearDayFraction * len, p.wearDayMaxM)
                 when {
                     footLen >= wearNeed -> e.wear += 1.0
@@ -205,12 +219,19 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             if (newlyDiscovered.isNotEmpty()) events += WorldEvent.RoadsCharted(day, newlyDiscovered)
 
             // 1b. Named places walked through, and your own paths.
+            var earnWood = 0.0; var earnFood = 0.0; var earnMetal = 0.0
             visitsByDay[day]?.groupBy { it.landmarkId }?.forEach { (id, vs) ->
+                input.landmarks[id]?.let { info ->
+                    val secs = vs.sumOf { it.seconds }
+                    if (info.kind in Yields.WOOD_KINDS) earnWood += secs / 300.0
+                    if (info.kind in Yields.FOOD_KINDS) earnFood += secs / 600.0
+                }
                 val info = input.landmarks[id] ?: return@forEach
                 val need = if (info.pointLike) p.pointLandmarkSeconds else p.landmarkSeconds
                 if (vs.sumOf { it.seconds } < need) return@forEach
                 landmarkDays.merge(id, 1, Int::plus)
                 landmarkLast[id] = day
+                if (info.kind in Yields.METAL_KINDS) earnMetal += if (id !in landmarkFirst) 3.0 else 1.0
                 if (id !in landmarkFirst) {
                     landmarkFirst[id] = day
                     events += WorldEvent.LandmarkDiscovered(day, id)
@@ -261,7 +282,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                     a.d += gain * remember
                     a.areaDays++
                     a.lastAreaDay = day
-                    if (s != null) s.d += gain * remember
+                    if (s != null) { s.d += gain * remember; s.lastVisit = day }
                 }
                 // Capital: founded the first day you move at home.
                 if (s == null && areaId == input.homeAreaId && footMin * 60 >= p.cellPresenceSeconds) {
@@ -347,12 +368,60 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             }
             if (input.goalLocked && input.lockedGoal != null) goal = input.lockedGoal
 
+            // 7. Economy: earnings, milestones, and the next proposal.
+            val mvToday = movementByDay[day]
+            val footKm = (mvToday?.sumOf { it.footMeters } ?: 0.0) / 1000
+            val waterKm = (mvToday?.sumOf { it.waterMeters } ?: 0.0) / 1000
+            val outdoorKm = footKm + (mvToday?.sumOf { it.cycleMeters } ?: 0.0) / 1000 + waterKm
+            earnFood += waterKm * 2
+            val earned = Treasury(
+                gold = Yields.gold(intensityByDay[day] ?: 0.0, outdoorKm),
+                wood = earnWood, food = earnFood, stone = roadFootM / 1000.0, metal = earnMetal,
+            )
+            treasury += earned
+            totalKm += outdoorKm
+            if (footKm >= 5) raise("day_5k", day)
+            if (footKm >= 10) raise("day_10k", day)
+            if (footKm >= 21.1) raise("day_21k", day)
+            if (totalKm >= 100) raise("total_100k", day)
+            if (totalKm >= 500) raise("total_500k", day)
+            if (waterKm > 0.1 && !paddledEver) { paddledEver = true; raise("first_paddle", day) }
+            if (waystones.isNotEmpty()) raise("first_waystone", day)
+            if (regions.size > 1) raise("first_region", day)
+            val goalWeeks = weeks.count { it.minutes >= it.goal }
+            if (goalWeeks >= 4) raise("weeks_4", day)
+            if (goalWeeks >= 12) raise("weeks_12", day)
+            if (goalWeeks >= 52) raise("weeks_52", day)
+            if (pending == null) pending = propose(day, settlements, built, declinedOn, input, centerOf = { s -> s.position })?.also {
+                events += WorldEvent.ProjectProposed(day, it.areaId, it.projectId)
+            }
+
+            // 8. Your decisions on project proposals (after today's proposal, so you can answer it the same day).
+            decisionsByDay[day]?.forEach { dcs ->
+                val pr = pending ?: return@forEach
+                if (pr.areaId != dcs.areaId || pr.projectId != dcs.projectId) return@forEach
+                val def = Projects.byId(dcs.projectId) ?: return@forEach
+                if (dcs.approve) {
+                    if (def.cost.affordable(treasury)) {
+                        treasury = treasury.spend(def.cost)
+                        built.getOrPut(dcs.areaId) { mutableListOf() } += def.id
+                        events += WorldEvent.ProjectBuilt(day, dcs.areaId, def.id)
+                        pending = null
+                    }
+                } else {
+                    declinedOn[dcs.areaId to def.id] = day
+                    pending = null
+                }
+            }
+
+
             val mv = movementByDay[day]
             days[day] = DaySummary(
                 day = day,
                 footMeters = mv?.sumOf { it.footMeters } ?: 0.0,
                 cycleMeters = mv?.sumOf { it.cycleMeters } ?: 0.0,
                 waterMeters = mv?.sumOf { it.waterMeters } ?: 0.0,
+                earned = earned,
                 intensityMinutes = intensityByDay[day] ?: 0.0,
                 ratio = ratio,
                 protection = protection,
@@ -416,6 +485,8 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                     liveliness = 0.5.pow((today - a.lastAreaDay).coerceAtLeast(0) / p.livelinessHalfLifeDays),
                     position = s.position ?: LatLng(0.0, 0.0),
                     regionId = areaRegion[s.areaId] ?: 0,
+                    projects = built[s.areaId].orEmpty(),
+                    prosperity = built[s.areaId].orEmpty().sumOf { Projects.byId(it)?.prosperity ?: 0 },
                     dormant = areaRegion[s.areaId]?.let { regions[it].dormant } ?: false,
                 )
             },
@@ -439,6 +510,9 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             },
             waystones = waystones.map { WaystoneState(it.id, it.center, it.great, it.regionId, it.foundDay, it.trips) },
             portals = portals.map { (k, v) -> PortalLink(k.first, k.second, v) },
+            treasury = treasury,
+            proposal = pending,
+            monuments = monuments.map { (id, d) -> Monuments.byId(id).let { MonumentState(it.id, it.name, it.description, d) } },
             exploredAreas = areas.filter { (id, a) -> a.cells.isNotEmpty() || id in settlements }
                 .map { (id, a) ->
                     val known = a.cells.filter { (familiarity[it] ?: 0.0) > 0 }.ifEmpty { a.cells.toList() }
@@ -452,6 +526,38 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                     )
                 },
         )
+    }
+
+    /**
+     * One proposal at a time: the most recently visited settlement with something it can build, cheapest first.
+     * Declined projects come back after 14 days; nothing ever expires.
+     */
+    private fun propose(
+        day: Int,
+        settlements: Map<String, SettlementAcc>,
+        built: Map<String, List<String>>,
+        declinedOn: Map<Pair<String, String>, Int>,
+        input: WorldInput,
+        centerOf: (SettlementAcc) -> LatLng?,
+    ): Proposal? {
+        val waterCenters = input.landmarks.values.filter { it.kind in Yields.FOOD_KINDS }.mapNotNull { it.center }
+        fun nearWater(s: SettlementAcc): Boolean {
+            val c = centerOf(s) ?: return false
+            return waterCenters.any { Geo.distanceM(it, c) < 3_000 } ||
+                input.wake.any { Geo.distanceM(Cells.center(it.cell), c) < 3_000 }
+        }
+        val options = settlements.values.filter { it.tier != Tier.RUINS }.flatMap { s ->
+            Projects.ALL.filter { def ->
+                s.tier.ordinal >= def.minTier.ordinal &&
+                    def.id !in built[s.areaId].orEmpty() &&
+                    (declinedOn[s.areaId to def.id]?.let { day - it >= 14 } ?: true) &&
+                    (!def.needsWater || nearWater(s))
+            }.map { s to it }
+        }
+        val pick = options.sortedWith(
+            compareByDescending<Pair<SettlementAcc, ProjectDef>> { it.first.lastVisit }.thenBy { it.second.cost.gold },
+        ).firstOrNull() ?: return null
+        return Proposal(day, pick.first.areaId, pick.second.id)
     }
 
     private fun floorTier(s: SettlementAcc): Tier {

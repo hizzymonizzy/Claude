@@ -42,6 +42,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import world.wander.engine.SettlementState
+import world.wander.engine.Cost
+import world.wander.engine.Projects
+import world.wander.engine.Treasury
+import world.wander.engine.WorldState
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import world.wander.engine.RegionState
 import world.wander.engine.Tier
 import world.wander.engine.WorldParams
@@ -68,6 +76,7 @@ fun DispatchScreen(repo: Repository) {
     val archive by repo.dao.dispatches().collectAsState(initial = emptyList())
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Spacer(Modifier.height(12.dp)) }
+        world?.let { w -> if (w.proposal != null) item { ProposalCard(repo, w) } }
         world?.let { w ->
             item {
                 val d = repo.dispatchFor(w, w.today)
@@ -139,6 +148,12 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+            if (w != null) {
+                Spacer(Modifier.height(8.dp))
+                TreasuryRow(w.treasury)
+                Spacer(Modifier.height(8.dp))
+                ProposalCard(repo, w)
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
@@ -198,7 +213,22 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
                     }
                     Text("Founded ${dayLabel(s.foundedDay)} · ${s.areaDays} visit-days · ${s.exploredCells} blocks explored", style = MaterialTheme.typography.bodySmall)
                     Text("Liveliness %.0f%% · last visit ${dayLabel(s.lastAreaDay)}".format(s.liveliness * 100), style = MaterialTheme.typography.bodySmall)
+                    if (s.projects.isNotEmpty()) {
+                        Text(
+                            "Built: " + s.projects.mapNotNull { Projects.byId(it)?.name }.joinToString() + " · Prosperity ${s.prosperity}",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
+            }
+        }
+
+        val monuments = w?.monuments.orEmpty()
+        if (monuments.isNotEmpty()) {
+            item { SectionTitle("Monuments at your capital") }
+            items(monuments, key = { "mo-" + it.id }) { m ->
+                val capital = w?.settlements?.firstOrNull { it.isCapital }
+                HitRow(m.name, "${m.description} · ${dayLabel(m.day)}", R.drawable.oad_medal_monument) { capital?.let { go(it.position) } }
             }
         }
 
@@ -240,6 +270,55 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
             }
         }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** Gold, wood, food, stone and metal, with their 0 A.D. icons. */
+@Composable
+fun TreasuryRow(t: Treasury) {
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        listOf(
+            R.drawable.oad_medal_gold to t.gold, R.drawable.oad_res_wood to t.wood, R.drawable.oad_res_food to t.food,
+            R.drawable.oad_res_stone to t.stone, R.drawable.oad_res_metal to t.metal,
+        ).forEach { (icon, v) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(ImageBitmap.imageResource(icon), contentDescription = null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(3.dp))
+                Text(v.toInt().toString(), style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+/** The current project proposal, with approve / decline. */
+@Composable
+fun ProposalCard(repo: Repository, w: WorldState) {
+    val p = w.proposal ?: return
+    val def = Projects.byId(p.projectId) ?: return
+    val scope = rememberCoroutineScope()
+    val canAfford = def.cost.affordable(w.treasury)
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Proposal from ${w.areaNames[p.areaId] ?: "a settlement"}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+            Text(def.name, style = MaterialTheme.typography.titleMedium)
+            Text(def.description + " · +${def.prosperity} prosperity", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(6.dp))
+            Text("Costs ${def.cost}", style = MaterialTheme.typography.bodyMedium)
+            if (!canAfford) {
+                val t = w.treasury; val c = def.cost
+                val need = Cost(
+                    gold = (c.gold - t.gold.toInt()).coerceAtLeast(0), wood = (c.wood - t.wood.toInt()).coerceAtLeast(0),
+                    food = (c.food - t.food.toInt()).coerceAtLeast(0), stone = (c.stone - t.stone.toInt()).coerceAtLeast(0),
+                    metal = (c.metal - t.metal.toInt()).coerceAtLeast(0),
+                )
+                Text("Still needed: $need. Keep moving; it'll wait for you.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(enabled = canAfford, onClick = { scope.launch { repo.decide(p, true) } }) { Text("Approve") }
+                OutlinedButton(onClick = { scope.launch { repo.decide(p, false) } }) { Text("Decline") }
+            }
+        }
     }
 }
 

@@ -71,6 +71,8 @@ data class WorldInput(
     val arrivals: List<Arrival> = emptyList(),
     /** Fine cells paddled on a given day, for water-route wear. */
     val wake: List<TroddenCell> = emptyList(),
+    /** Your approvals and declines of project proposals. */
+    val decisions: List<ProjectDecision> = emptyList(),
 )
 
 /** The first walking point after travelling by vehicle or plane. */
@@ -160,6 +162,8 @@ data class SettlementState(
     val position: LatLng,
     val regionId: Int = 0,
     val dormant: Boolean = false,
+    val projects: List<String> = emptyList(),
+    val prosperity: Int = 0,
 )
 
 data class WeekRecord(val weekStartDay: Int, val goal: Int, val minutes: Double)
@@ -182,6 +186,9 @@ sealed class WorldEvent {
     data class RegionWoke(override val day: Int, val regionId: Int) : WorldEvent()
     data class WaystoneFound(override val day: Int, val waystoneId: Int, val great: Boolean, val regionId: Int) : WorldEvent()
     data class WaystoneReturned(override val day: Int, val waystoneId: Int) : WorldEvent()
+    data class ProjectProposed(override val day: Int, val areaId: String, val projectId: String) : WorldEvent()
+    data class ProjectBuilt(override val day: Int, val areaId: String, val projectId: String) : WorldEvent()
+    data class MonumentRaised(override val day: Int, val monumentId: String) : WorldEvent()
     data class LandmarkDiscovered(override val day: Int, val landmarkId: String) : WorldEvent()
     data class GoalChanged(override val day: Int, val from: Int, val to: Int) : WorldEvent()
 }
@@ -227,6 +234,8 @@ data class DaySummary(
     val intensityMinutes: Double,
     val waterMeters: Double = 0.0,
     val ratio: Double,
+    /** What you earned that day. */
+    val earned: Treasury = Treasury(),
     val protection: Protection,
     val goal: Int,
 )
@@ -249,6 +258,9 @@ data class WorldState(
     val regions: List<RegionState> = emptyList(),
     val waystones: List<WaystoneState> = emptyList(),
     val portals: List<PortalLink> = emptyList(),
+    val treasury: Treasury = Treasury(),
+    val proposal: Proposal? = null,
+    val monuments: List<MonumentState> = emptyList(),
 ) {
     fun regionName(id: Int) = regions.firstOrNull { it.id == id }?.name ?: "a distant land"
 

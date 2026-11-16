@@ -42,6 +42,8 @@ Source: official mirror `github.com/0ad/0ad`, branch `master`. Every file passed
 | `oad_medal_poi_lighthouse.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/lighthouse.png` | cropped to a circle, framed |
 | `oad_medal_poi_historic.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/statue.png` | cropped to a circle, framed |
 | `oad_medal_place_water.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/fauna_fish.png` | cropped to a circle, framed |
+| `oad_medal_gold.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/special_treasure.png` | cropped to a circle, framed |
+| `oad_medal_monument.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/special_obelisk.png` | cropped to a circle, framed |
 | `oad_medal_place_beach.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/flora_tree_date_palm.png` | cropped to a circle, framed |
 | `oad_res_food.png` | `binaries/data/mods/public/art/textures/ui/session/icons/resources/food.png` | re-encoded |
 | `oad_res_wood.png` | `binaries/data/mods/public/art/textures/ui/session/icons/resources/wood.png` | re-encoded |

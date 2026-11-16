@@ -114,7 +114,27 @@ class TrackProcessor(
         return Split(moving, dropped, arrivals.filter { a -> a !in stillFirsts }, still.sumOf { it.size })
     }
 
-    fun process(points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>, landmarks: List<Landmark> = emptyList()): TrackResult {
+    /**
+     * Is this stretch on the water? Mostly inside mapped water (lakes, rivers, bays), or — where the coast is
+     * mapped but the sea isn't an area — mostly far from any road at paddling speed and not on a beach.
+     */
+    private fun onWater(run: List<TrackPoint>, water: List<Landmark>, coastal: Boolean, matcher: MapMatcher?, beaches: List<Landmark>): Boolean {
+        if (water.isNotEmpty() && run.count { p -> water.any { it.contains(p.lat, p.lng) } } >= 0.6 * run.size) return true
+        if (!coastal || matcher == null) return false
+        val farFromRoads = run.count { matcher.nearestRoadM(LatLng(it.lat, it.lng), 80.0) == null }
+        val onBeach = run.count { p -> beaches.any { it.contains(p.lat, p.lng) } }
+        val speeds = (1 until run.size).mapNotNull { k ->
+            val dt = (run[k].timeMs - run[k - 1].timeMs) / 1000.0
+            if (dt <= 0) null else Geo.distanceM(run[k - 1].lat, run[k - 1].lng, run[k].lat, run[k].lng) / dt
+        }.sorted()
+        val median = speeds.getOrNull(speeds.size / 2) ?: return false
+        return farFromRoads >= 0.7 * run.size && onBeach < 0.3 * run.size && median in 0.4..3.5
+    }
+
+    fun process(
+        points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>, landmarks: List<Landmark> = emptyList(),
+        water: List<Landmark> = emptyList(), coastal: Boolean = false,
+    ): TrackResult {
         val split = runs(points)
         val runs = split.runs
         val dropped = split.dropped
@@ -133,7 +153,8 @@ class TrackProcessor(
 
         for (run in runs) {
             kept += run.size
-            val mode = modeHint ?: inferMode(run)
+            val beaches = landmarks.filter { it.kind == "beach" }
+            val mode = if (modeHint == Mode.WATER || onWater(run, water, coastal, matcher, beaches)) Mode.WATER else modeHint ?: inferMode(run)
             val line = run.map { LatLng(it.lat, it.lng) }
             if (mode == Mode.WATER) {
                 // On the water: chart the route, clear fog, find beaches and lakes; no roads, no settlements.

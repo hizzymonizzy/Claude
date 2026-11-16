@@ -3,6 +3,7 @@ package world.wander.app.geo
 import org.json.JSONObject
 import world.wander.app.data.EdgeEntity
 import world.wander.app.data.LandmarkEntity
+import world.wander.app.data.WaterAreaEntity
 import world.wander.engine.Landmark
 import world.wander.app.data.PlaceEntity
 import world.wander.engine.Cells
@@ -74,22 +75,71 @@ object Overpass {
         nwr["man_made"="lighthouse"](BBOX);
         nwr["historic"~"^(monument|memorial|castle|fort|ruins|archaeological_site|battlefield|building)$"]["name"](BBOX);
         way["shop"]["name"]["building"](BBOX);
+        wr["natural"~"^(water|bay|strait)$"](BBOX);
+        wr["waterway"="riverbank"](BBOX);
+        wr["landuse"~"^(reservoir|basin)$"](BBOX);
+        way["natural"="coastline"](BBOX);
     """
+
+    /** Named places, plus every water area (named or not) and whether the tile touches the coast. */
+    data class TileExtras(val landmarks: List<LandmarkEntity>, val water: List<WaterAreaEntity>, val coastal: Boolean)
 
     /** Points of interest mapped as a single point get a small circle you can walk through. */
     private const val POINT_RADIUS_M = 35.0
 
     /** Named places in a tile: parks, woods, beaches, lakes, civic buildings, big stores. Small shops are dropped. */
-    fun fetchLandmarks(tile: String): List<LandmarkEntity> {
+    fun fetchLandmarks(tile: String): TileExtras {
         val boundary = Cells.boundary(tile)
         val bbox = "${boundary.minOf { it.lat }},${boundary.minOf { it.lng }},${boundary.maxOf { it.lat }},${boundary.maxOf { it.lng }}"
         val lines = AREA_FILTERS.replace("BBOX", bbox).lines().map { it.trim() }.filter { it.isNotEmpty() }
         val parts = lines.flatMap { l ->
-            if (l.startsWith("nwr[")) listOf(l.replaceFirst("nwr[", "way["), l.replaceFirst("nwr[", "relation["), l.replaceFirst("nwr[", "node["))
-            else listOf(l)
+            when {
+                l.startsWith("nwr[") -> listOf(l.replaceFirst("nwr[", "way["), l.replaceFirst("nwr[", "relation["), l.replaceFirst("nwr[", "node["))
+                l.startsWith("wr[") -> listOf(l.replaceFirst("wr[", "way["), l.replaceFirst("wr[", "relation["))
+                else -> listOf(l)
+            }
         }
         val query = "[out:json][timeout:90];(" + parts.joinToString("") + ");out body geom;"
-        return parseLandmarks(postWithRetry(query), tile)
+        val json = postWithRetry(query)
+        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), JSONObject(json).getJSONArray("elements").let { els ->
+            (0 until els.length()).any { els.getJSONObject(it).optJSONObject("tags")?.optString("natural") == "coastline" }
+        })
+    }
+
+    private fun isWater(t: JSONObject) = t.optString("natural") in setOf("water", "bay", "strait") ||
+        t.optString("waterway") == "riverbank" || t.optString("landuse") in setOf("reservoir", "basin")
+
+    /** Every water area (lakes, ponds, rivers, bays), named or not: where you're paddling. */
+    internal fun parseWater(json: String, tile: String): List<WaterAreaEntity> {
+        val elements = JSONObject(json).getJSONArray("elements")
+        val out = mutableListOf<WaterAreaEntity>()
+        for (i in 0 until elements.length()) {
+            val el = elements.getJSONObject(i)
+            val tags = el.optJSONObject("tags") ?: continue
+            if (!isWater(tags)) continue
+            val rings = elementRings(el) ?: continue
+            out += WaterAreaEntity("${el.getString("type").first()}${el.getLong("id")}", tile, rings.joinToString("|") { encode(it) })
+        }
+        return out
+    }
+
+    private fun elementRings(el: JSONObject): List<List<LatLng>>? = when (el.getString("type")) {
+        "way" -> {
+            val g = el.optJSONArray("geometry")
+            val pts = g?.let { (0 until it.length()).map { k -> val o = it.getJSONObject(k); LatLng(o.getDouble("lat"), o.getDouble("lon")) } }
+            if (pts != null && pts.size >= 4 && pts.first() == pts.last()) listOf(pts) else null
+        }
+        "relation" -> {
+            val members = el.optJSONArray("members")
+            val pieces = members?.let { (0 until it.length()).mapNotNull { m ->
+                val mem = it.getJSONObject(m)
+                if (mem.optString("type") != "way" || mem.optString("role") == "inner") return@mapNotNull null
+                val g = mem.optJSONArray("geometry") ?: return@mapNotNull null
+                (0 until g.length()).map { k -> val o = g.getJSONObject(k); LatLng(o.getDouble("lat"), o.getDouble("lon")) }
+            } }
+            pieces?.let { Landmark.stitch(it) }?.ifEmpty { null }
+        }
+        else -> null
     }
 
     /** Our category for a place, from its OpenStreetMap tags. Drives its medallion and legend entry. */

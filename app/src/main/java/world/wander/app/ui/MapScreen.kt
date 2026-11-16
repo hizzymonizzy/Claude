@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
@@ -257,21 +255,12 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         ) { Text("◎") }
 
         val recording = captureMode != null
-        var chooser by remember { mutableStateOf(false) }
         Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
             ExtendedFloatingActionButton(
                 onClick = {
-                    if (recording) TrackingService.start(context, TrackingService.ACTION_STOP_MANUAL) else chooser = true
+                    TrackingService.start(context, if (recording) TrackingService.ACTION_STOP_MANUAL else TrackingService.ACTION_START_MANUAL)
                 },
-            ) { Text(if (recording) (if (captureMode == "WATER") "Stop paddle" else "Stop walk") else "Start") }
-            DropdownMenu(expanded = chooser, onDismissRequest = { chooser = false }) {
-                DropdownMenuItem(text = { Text("Walk or run") }, onClick = {
-                    chooser = false; TrackingService.start(context, TrackingService.ACTION_START_MANUAL)
-                })
-                DropdownMenuItem(text = { Text("Paddle (SUP, canoe, kayak)") }, onClick = {
-                    chooser = false; TrackingService.start(context, TrackingService.ACTION_START_MANUAL, "WATER")
-                })
-            }
+            ) { Text(if (recording) "Stop" else "Start") }
         }
     }
 }
@@ -493,6 +482,15 @@ private fun addWorldLayers(s: Style, problems: MutableList<String>) {
             iconAnchor(Property.ICON_ANCHOR_CENTER),
         ),
     )
+    guard(problems, "capital-monument") {
+        s.addLayer(
+            SymbolLayer("capital-monument", "settlements").withProperties(
+                iconImage("medal_monument"), iconAllowOverlap(true), iconIgnorePlacement(true),
+                iconSize(interpolate(linear(), zoom(), stop(8, 0.18f), stop(14, 0.25f), stop(17, 0.35f))),
+                iconOffset(arrayOf(-170f, -150f)),
+            ).also { it.setFilter(eq(get("monument"), literal(true))) },
+        )
+    }
     guard(problems, "capital-badge") {
         s.addLayer(
             SymbolLayer("capital-badge", "settlements").withProperties(
