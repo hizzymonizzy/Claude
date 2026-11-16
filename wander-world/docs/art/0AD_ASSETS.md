@@ -17,6 +17,8 @@ Source: official mirror `github.com/0ad/0ad`, branch `master`. Every file passed
 | `oad_ground_snow.png` | `binaries/data/mods/public/art/textures/terrain/types/alpine_arctic/snow_01.png` | resized to 256 px |
 | `oad_road_dirt.png` | `binaries/data/mods/public/art/textures/terrain/types/temperate/mud_01.png` | resized to 256 px, lightened and warmed |
 | `oad_road_cobble.png` | `binaries/data/mods/public/art/textures/terrain/types/temperate/paving_001.png` | resized to 256 px |
+| `oad_water_sea.png` | `binaries/data/mods/public/art/textures/terrain/types/aegean_anatolia/ocean_coral_01.png` | resized to 256 px, tinted blue as water |
+| `oad_ground_sand_wet.png` | `binaries/data/mods/public/art/textures/terrain/types/aegean_anatolia/sand_01_wet.png` | resized to 256 px |
 | `oad_medal_tier_0.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/wall.png` | cropped to a circle, framed, weathered |
 | `oad_medal_tier_1.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/special_settlement.png` | cropped to a circle, framed |
 | `oad_medal_tier_2.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/house.png` | cropped to a circle, framed |

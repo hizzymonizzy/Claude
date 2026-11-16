@@ -44,16 +44,21 @@ private val RESOURCE_ICONS = mapOf(
     "stone" to R.drawable.oad_res_stone, "metal" to R.drawable.oad_res_metal,
 )
 
+/** Within this distance of a pointer you're at the source: its ring turns green ("gathering"). */
+const val GATHER_M = 40.0
+
 fun formatDistance(m: Double): String = if (m < 950) "${(m / 10).roundToInt() * 10} m" else "%.1f km".format(m / 1000)
 
 /** Your stores on the map. Tapping a resource flies to its nearest source, when there is one. */
 @Composable
-fun InventoryBar(t: Treasury, targets: List<ResourceTarget>, onPick: (ResourceTarget) -> Unit) {
+fun InventoryBar(t: Treasury, targets: List<ResourceTarget>, today: Treasury? = null, onPick: (ResourceTarget) -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, Color(0x55806040)),
     ) {
         Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            val gained = mapOf("gold" to (today?.gold ?: 0.0), "wood" to (today?.wood ?: 0.0), "food" to (today?.food ?: 0.0),
+                "stone" to (today?.stone ?: 0.0), "metal" to (today?.metal ?: 0.0))
             listOf("gold" to t.gold, "wood" to t.wood, "food" to t.food, "stone" to t.stone, "metal" to t.metal).forEach { (kind, v) ->
                 val target = targets.firstOrNull { it.resource == kind }
                 Row(
@@ -63,6 +68,10 @@ fun InventoryBar(t: Treasury, targets: List<ResourceTarget>, onPick: (ResourceTa
                     Image(ImageBitmap.imageResource(RESOURCE_ICONS.getValue(kind)), contentDescription = kind, filterQuality = FilterQuality.Medium, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(2.dp))
                     Text(v.toInt().toString(), style = MaterialTheme.typography.labelLarge)
+                    // What today's walks added (counted when a walk ends).
+                    gained.getValue(kind).toInt().takeIf { it > 0 }?.let {
+                        Text("+$it", fontSize = 10.sp, color = Color(0xFF3F7D3A), modifier = Modifier.padding(start = 1.dp))
+                    }
                 }
             }
         }

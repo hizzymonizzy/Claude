@@ -113,4 +113,19 @@ class MapMatcherTest {
         assertTrue("trail ${trail.size}", trail.size in 2..4)
         assertTrue(trail.all { Geo.distanceM(it, at(it.let { p -> proj.x(p) }, 2.0)) < 5 })
     }
+
+    @Test
+    fun walkingAShoreGathersFromTheWaterButWoodsNeedYouInside() {
+        // Alpha 0.9.5: a pointer led to a pond's edge, but only time *inside* a named place counted.
+        val zone = ZoneId.of("America/New_York")
+        val t0 = 1_767_600_000_000L
+        val pond = Landmark("w9", "", "water", listOf(listOf(at(0.0, 300.0), at(400.0, 300.0), at(400.0, 600.0), at(0.0, 600.0), at(0.0, 300.0))))
+        val wood = Landmark("w10", "Elm Woods", "wood", listOf(listOf(at(0.0, 240.0), at(400.0, 240.0), at(400.0, 250.0), at(0.0, 250.0), at(0.0, 240.0))))
+        // Walk east 30 m south of the pond's edge (and 20 m north of the wood strip) at ~1.4 m/s.
+        val walk = (0..40).map { TrackPoint(t0 + it * 7_000L, at(it * 9.0, 270.0).lat, at(it * 9.0, 270.0).lng, 6f) }
+        val r = TrackProcessor(zone).process(walk, null, edges, landmarks = listOf(wood), water = listOf(pond))
+        assertTrue(r.waterTrails.isEmpty())
+        assertTrue("on the shore counts for the pond", (r.landmarkVisits.filter { it.landmarkId == "w9" }.sumOf { it.seconds }) > 200)
+        assertTrue("beside the wood doesn't", r.landmarkVisits.none { it.landmarkId == "w10" })
+    }
 }

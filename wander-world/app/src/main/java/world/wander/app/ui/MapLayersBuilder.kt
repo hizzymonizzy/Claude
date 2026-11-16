@@ -67,11 +67,19 @@ object MapLayersBuilder {
     /** Medallion for a kind of place. */
     fun placeIcon(kind: String?): String = MapIcons.placeIcon(kind)
 
-    /** Discovered beaches and sand, drawn with a sand texture (under the fog). */
+    /** Beaches and sand: discovered beaches plus every mapped sand area nearby, drawn under the fog. */
     fun sandPlaces(layers: MapLayers, kinds: Map<String, String>): FeatureCollection = FeatureCollection.fromFeatures(
-        layers.landmarks.filter { kinds[it.first] == "beach" }.mapNotNull { (_, rings, _) ->
+        (layers.landmarks.filter { kinds[it.first] == "beach" }.map { it.second } + layers.sand).mapNotNull { rings ->
             placePolygon(rings)?.let { g -> polygons(g).map { Feature.fromGeometry(toGeo(it)) } }
         }.flatten(),
+    )
+
+    /** How wide the wet-sand shore is along a coastline (the sea side is hidden under the water). */
+    private const val SHORE_M = 18.0
+
+    /** A wet-sand strip along every coastline nearby, drawn under the fog and under the water. */
+    fun shore(layers: MapLayers): FeatureCollection = FeatureCollection.fromFeatures(
+        layers.coast.mapNotNull { bufferedLatLng(it, SHORE_M) }.flatMap { g -> polygons(g).map { Feature.fromGeometry(toGeo(it)) } },
     )
 
     /** Water routes you've paddled, with their wear level. */
@@ -106,6 +114,7 @@ object MapLayersBuilder {
             Feature.fromGeometry(Point.fromLngLat(t.point.lng, t.point.lat)).apply {
                 addStringProperty("icon", "res_${t.resource}")
                 addStringProperty("name", t.name)
+                addBooleanProperty("near", t.distanceM <= GATHER_M)
             }
         },
     )

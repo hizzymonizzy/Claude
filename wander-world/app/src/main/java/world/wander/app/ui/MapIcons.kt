@@ -30,6 +30,7 @@ object MapIcons {
         // Ground and roads
         "ground_grass" to R.drawable.oad_ground_grass, "ground_forest" to R.drawable.oad_ground_forest,
         "ground_sand" to R.drawable.oad_ground_sand, "water_ripple" to R.drawable.water_ripple,
+        "water_sea" to R.drawable.oad_water_sea, "ground_sand_wet" to R.drawable.oad_ground_sand_wet,
         "road_dirt" to R.drawable.oad_road_dirt, "road_cobble" to R.drawable.oad_road_cobble,
         "fog_parchment" to R.drawable.fog_parchment,
         // Economy

@@ -33,6 +33,16 @@ class Landmark(
 
     val center: LatLng = rings.maxBy { it.size }.let { r -> LatLng(r.sumOf { it.lat } / r.size, r.sumOf { it.lng } / r.size) }
 
+    /** Inside, or within [marginM] of the outline (walking a lake's shore or a beach's edge counts as being there). */
+    fun near(lat: Double, lng: Double, marginM: Double): Boolean {
+        if (contains(lat, lng)) return true
+        if (marginM <= 0) return false
+        val dLat = marginM / 110_540.0; val dLng = marginM / (111_320.0 * kotlin.math.cos(Math.toRadians(lat)))
+        if (lat < minLat - dLat || lat > maxLat + dLat || lng < minLng - dLng || lng > maxLng + dLng) return false
+        val p = LatLng(lat, lng)
+        return rings.any { r -> (1 until r.size).any { i -> Geo.distanceToSegmentM(p, r[i - 1], r[i]) <= marginM } }
+    }
+
     fun contains(lat: Double, lng: Double): Boolean {
         if (lat < minLat || lat > maxLat || lng < minLng || lng > maxLng) return false
         var inside = false

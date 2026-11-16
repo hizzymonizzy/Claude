@@ -79,6 +79,13 @@ data class DayMovementEntity(
 data class WaterAreaEntity(@PrimaryKey val id: String, val tile: String, val geometry: String)
 
 /** Whether a tile touches a mapped coastline (the open sea isn't mapped as an area). */
+/**
+ * Ground the map paints but you don't "discover": beaches and sand (named or not, as areas) and the coastline
+ * (as lines, clipped to the tile). kind = "sand" or "coast". Rings or lines joined by '|'.
+ */
+@Entity(tableName = "terrain_area", indices = [Index("tile")])
+data class TerrainAreaEntity(@PrimaryKey val id: String, val tile: String, val kind: String, val geometry: String)
+
 @Entity(tableName = "water_tile")
 data class WaterTileEntity(@PrimaryKey val tile: String, val coastal: Boolean)
 
@@ -273,6 +280,9 @@ interface WanderDao {
     @Query("SELECT * FROM landmark_visit") fun allVisits(): List<LandmarkVisitEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertWaterAreas(w: List<WaterAreaEntity>)
     @Query("SELECT * FROM water_area WHERE tile IN (:tiles)") fun waterAreasInTiles(tiles: List<String>): List<WaterAreaEntity>
+    @Query("SELECT * FROM water_area WHERE id IN (:ids)") fun waterAreasById(ids: List<String>): List<WaterAreaEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertTerrain(t: List<TerrainAreaEntity>)
+    @Query("SELECT * FROM terrain_area WHERE tile IN (:tiles)") fun terrainInTiles(tiles: List<String>): List<TerrainAreaEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertWaterTile(t: WaterTileEntity)
     @Query("SELECT * FROM water_tile WHERE tile IN (:tiles)") fun waterTiles(tiles: List<String>): List<WaterTileEntity>
     @Insert fun insertDecision(d: ProjectDecisionEntity)
@@ -325,7 +335,7 @@ interface WanderDao {
         PlaceEntity::class, CellAreaEntity::class, AreaEntity::class, DispatchEntity::class, DiagEntity::class,
         TrailEntity::class, WildTrailEntity::class, TroddenEntity::class, LandmarkEntity::class,
         LandmarkTileEntity::class, LandmarkVisitEntity::class, ArrivalEntity::class, WaterTrailEntity::class, WakeEntity::class,
-        WaterAreaEntity::class, WaterTileEntity::class, ProjectDecisionEntity::class,
+        WaterAreaEntity::class, WaterTileEntity::class, ProjectDecisionEntity::class, TerrainAreaEntity::class,
     ],
     version = DbMigrations.LATEST,
     exportSchema = true,

@@ -75,9 +75,8 @@ class MigrationTest {
                 }
                 assertEquals("schema after upgrading from v$from", expected, shape(c))
                 assertEquals("walk points kept (from v$from)", 50, count(c, "SELECT COUNT(*) FROM track_point"))
-                // Walks are queued for re-processing under the new rules, never deleted.
+                // Walks are never deleted. (Re-processing under new rules is driven by PROCESSING_VERSION, not here.)
                 assertEquals(1, count(c, "SELECT COUNT(*) FROM segment"))
-                assertEquals(0, count(c, "SELECT processed FROM segment WHERE id = 1"))
             }
         }
     }

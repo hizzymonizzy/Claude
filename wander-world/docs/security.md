@@ -49,6 +49,13 @@ Before adding anything third-party:
 
 **Dependency verification is on.** `gradle/verification-metadata.xml` pins SHA-256 checksums for all 412 build and runtime files. A changed or unreviewed library fails the build.
 
+### Assets added in alpha 0.9.5
+
+Two more 0 A.D. terrain textures, `aegean_anatolia/ocean_coral_01.png` and `aegean_anatolia/sand_01_wet.png`,
+taken from the same official repository clone. They passed `tools/asset_intake.py` (PNG, full decode, nothing
+after IEND, re-encoded) and were resized and tinted by `tools/build_0ad_assets.py`. Provenance is in
+`docs/art/0AD_ASSETS.md`.
+
 ### Test-only libraries (not in the APK)
 
 | Library | Why | Review |

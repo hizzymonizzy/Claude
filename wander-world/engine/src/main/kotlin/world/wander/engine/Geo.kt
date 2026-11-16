@@ -23,6 +23,17 @@ object Geo {
     }
 
     /** Length of a polyline in meters. */
+    /** Distance in metres from [p] to the segment [a]–[b] (local flat projection; fine at street scale). */
+    fun distanceToSegmentM(p: LatLng, a: LatLng, b: LatLng): Double {
+        val proj = LocalProjection(p)
+        val ax = proj.x(a); val ay = proj.y(a); val bx = proj.x(b); val by = proj.y(b)
+        val dx = bx - ax; val dy = by - ay
+        val len2 = dx * dx + dy * dy
+        val t = if (len2 == 0.0) 0.0 else ((-ax) * dx + (-ay) * dy) / len2
+        val c = t.coerceIn(0.0, 1.0)
+        return kotlin.math.hypot(ax + c * dx, ay + c * dy)
+    }
+
     fun lengthM(points: List<LatLng>): Double {
         var total = 0.0
         for (i in 1 until points.size) total += distanceM(points[i - 1], points[i])

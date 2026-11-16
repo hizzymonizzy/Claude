@@ -109,11 +109,17 @@ def roads():
     ptr.alpha_composite(wood, (34, 34))
     pdr.polygon([(104, 46), (118, 60), (104, 74)], fill=(91, 70, 54))
     out["oad_legend_pointer"] = ptr
+    g = Image.new("RGBA", (120, 120), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(g)
+    gd.ellipse([20, 20, 100, 100], fill=(244, 236, 216, 220), outline=(63, 157, 74), width=8)
+    g.alpha_composite(Image.open(RES / "oad_res_food.png").convert("RGBA").resize((52, 52), Image.LANCZOS), (34, 34))
+    out["legend_gathering"] = g
     out["legend_ground_fog"] = Image.open(RES / "fog_parchment.png").convert("RGB").resize((W, H))
     out["oad_legend_ground_explored"] = grass()
     out["oad_legend_ground_woods"] = tile("oad_ground_forest", (W, H))
     out["oad_legend_ground_sand"] = tile("oad_ground_sand", (W, H))
-    out["legend_ground_water"] = tile("water_ripple", (W, H))
+    out["oad_legend_ground_water"] = tile("oad_water_sea", (W, H))
+    out["oad_legend_ground_shore"] = tile("oad_ground_sand_wet", (W, H))
     return out
 
 
@@ -124,7 +130,8 @@ LEGEND = [
     ("oad_legend_ground_explored", "Explored ground", "Cleared by your walks; worn roads clear wider."),
     ("oad_legend_ground_woods", "Woods & parks", "Named green places you've discovered."),
     ("oad_legend_ground_sand", "Sand & beaches", "Beaches and dunes you've discovered."),
-    ("legend_ground_water", "Water", "Lakes, rivers and sea."),
+    ("oad_legend_ground_water", "Water", "Clear and blue where you've been; faded under the fog."),
+    ("oad_legend_ground_shore", "Shore", "Wet sand along the coast."),
     ("Roads", None, None),
     ("oad_legend_road_1", "Trail", "Walked on 1 day."),
     ("oad_legend_road_2", "Footpath", "3 days."),
@@ -180,11 +187,12 @@ LEGEND = [
     ("Economy", None, None),
     ("oad_medal_gold", "Gold", "Your weekly-goal effort and distance."),
     ("oad_res_wood", "Wood", "Time in woods and parks. New ones pay double; favourites thin, rest restores."),
-    ("oad_res_food", "Food", "Paddling, beaches and lakes."),
+    ("oad_res_food", "Food", "Paddling, and time on beaches or along any shore."),
     ("oad_res_stone", "Stone", "Kilometres walked on roads; points to streets you haven't walked."),
     ("oad_res_metal", "Metal", "Discovering and revisiting places; points to undiscovered ones."),
     ("oad_medal_monument", "Monument", "A milestone, raised at your capital."),
     ("oad_legend_pointer", "Nearest source", "Best nearby wood, food, stone or metal: fresh ground beats thinned. Tap to go."),
+    ("legend_gathering", "Gathering", "Ring turns green within 40 m: you're at the source. Shores count for food."),
     ("You", None, None),
     ("sprite_wanderer", "Walking", ""),
     ("sprite_wanderer_paddle", "Paddling", ""),

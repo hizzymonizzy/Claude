@@ -52,10 +52,18 @@ data class MapLayers(
     val landmarks: List<Triple<String, List<List<LatLng>>, Double>> = emptyList(),
     /** Water routes you've paddled, with a wear level 1–5. */
     val water: List<Pair<List<LatLng>, Int>> = emptyList(),
+    /** Sand areas (rings) near where you've been; drawn under the fog. */
+    val sand: List<List<List<LatLng>>> = emptyList(),
+    /** Coastlines (lines) near where you've been; a wet-sand shore is drawn along them, under the fog. */
+    val coast: List<List<LatLng>> = emptyList(),
 )
 
 /** The best nearby place to gather one resource: where, what it's called, how far, and "new" or "thinned". */
-data class ResourceTarget(val resource: String, val name: String, val point: LatLng, val distanceM: Double, val note: String = "")
+data class ResourceTarget(
+    val resource: String, val name: String, val point: LatLng, val distanceM: Double, val note: String = "",
+    /** Which place or street this is, so the map can keep pointing at the same spot as you walk. */
+    val sourceId: String = "",
+)
 
 /** Everything the UI, the tracking service and the daily worker share. */
 class Repository(context: Context) {
@@ -144,12 +152,13 @@ class Repository(context: Context) {
                 val lms = extras.landmarks
                 dao.upsertLandmarks(lms)
                 dao.upsertWaterAreas(extras.water)
+                dao.upsertTerrain(extras.terrain)
                 dao.upsertWaterTile(WaterTileEntity(tile, extras.coastal))
                 dao.upsertLandmarkTile(LandmarkTileEntity(tile, System.currentTimeMillis(), lms.size))
                 tileRetry.remove(key)
                 val again = dao.allPresenceCells().filter { Cells.parent(it.cell, Cells.TILE_RES) == tile }.map { it.segmentId }.toSet()
                 again.forEach { dao.markProcessed(it, false, "re-processing for named places") }
-                log("geo", "Fetched ${lms.size} named places, ${extras.water.size} water areas for tile $tile" +
+                log("geo", "Fetched ${lms.size} named places, ${extras.water.size} water areas, ${extras.terrain.size} sand/coast for tile $tile" +
                     (if (extras.skippedLarge > 0) " (${extras.skippedLarge} very large areas skipped)" else "") + "; re-processing ${again.size} walk(s)")
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -337,6 +346,12 @@ class Repository(context: Context) {
         }
         val visits = dao.allVisits()
         val landmarkEntities = visits.map { it.landmarkId }.distinct().chunked(500).flatMap { dao.landmarksById(it) }.associateBy { it.id }
+        // Unnamed lakes and ponds you gathered food at: sources without a name (never "discovered").
+        val waterInfos = visits.map { it.landmarkId }.distinct().filter { it !in landmarkEntities }.chunked(500)
+            .flatMap { dao.waterAreasById(it) }.associate { w ->
+                val ring = Overpass.decodeRings(w.geometry).maxByOrNull { it.size }
+                w.id to LandmarkInfo(w.id, "", "water", 0.0, center = ring?.let { r -> LatLng(r.sumOf { it.lat } / r.size, r.sumOf { it.lng } / r.size) })
+            }
         val rest = prefs.restPeriods.map { (a, b) -> a..(if (b < 0) today else b) }
         val input = WorldInput(
             startDay = prefs.startDay,
@@ -357,7 +372,7 @@ class Repository(context: Context) {
                     l.id, l.name, l.kind, l.areaM2, pointLike = l.id.startsWith("n"),
                     center = ring?.let { r -> LatLng(r.sumOf { it.lat } / r.size, r.sumOf { it.lng } / r.size) },
                 )
-            },
+            } + waterInfos,
             decisions = dao.allDecisions().map { ProjectDecision(it.day, it.areaId, it.projectId, it.approve) },
             landmarkVisits = visits.map { LandmarkVisit(it.landmarkId, it.day, it.seconds) },
             trodden = dao.allTrodden().map { TroddenCell(it.cell, it.day) },
@@ -387,7 +402,11 @@ class Repository(context: Context) {
             val wear = pts.map { state.wakeWear[Cells.cellAt(it.lat, it.lng, Cells.TRODDEN_RES)] ?: 1.0 }.average()
             pts to state.levelFor(wear)
         }
-        _layers.value = MapLayers(discoveredEntities, peek, trails, wild, shownLandmarks, water)
+        val nearTiles = dao.allPresenceCells().map { Cells.parent(it.cell, Cells.TILE_RES) }.toSet()
+        val terrain = dao.terrainInTiles(nearTiles.toList()).distinctBy { it.id }
+        val sand = terrain.filter { it.kind == "sand" }.mapNotNull { try { Overpass.decodeRings(it.geometry) } catch (_: Exception) { null } }
+        val coast = terrain.filter { it.kind == "coast" }.flatMap { try { Overpass.decodeRings(it.geometry) } catch (_: Exception) { emptyList() } }
+        _layers.value = MapLayers(discoveredEntities, peek, trails, wild, shownLandmarks, water, sand, coast)
         _world.value = state
         state
     }
@@ -427,17 +446,17 @@ class Repository(context: Context) {
         // Best value for the walk: yield per distance, so a fresh wood a little further beats a thinned one next door.
         fun best(resource: String, candidates: List<Landmark>): ResourceTarget? =
             candidates.map { it to reach(it) }.minByOrNull { (l, r) -> (r.second + 300) / worth(l) }
-                ?.let { (l, r) -> ResourceTarget(resource, l.name, r.first, r.second, note(l)) }
+                ?.let { (l, r) -> ResourceTarget(resource, l.name, r.first, r.second, note(l), sourceId = l.id) }
         val metal = places.filter { it.kind in Yields.METAL_KINDS }
         // Stone: the nearest street you haven't walked yet (any mapped road nearby, not only ones next to explored ground).
         val walked = world?.edges.orEmpty().filterValues { it.discovered }.keys
         val streets = dao.edgesInTiles(Cells.disk(here, 1)).asSequence().filter { it.id !in walked }.mapNotNull { e ->
-            Overpass.decode(e.geometry).minByOrNull { Geo.distanceM(from, it) }?.let { pt -> Triple(e.name ?: "A new street", pt, Geo.distanceM(from, pt)) }
+            Overpass.decode(e.geometry).minByOrNull { Geo.distanceM(from, it) }?.let { pt -> Triple(e, pt, Geo.distanceM(from, pt)) }
         }.minByOrNull { it.third }
         listOfNotNull(
             best("wood", places.filter { it.kind in Yields.WOOD_KINDS }),
             best("food", places.filter { it.kind in Yields.FOOD_KINDS } + water),
-            streets?.let { ResourceTarget("stone", it.first, it.second, it.third, "new") },
+            streets?.let { ResourceTarget("stone", it.first.name ?: "A new street", it.second, it.third, "new", sourceId = it.first.id) },
             best("metal", metal.filter { it.id !in discovered }) ?: best("metal", metal),
         ).filter { it.distanceM <= 8_000 }
     }
@@ -525,7 +544,7 @@ class Repository(context: Context) {
          * v4: paddling (water routes) and wider place categories.
          * v5: paddling detected from being on water (water areas, coast).
          */
-        const val PROCESSING_VERSION = 6
+        const val PROCESSING_VERSION = 7
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }

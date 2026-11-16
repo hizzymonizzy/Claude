@@ -4,6 +4,7 @@ import org.json.JSONObject
 import world.wander.app.data.EdgeEntity
 import world.wander.app.data.LandmarkEntity
 import world.wander.app.data.WaterAreaEntity
+import world.wander.app.data.TerrainAreaEntity
 import world.wander.engine.Landmark
 import world.wander.app.data.PlaceEntity
 import world.wander.engine.Cells
@@ -76,6 +77,7 @@ object Overpass {
         nwr["historic"~"^(monument|memorial|castle|fort|ruins|archaeological_site|battlefield|building)$"]["name"](BBOX);
         way["shop"]["name"]["building"](BBOX);
         wr["natural"="water"](BBOX);
+        wr["natural"~"^(beach|sand)$"](BBOX);
         wr["waterway"="riverbank"](BBOX);
         wr["landuse"~"^(reservoir|basin)$"](BBOX);
     """
@@ -85,10 +87,14 @@ object Overpass {
      * the ocean's coastline), which made the server time out, so we ask for tags only.
      */
     private const val COAST_QUERY =
-        "[out:json][timeout:30];(way[\"natural\"=\"coastline\"](BBOX);way[\"natural\"~\"^(bay|strait)$\"](BBOX);relation[\"natural\"~\"^(bay|strait)$\"](BBOX););out ids 1;"
+        "[out:json][timeout:30];way[\"natural\"=\"coastline\"](BBOX);out geom(BBOX);" +
+            "(way[\"natural\"~\"^(bay|strait)$\"](BBOX);relation[\"natural\"~\"^(bay|strait)$\"](BBOX););out ids 1;"
 
     /** Named places, plus every water area (named or not) and whether the tile touches the coast. */
-    data class TileExtras(val landmarks: List<LandmarkEntity>, val water: List<WaterAreaEntity>, val coastal: Boolean, val skippedLarge: Int = 0)
+    data class TileExtras(
+        val landmarks: List<LandmarkEntity>, val water: List<WaterAreaEntity>, val coastal: Boolean, val skippedLarge: Int = 0,
+        val terrain: List<TerrainAreaEntity> = emptyList(),
+    )
 
     /** Points of interest mapped as a single point get a small circle you can walk through. */
     private const val POINT_RADIUS_M = 35.0
@@ -115,10 +121,13 @@ object Overpass {
         }
         val json = JSONObject().put("elements", elements).toString()
         Thread.sleep(1_500)
+        var coast = emptyList<TerrainAreaEntity>()
         val coastal = try {
-            JSONObject(postWithRetry(coastQuery(bbox))).getJSONArray("elements").length() > 0
+            val c = postWithRetry(coastQuery(bbox))
+            coast = parseCoast(c, tile)
+            JSONObject(c).getJSONArray("elements").length() > 0
         } catch (_: Exception) { false }
-        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal, skippedLarge = skipped)
+        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal, skippedLarge = skipped, terrain = parseSand(json, tile) + coast)
     }
 
     /** Ids of relations small enough to fetch whole, and how many were too large. */
@@ -156,6 +165,44 @@ object Overpass {
 
     /** Sea features only tell us the tile is coastal: ids only, never their (huge) geometry. */
     internal fun coastQuery(bbox: String): String = COAST_QUERY.replace("BBOX", bbox)
+
+    /** Beaches and sand, named or not, as areas to paint (not places to discover). */
+    internal fun parseSand(json: String, tile: String): List<TerrainAreaEntity> {
+        val elements = JSONObject(json).getJSONArray("elements")
+        val out = mutableListOf<TerrainAreaEntity>()
+        for (i in 0 until elements.length()) {
+            val el = elements.getJSONObject(i)
+            val natural = el.optJSONObject("tags")?.optString("natural") ?: continue
+            if (natural != "beach" && natural != "sand") continue
+            val rings = elementRings(el) ?: continue
+            out += TerrainAreaEntity("${el.getString("type").first()}${el.getLong("id")}", tile, "sand", rings.joinToString("|") { encode(it) })
+        }
+        return out
+    }
+
+    /**
+     * Coastline ways clipped to the tile (`out geom(bbox)`). Clipping can leave gaps (null points), so each way
+     * is split into its unbroken runs. Returned as lines of kind "coast".
+     */
+    internal fun parseCoast(json: String, tile: String): List<TerrainAreaEntity> {
+        val elements = JSONObject(json).getJSONArray("elements")
+        val out = mutableListOf<TerrainAreaEntity>()
+        for (i in 0 until elements.length()) {
+            val el = elements.getJSONObject(i)
+            if (el.getString("type") != "way" || el.optJSONObject("tags")?.optString("natural") != "coastline") continue
+            val g = el.optJSONArray("geometry") ?: continue
+            val runs = mutableListOf<MutableList<LatLng>>(mutableListOf())
+            for (k in 0 until g.length()) {
+                val o = g.optJSONObject(k)
+                if (o == null) { if (runs.last().isNotEmpty()) runs += mutableListOf<LatLng>(); continue }
+                runs.last() += LatLng(o.getDouble("lat"), o.getDouble("lon"))
+            }
+            val lines = runs.filter { it.size >= 2 }
+            if (lines.isEmpty()) continue
+            out += TerrainAreaEntity("c${el.getLong("id")}", tile, "coast", lines.joinToString("|") { encode(it) })
+        }
+        return out
+    }
 
     private fun isWater(t: JSONObject) = t.optString("natural") == "water" ||
         t.optString("waterway") == "riverbank" || t.optString("landuse") in setOf("reservoir", "basin")

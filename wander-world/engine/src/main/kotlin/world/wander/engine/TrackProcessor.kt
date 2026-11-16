@@ -131,11 +131,17 @@ class TrackProcessor(
         return farFromRoads >= 0.7 * run.size && onBeach < 0.3 * run.size && median in 0.4..3.5
     }
 
+    /** Being this close to a place's edge counts as being at it: shores of water and beaches, not woods or buildings. */
+    fun gatherMarginM(kind: String): Double = if (kind in Yields.FOOD_KINDS) 40.0 else 0.0
+
     fun process(
         points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>, landmarks: List<Landmark> = emptyList(),
         water: List<Landmark> = emptyList(), coastal: Boolean = false,
     ): TrackResult {
         val split = runs(points)
+        // Places you can be "at": named places, plus unnamed lakes and ponds (food from their shores).
+        val named = landmarks.map { it.id }.toSet()
+        val gatherable = landmarks + water.filter { it.id !in named }
         val runs = split.runs
         val dropped = split.dropped
         val matcher = if (edges.isNotEmpty()) MapMatcher(edges) else null
@@ -164,7 +170,7 @@ class TrackProcessor(
                 for (k in 1 until run.size) {
                     val a = run[k - 1]; val b = run[k]
                     val d = dayOf(a.timeMs)
-                    for (lm in landmarks) if (lm.contains(a.lat, a.lng)) visits.merge(lm.id to d, (b.timeMs - a.timeMs) / 1000.0, Double::plus)
+                    for (lm in gatherable) if (lm.near(a.lat, a.lng, gatherMarginM(lm.kind))) visits.merge(lm.id to d, (b.timeMs - a.timeMs) / 1000.0, Double::plus)
                     movement.getOrPut(d) { DoubleArray(3) }[2] += Geo.distanceM(a.lat, a.lng, b.lat, b.lng)
                 }
                 continue
@@ -176,7 +182,7 @@ class TrackProcessor(
                 val dt = (b.timeMs - a.timeMs) / 1000.0
                 val day = dayOf(a.timeMs)
                 val cell = Cells.cell(a.lat, a.lng)
-                for (lm in landmarks) if (lm.contains(a.lat, a.lng)) visits.merge(lm.id to day, dt, Double::plus)
+                for (lm in gatherable) if (lm.near(a.lat, a.lng, gatherMarginM(lm.kind))) visits.merge(lm.id to day, dt, Double::plus)
                 presence.merge(Triple(cell, day, mode), dt, Double::plus)
                 val m = movement.getOrPut(day) { DoubleArray(3) }
                 m[if (mode == Mode.FOOT) 0 else 1] += Geo.distanceM(a.lat, a.lng, b.lat, b.lng)

@@ -144,6 +144,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         val counts = linkedMapOf(
             "green" to update("green-places") { MapLayersBuilder.greenPlaces(layers, kinds) },
             "sand" to update("sand-places") { MapLayersBuilder.sandPlaces(layers, kinds) },
+            "shore" to update("shore") { MapLayersBuilder.shore(layers) },
             "water" to update("water") { MapLayersBuilder.water(layers) },
             "roads" to update("roads") { MapLayersBuilder.roads(layers) },
             "peek" to update("peek") { MapLayersBuilder.peeks(layers) },
@@ -183,6 +184,14 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         }
     }
 
+    // Each pointer keeps aiming at the same spot of the same source as you walk (the nearest edge of a lake would
+    // otherwise slide along with you); it only moves when a different source becomes the best choice.
+    val aimed = remember { HashMap<String, Pair<String, WLatLng>>() }
+    fun steady(found: List<ResourceTarget>, from: WLatLng): List<ResourceTarget> = found.map { t ->
+        val prev = aimed[t.resource]
+        if (prev != null && prev.first == t.sourceId && t.distanceM > GATHER_M) t.copy(point = prev.second, distanceM = Geo.distanceM(from, prev.second))
+        else { aimed[t.resource] = t.sourceId to t.point; t }
+    }
     // Nearest source of each resource, from where you are (or home), refreshed as you move or the world changes.
     var targetsFrom by remember { mutableStateOf<Pair<WLatLng, MapLayers>?>(null) }
     LaunchedEffect(me, layers) {
@@ -194,7 +203,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         // A newer search may cancel this one (the world just rebuilt); let it, rather than blanking the pointers.
         // If this spot's places haven't downloaded yet (the server is often busy), try again a few times.
         for (attempt in 1..6) {
-            targets = try { repo.nearestSources(from) } catch (e: CancellationException) { targetsFrom = null; searching = false; throw e }
+            targets = try { steady(repo.nearestSources(from), from) } catch (e: CancellationException) { targetsFrom = null; searching = false; throw e }
                 catch (e: Exception) { repo.log("map", "Resource search failed: ${e.message}"); targets }
             repo.log("map", "Resource pointers: " + targets.joinToString { "${it.resource} ${formatDistance(it.distanceM)}" }.ifEmpty { "none nearby yet" })
             if (repo.placesLoadedAt(from)) break
@@ -237,7 +246,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             }
             world?.let { w ->
                 Spacer(Modifier.height(6.dp))
-                InventoryBar(w.treasury, targets) { repo.focus.value = it.point }
+                InventoryBar(w.treasury, targets, today = w.days[w.today]?.earned) { repo.focus.value = it.point }
                 if (showPointers && targets.isEmpty()) {
                     Text(
                         if (searching) "Looking for resources nearby…" else "No wood, food, stone or metal mapped near here yet",

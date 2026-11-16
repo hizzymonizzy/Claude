@@ -54,7 +54,13 @@ object DbMigrations {
             "DELETE FROM `landmark_tile`",
             "UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL",
         ),
+        // v7: terrain (beaches, sand, coastline) so shores draw as sand; places re-fetched to collect it.
+        6 to listOf(
+            "CREATE TABLE IF NOT EXISTS `terrain_area` (`id` TEXT NOT NULL, `tile` TEXT NOT NULL, `kind` TEXT NOT NULL, `geometry` TEXT NOT NULL, PRIMARY KEY(`id`))",
+            "CREATE INDEX IF NOT EXISTS `index_terrain_area_tile` ON `terrain_area` (`tile`)",
+            "DELETE FROM `landmark_tile`",
+        ),
     )
 
-    const val LATEST = 6
+    const val LATEST = 7
 }

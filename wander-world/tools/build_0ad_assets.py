@@ -32,6 +32,9 @@ TERRAIN = {   # our name -> (clean file, 0 A.D. source path)
     "ground_snow": ("terrain/snow_01.png", "terrain/types/alpine_arctic/snow_01.png"),
     "road_dirt": ("terrain/mud_01.png", "terrain/types/temperate/mud_01.png"),
     "road_cobble": ("terrain/paving_001.png", "terrain/types/temperate/paving_001.png"),
+    # Charted water: the sea floor seen through clear water (tinted blue below), and wet sand for shorelines.
+    "water_sea": ("terrain/aegean_ocean_coral_01.png", "terrain/types/aegean_anatolia/ocean_coral_01.png"),
+    "ground_sand_wet": ("terrain/aegean_sand_01_wet.png", "terrain/types/aegean_anatolia/sand_01_wet.png"),
 }
 
 PORTRAIT = "ui/session/portraits/"
@@ -121,8 +124,13 @@ def main():
     for name, (f, src) in TERRAIN.items():
         # Dirt roads are lightened toward sandy earth so they read against grass.
         lighten, warm = (1.45, 0.25) if name == "road_dirt" else (1.0, 0.0)
-        pattern(clean / f, lighten=lighten, warm=warm).save(RES / f"oad_{name}.png", optimize=True)
-        rows.append((f"oad_{name}.png", SRC_PREFIX + src, "resized to 256 px" + (", lightened and warmed" if warm else "")))
+        img = pattern(clean / f, lighten=lighten, warm=warm)
+        note = "resized to 256 px" + (", lightened and warmed" if warm else "")
+        if name == "water_sea":   # sea floor under clear water: blue overlay, slightly brighter
+            img = ImageEnhance.Brightness(Image.blend(img, Image.new("RGB", img.size, (58, 128, 170)), 0.55)).enhance(1.08)
+            note += ", tinted blue as water"
+        img.save(RES / f"oad_{name}.png", optimize=True)
+        rows.append((f"oad_{name}.png", SRC_PREFIX + src, note))
     for name, (f, src, opts) in MEDALLIONS.items():
         size = 96 if opts.get("small") else 128
         medallion(clean / f, size, ruins=opts.get("ruins", False), green=opts.get("green", False), small=opts.get("small", False),

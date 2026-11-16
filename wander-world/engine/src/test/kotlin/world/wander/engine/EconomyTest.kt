@@ -97,4 +97,12 @@ class EconomyTest {
         assertTrue((same.abundance["p0"] ?: 1.0) < 0.5)
         assertTrue(DispatchWriter.write(same, same.events.filterIsInstance<WorldEvent.SourceThinning>().first().day).text.contains("Wood 0 is thinning"))
     }
+
+    @Test
+    fun anUnnamedPondGivesFoodButIsNotADiscoveredPlace() {
+        val pond = LandmarkInfo("w9", "", "water", 0.0)
+        val w = WorldEngine().build(input(2, 30.0, 3.0).copy(landmarks = mapOf("w9" to pond), landmarkVisits = listOf(LandmarkVisit("w9", start + 1, 600.0))), start + 1)
+        assertTrue(w.treasury.food > 0)
+        assertTrue(w.landmarks.isEmpty())
+    }
 }
