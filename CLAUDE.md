@@ -31,7 +31,7 @@ rules): `docs/design.md`. Decisions: `docs/decisions/`.
   matching, economy tables (`Economy.kt`), dispatch text. All rules are unit-tested here; `RandomHistoryTest`
   checks determinism and invariants over busy random histories.
 - `app/`: Android (Compose, MapLibre, Room, WorkManager, Health Connect, H3). `data/Repository.kt` is the hub;
-  `ui/MapScreen.kt` draws the map; `ui/MapIcons.kt` names every image; `ui/Legend.kt` is generated.
+  `ui/MapScreen.kt` feeds data to the map and holds its UI; `ui/MapStyle.kt` defines every source, layer and sprite; `ui/MapIcons.kt` names every image; `ui/Legend.kt` is generated.
 - `tools/`: `check.sh` (the gate), `policy/` (allowed permissions, exported components, hosts),
   `security_scan.sh` (full inventory), `asset_intake.py`, `build_0ad_assets.py`, `gen_sprites.py`, `gen_legend.py`.
 
@@ -60,5 +60,4 @@ Commit message: `Alpha X.Y.Z: summary` plus bullets. Report to the player what w
 - Tunable numbers live in `WorldParams` / `HarvestParams`, not inline.
 
 ## Known technical debt (pay down before it grows)
-- `MapScreen.kt` mixes layer styling with UI; move style layers to their own file.
 - No tests for Room migrations, Overpass parsing, or `MapLayersBuilder`.
