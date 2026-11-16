@@ -45,7 +45,7 @@ tools/security_scan.sh               # full third-party inventory, for intake re
 ```
 APK: `app/build/outputs/apk/debug/app-debug.apk`. Copy it to the scratchpad as `wander-world-alpha-X.Y.Z.apk` and send it.
 In a fresh cloud container the SDK may be missing: install cmdline-tools from dl.google.com, then
-`sdkmanager "platforms;android-37" "build-tools;36.0.0" "platform-tools"`.
+`sdkmanager "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"`.
 
 ## How to ship
 Follow `docs/process/release.md` step by step. Develop on branch `claude/fitness-gps-world-building-j6g4s6`.
