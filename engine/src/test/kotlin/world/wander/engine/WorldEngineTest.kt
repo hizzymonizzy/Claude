@@ -65,6 +65,17 @@ class WorldEngineTest {
     }
 
     @Test
+    fun everyAreaWalkedInIsAWaypointEvenWithoutASettlement() {
+        val brief = listOf(CellPresence(parkCells[0], start + 2, 90.0, Mode.FOOT)) // 90 s: no area-day
+        val state = WorldEngine().build(baseInput(walk(homeCells, start, 20.0) + brief), start + 3)
+        val park = state.exploredAreas.single { it.id == "park" }
+        assertEquals("Ridgefield", park.name)
+        assertTrue(!park.settled)
+        assertEquals(start + 2, park.lastVisitDay)
+        assertTrue(state.exploredAreas.single { it.id == "home" }.settled)
+    }
+
+    @Test
     fun cyclingAloneNeverFoundsASettlement() {
         val rides = (0..10).flatMap { walk(parkCells, start + it, 40.0, mode = Mode.CYCLE) }
         assertTrue(WorldEngine().build(baseInput(rides), start + 15).settlements.isEmpty())

@@ -168,22 +168,35 @@ def wanderer():
     return img
 
 
+def waypoint():
+    """Signpost: marks every area you've walked in."""
+    img, d = canvas()
+    d.rectangle([7, 4, 8, 13], fill=WOOD, outline=INK)                     # post
+    d.polygon([(3, 4), (11, 4), (13, 5), (11, 7), (3, 7)], fill=WOOD_L, outline=INK)   # arrow sign
+    d.line([(5, 5), (10, 5)], fill=WOOD)
+    return img
+
+
+def waystone():
+    """Standing stone with a glowing rune: where travel set you down."""
+    img, d = canvas()
+    d.polygon([(5, 13), (4, 5), (7, 2), (10, 4), (11, 13)], fill=STONE, outline=INK)
+    d.line([(6, 4), (6, 12)], fill=STONE_L)
+    d.line([(8, 6), (8, 10)], fill=(120, 200, 255, 255))                   # rune
+    d.line([(7, 8), (9, 8)], fill=(120, 200, 255, 255))
+    return img
+
+
 def parchment(size=64, seed=7):
-    """Tileable fog texture: parchment with faint fibres and cloud blots."""
+    """Tileable fog texture: plain parchment with faint fibres (no blots, so it doesn't look patterned)."""
     rnd = random.Random(seed)
-    img = Image.new("RGBA", (size, size), (233, 223, 199, 255))
+    img = Image.new("RGBA", (size, size), (236, 228, 208, 255))
     px = img.load()
-    for _ in range(900):
+    for _ in range(500):
         x, y = rnd.randrange(size), rnd.randrange(size)
         r, g, b, a = px[x, y]
-        k = rnd.choice([-10, -7, -5, 5, 6])
+        k = rnd.choice([-6, -4, 3, 4])
         px[x, y] = (max(0, r + k), max(0, g + k), max(0, b + k), 255)
-    d = ImageDraw.Draw(img)
-    for _ in range(6):
-        x, y, r = rnd.randrange(size), rnd.randrange(size), rnd.randrange(4, 9)
-        for dx in (-size, 0, size):          # wrap so the tile is seamless
-            for dy in (-size, 0, size):
-                d.ellipse([x + dx - r, y + dy - r, x + dx + r, y + dy + r], fill=(225, 214, 188, 255))
     return img
 
 
@@ -191,7 +204,7 @@ SPRITES = {
     "tier_0": ruins, "tier_1": camp, "tier_2": hamlet, "tier_3": village,
     "tier_4": town, "tier_5": city, "tier_6": metropolis,
     "place_park": place_park, "place_store": place_store, "place_generic": place_generic,
-    "wanderer": wanderer,
+    "wanderer": wanderer, "waypoint": waypoint, "waystone": waystone,
 }
 
 

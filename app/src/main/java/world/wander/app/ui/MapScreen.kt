@@ -66,6 +66,7 @@ import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.PropertyFactory.lineBlur
 import org.maplibre.android.style.layers.PropertyFactory.visibility
+import org.maplibre.android.style.layers.PropertyFactory.textOptional
 import org.maplibre.android.style.layers.PropertyFactory.fillColor
 import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
@@ -148,6 +149,16 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         val kinds = world?.landmarks.orEmpty().associate { it.name to it.kind }
         s.source("landmarks")?.setGeoJson(MapLayersBuilder.landmarkLabels(layers, kinds))
         s.source("settlements")?.setGeoJson(MapLayersBuilder.settlements(world))
+        s.source("waypoints")?.setGeoJson(MapLayersBuilder.waypoints(world))
+    }
+    // Fly to whatever the Atlas or search picked.
+    val focus by repo.focus.collectAsState()
+    LaunchedEffect(map, focus) {
+        val f = focus ?: return@LaunchedEffect
+        val m = map ?: return@LaunchedEffect
+        m.animateCamera(CameraUpdateFactory.newLatLngZoom(MlLatLng(f.lat, f.lng), 15.5), 1200)
+        centered = true
+        repo.focus.value = null
     }
     LaunchedEffect(style, track) { style?.source("track")?.setGeoJson(MapLayersBuilder.track(track)) }
     LaunchedEffect(style, me) {
@@ -214,11 +225,17 @@ private fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
 private fun addWorldLayers(s: Style) {
     val empty = FeatureCollection.fromFeatures(emptyList())
-    for (id in listOf("fog", "peek", "wild", "roads", "landmarks", "track", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
+    for (id in listOf("fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
 
-    s.addLayer(FillLayer("fog", "fog").withProperties(fillPattern("fog_parchment"), fillOpacity(0.96f)))
+    // Fog: parchment you can see the land through, thicker when zoomed out so explored areas pop.
+    s.addLayer(
+        FillLayer("fog", "fog").withProperties(
+            fillPattern("fog_parchment"),
+            fillOpacity(interpolate(linear(), zoom(), stop(8, 0.85f), stop(13, 0.75f), stop(17, 0.62f))),
+        ),
+    )
     // Soft edge: a wide blurred line along the fog boundary.
-    s.addLayer(LineLayer("fog-edge", "fog").withProperties(lineColor(FOG), lineWidth(16f), lineBlur(14f), lineOpacity(0.9f)))
+    s.addLayer(LineLayer("fog-edge", "fog").withProperties(lineColor(FOG), lineWidth(12f), lineBlur(10f), lineOpacity(0.6f)))
     s.addLayer(
         LineLayer("peek", "peek").withProperties(
             lineColor(INK), lineOpacity(0.35f), lineWidth(1.5f), lineDasharray(arrayOf(1.5f, 2.5f)),
@@ -255,10 +272,20 @@ private fun addWorldLayers(s: Style) {
         ).also { it.minZoom = 14f },
     )
     s.addLayer(LineLayer("track", "track").withProperties(lineColor("#C0392B"), lineWidth(3f), lineOpacity(0.8f)))
+    // Waypoints: a signpost for every area you've walked in, readable from far out.
+    s.addLayer(
+        SymbolLayer("waypoints", "waypoints").withProperties(
+            iconImage("waypoint"), iconAllowOverlap(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            iconSize(interpolate(linear(), zoom(), stop(8, 0.3f), stop(13, 0.45f), stop(17, 0.7f))),
+            textField(get("name")), textSize(interpolate(linear(), zoom(), stop(8, 10f), stop(15, 13f))),
+            textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.2f)), textOptional(true),
+        ),
+    )
     s.addLayer(
         SymbolLayer("settlements", "settlements").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true),
-            iconSize(interpolate(linear(), zoom(), stop(10, 0.35f), stop(14, 0.6f), stop(17, 1.0f))),
+            iconSize(interpolate(linear(), zoom(), stop(8, 0.35f), stop(14, 0.6f), stop(17, 1.0f))),
             iconAnchor(Property.ICON_ANCHOR_BOTTOM),
         ),
     )
@@ -283,6 +310,7 @@ private val SPRITES = mapOf(
     "tier_6" to R.drawable.sprite_tier_6, "place_park" to R.drawable.sprite_place_park,
     "place_store" to R.drawable.sprite_place_store, "place_generic" to R.drawable.sprite_place_generic,
     "wanderer" to R.drawable.sprite_wanderer, "fog_parchment" to R.drawable.fog_parchment,
+    "waypoint" to R.drawable.sprite_waypoint, "waystone" to R.drawable.sprite_waystone,
 )
 
 private fun addSprites(s: Style, context: Context) {

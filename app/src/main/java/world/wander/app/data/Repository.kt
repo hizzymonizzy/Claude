@@ -66,6 +66,8 @@ class Repository(context: Context) {
     /** Live track of the current capture, for the map. */
     val liveTrack = MutableStateFlow<List<LatLng>>(emptyList())
     val lastLocation = MutableStateFlow<LatLng?>(null)
+    /** Set by the Atlas / search to fly the map somewhere; the map clears it after moving. */
+    val focus = MutableStateFlow<LatLng?>(null)
     val trackingStatus = MutableStateFlow("Idle")
 
     val zone: ZoneId get() = ZoneId.systemDefault()

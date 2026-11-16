@@ -41,6 +41,13 @@ object MapLayersBuilder {
         layers.wild.map { (pts, level) -> Feature.fromGeometry(line(pts)).apply { addNumberProperty("level", level) } },
     )
 
+    /** One signpost per area walked in that hasn't grown a settlement yet (settlements have their own sprite). */
+    fun waypoints(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
+        state?.exploredAreas.orEmpty().filter { !it.settled }.map { a ->
+            Feature.fromGeometry(Point.fromLngLat(a.center.lng, a.center.lat)).apply { addStringProperty("name", a.name) }
+        },
+    )
+
     /** Sprite for a kind of place. */
     fun placeIcon(kind: String?): String = when (kind) {
         "park", "garden", "nature_reserve", "wood", "forest", "common", "recreation_ground", "village_green",

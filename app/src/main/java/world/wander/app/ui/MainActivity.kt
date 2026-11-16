@@ -114,7 +114,7 @@ fun WanderRoot(repo: Repository, startTab: Tab) {
                 },
             ) { pad ->
                 Surface(Modifier.padding(pad).fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    TabContent(repo, tab, onOpenDispatch = { tab = Tab.DISPATCH })
+                    TabContent(repo, tab, onOpenDispatch = { tab = Tab.DISPATCH }, onShowOnMap = { tab = Tab.MAP })
                 }
             }
         }
@@ -122,11 +122,11 @@ fun WanderRoot(repo: Repository, startTab: Tab) {
 }
 
 @Composable
-private fun TabContent(repo: Repository, tab: Tab, onOpenDispatch: () -> Unit) {
+private fun TabContent(repo: Repository, tab: Tab, onOpenDispatch: () -> Unit, onShowOnMap: () -> Unit = {}) {
     when (tab) {
         Tab.MAP -> MapScreen(repo, onOpenDispatch)
         Tab.DISPATCH -> DispatchScreen(repo)
-        Tab.ATLAS -> AtlasScreen(repo)
+        Tab.ATLAS -> AtlasScreen(repo, onShowOnMap)
         Tab.GOAL -> GoalScreen(repo)
         Tab.SETTINGS -> SettingsScreen(repo)
     }

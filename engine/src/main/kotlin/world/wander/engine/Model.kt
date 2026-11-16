@@ -156,6 +156,17 @@ sealed class WorldEvent {
     data class GoalChanged(override val day: Int, val from: Int, val to: Int) : WorldEvent()
 }
 
+/** Any area you've walked in, settled or not: a waypoint on the map. */
+data class AreaState(
+    val id: String,
+    val name: String,
+    val center: LatLng,
+    val cells: Int,
+    val visitDays: Int,
+    val lastVisitDay: Int,
+    val settled: Boolean,
+)
+
 data class LandmarkState(
     val id: String,
     val name: String,
@@ -188,6 +199,7 @@ data class WorldState(
     val landmarks: List<LandmarkState> = emptyList(),
     /** Wear on your own paths, per fine cell. */
     val troddenWear: Map<String, Double> = emptyMap(),
+    val exploredAreas: List<AreaState> = emptyList(),
 ) {
     /** Visual level (1–5) for a wear value, same scale as roads. */
     fun levelFor(wear: Double, levels: List<Double> = WorldParams().wearLevels): Int {

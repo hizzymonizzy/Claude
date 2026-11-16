@@ -34,6 +34,13 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import world.wander.app.data.Repository
+import world.wander.app.geo.Overpass
+import world.wander.engine.LatLng
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import world.wander.engine.SettlementState
 import world.wander.engine.Tier
 import world.wander.engine.WorldParams
@@ -92,10 +99,33 @@ fun DispatchScreen(repo: Repository) {
 
 // ---- Atlas ----
 
+/** Something in your world you can search for and fly to. */
+private data class AtlasHit(val name: String, val kind: String, val where: LatLng)
+
 @Composable
-fun AtlasScreen(repo: Repository) {
+fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
     val world by repo.world.collectAsState()
+    val layers by repo.layers.collectAsState()
+    var query by rememberSaveable { mutableStateOf("") }
     val w = world
+    fun go(p: LatLng) { repo.focus.value = p; onShowOnMap() }
+
+    // Everything searchable: settlements, waypoints, places and charted streets.
+    val index = remember(w, layers) {
+        val hits = mutableListOf<AtlasHit>()
+        w?.settlements?.forEach { hits += AtlasHit(it.name, it.tier.label, it.position) }
+        w?.exploredAreas?.filter { !it.settled }?.forEach { hits += AtlasHit(it.name, "Waypoint", it.center) }
+        layers.landmarks.forEach { (name, rings, _) ->
+            val r = rings.maxBy { it.size }
+            hits += AtlasHit(name, "Place", LatLng(r.sumOf { it.lat } / r.size, r.sumOf { it.lng } / r.size))
+        }
+        layers.discovered.filter { !it.first.name.isNullOrBlank() }.groupBy { it.first.name!! }.forEach { (name, edges) ->
+            val pts = Overpass.decode(edges.maxBy { it.first.lengthM }.first.geometry)
+            hits += AtlasHit(name, "Street", pts[pts.size / 2])
+        }
+        hits
+    }
+
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Spacer(Modifier.height(12.dp))
@@ -103,28 +133,36 @@ fun AtlasScreen(repo: Repository) {
             if (w != null) {
                 val km = w.days.values.sumOf { it.footMeters } / 1000
                 Text(
-                    "${w.discoveredCount} roads charted · ${w.landmarks.size} places · %.1f km walked · ${w.settlements.size} settlements".format(km),
+                    "${w.discoveredCount} roads charted · ${w.landmarks.size} places · ${w.exploredAreas.size} areas · %.1f km walked".format(km),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = query, onValueChange = { query = it }, singleLine = true,
+                placeholder = { Text("Search towns, places, streets") }, modifier = Modifier.fillMaxWidth(),
+            )
         }
+
+        if (query.isNotBlank()) {
+            val q = query.trim().lowercase()
+            val results = index.filter { q in it.name.lowercase() }.distinctBy { it.name to it.kind }.take(50)
+            if (results.isEmpty()) item { Text("Nothing found yet. Maybe it's still in the fog.", fontStyle = FontStyle.Italic) }
+            items(results) { r -> HitRow(r.name, r.kind) { go(r.where) } }
+            item { Spacer(Modifier.height(24.dp)) }
+            return@LazyColumn
+        }
+
         val list = w?.settlements.orEmpty().sortedWith(compareByDescending<SettlementState> { it.isCapital }.thenByDescending { it.tier.ordinal })
+        item { SectionTitle("Settlements") }
         if (list.isEmpty()) item {
             Text(
                 "No settlements yet. Walk somewhere on three different days within a month and a camp will appear.",
                 style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic,
             )
         }
-        val places = w?.landmarks.orEmpty().sortedByDescending { it.visitDays }
-        if (places.isNotEmpty()) item {
-            SectionTitle("Places discovered")
-            places.forEach { l ->
-                Text("${l.name} · ${l.kind.replace('_', ' ')} · ${l.visitDays} visit-day${if (l.visitDays == 1) "" else "s"} · since ${dayLabel(l.discoveredDay)}", style = MaterialTheme.typography.bodyMedium)
-            }
-            SectionTitle("Settlements")
-        }
         items(list, key = { it.areaId }) { s ->
-            Card(Modifier.fillMaxWidth()) {
+            Card(onClick = { go(s.position) }, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
@@ -148,7 +186,44 @@ fun AtlasScreen(repo: Repository) {
                 }
             }
         }
+
+        val waypoints = w?.exploredAreas.orEmpty().filter { !it.settled }.sortedByDescending { it.lastVisitDay }
+        if (waypoints.isNotEmpty()) {
+            item { SectionTitle("Waypoints") }
+            items(waypoints, key = { "wp-" + it.id }) { a ->
+                HitRow(a.name, "${a.cells} block${if (a.cells == 1) "" else "s"} · last ${dayLabel(a.lastVisitDay)}", R.drawable.sprite_waypoint) { go(a.center) }
+            }
+        }
+
+        val places = w?.landmarks.orEmpty().sortedByDescending { it.visitDays }
+        if (places.isNotEmpty()) {
+            item { SectionTitle("Places discovered") }
+            items(places, key = { "lm-" + it.id }) { l ->
+                val hit = index.firstOrNull { it.kind == "Place" && it.name == l.name }
+                HitRow(
+                    l.name, "${l.kind.replace('_', ' ')} · ${l.visitDays} visit-day${if (l.visitDays == 1) "" else "s"} · since ${dayLabel(l.discoveredDay)}",
+                    if (l.kind == "store") R.drawable.sprite_place_store else R.drawable.sprite_place_park,
+                ) { hit?.let { go(it.where) } }
+            }
+        }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun HitRow(title: String, subtitle: String, sprite: Int? = null, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (sprite != null) {
+                Image(ImageBitmap.imageResource(sprite), contentDescription = null, filterQuality = FilterQuality.None, modifier = Modifier.size(32.dp))
+                Spacer(Modifier.width(10.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+            }
+            Text("Show ›", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        }
     }
 }
 

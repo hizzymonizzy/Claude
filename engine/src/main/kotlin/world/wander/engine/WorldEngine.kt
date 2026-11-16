@@ -32,6 +32,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
         var d = 0.0
         var lastAreaDay = Int.MIN_VALUE
         var areaDays = 0
+        var lastSeenDay = Int.MIN_VALUE
         val footDays = mutableListOf<Int>()
         val cells = mutableSetOf<String>()
     }
@@ -160,7 +161,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                     cycle >= p.cellPresenceSeconds -> familiarity.merge(cell, p.cyclingWeight, Double::plus)
                 }
                 val areaId = input.cellArea[cell] ?: return@forEach
-                areas.getOrPut(areaId) { AreaAcc() }.cells += cell
+                areas.getOrPut(areaId) { AreaAcc() }.also { it.cells += cell; it.lastSeenDay = day }
                 footByArea.merge(areaId, foot / 60.0, Double::plus)
                 cycleByArea.merge(areaId, cycle / 60.0, Double::plus)
             }
@@ -337,6 +338,18 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                 LandmarkState(id, info.name, info.kind, info.areaM2, first, landmarkDays[id] ?: 0, landmarkLast[id] ?: first)
             },
             troddenWear = trodden,
+            exploredAreas = areas.filter { (id, a) -> a.cells.isNotEmpty() || id in settlements }
+                .map { (id, a) ->
+                    val known = a.cells.filter { (familiarity[it] ?: 0.0) > 0 }.ifEmpty { a.cells.toList() }
+                    var wSum = 0.0; var lat = 0.0; var lng = 0.0
+                    for (c in known) { val w = familiarity[c] ?: 1.0; val ctr = Cells.center(c); lat += ctr.lat * w; lng += ctr.lng * w; wSum += w }
+                    AreaState(
+                        id = id, name = areaNames[id] ?: "Unnamed wilds",
+                        center = settlements[id]?.position ?: LatLng(lat / wSum, lng / wSum),
+                        cells = a.cells.size, visitDays = a.areaDays, lastVisitDay = maxOf(a.lastAreaDay, a.lastSeenDay),
+                        settled = id in settlements,
+                    )
+                },
         )
     }
 
