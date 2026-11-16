@@ -173,6 +173,7 @@ fun SettingsScreen(repo: Repository) {
             )
 
             SectionTitle("4 · Your goal")
+            ToggleRow("Point to the nearest wood, food, stone and metal on the map", prefs.resourcePointers) { prefs.resourcePointers = it; refresh++ }
             ToggleRow("Lock my weekly goal", prefs.goalLocked) { prefs.goalLocked = it; scope.launch { repo.rebuild() }; refresh++ }
             ToggleRow("Rest mode (pause decay)", prefs.resting) { on ->
                 val today = repo.today()

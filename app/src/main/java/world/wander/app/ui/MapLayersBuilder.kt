@@ -113,16 +113,22 @@ object MapLayersBuilder {
             Feature.fromGeometry(Point.fromLngLat(s.position.lng, s.position.lat)).apply {
                 addStringProperty("label", s.name + "\n" + (if (s.isCapital) "Capital · " else "") + s.tier.label)
                 addNumberProperty("tier", s.tier.ordinal)
-                addStringProperty("icon", "medal_tier_${s.tier.ordinal}")
-                addBooleanProperty("capital", s.isCapital)
-                addBooleanProperty("monument", s.isCapital && state?.monuments?.isNotEmpty() == true)
+                val badge = when {
+                    !s.isCapital -> ""
+                    state?.monuments?.isNotEmpty() == true -> "_capmon"
+                    else -> "_cap"
+                }
+                addStringProperty("icon", "medal_tier_${s.tier.ordinal}$badge")
                 addNumberProperty("liveliness", s.liveliness)
             }
         },
     )
 
     /** The whole world in fog, and the explored ground (holes in the fog) as its own layer. */
-    fun fogAndExplored(layers: MapLayers): Pair<FeatureCollection, FeatureCollection> {
+    /** Each waystone sits in a small clearing, so it never floats in the fog. */
+    private const val WAYSTONE_CLEARING_M = 45.0
+
+    fun fogAndExplored(layers: MapLayers, clearings: List<LatLng> = emptyList()): Pair<FeatureCollection, FeatureCollection> {
         val world = gf.createPolygon(
             arrayOf(Coordinate(-180.0, -85.0), Coordinate(180.0, -85.0), Coordinate(180.0, 85.0), Coordinate(-180.0, 85.0), Coordinate(-180.0, -85.0)),
         )
@@ -130,7 +136,8 @@ object MapLayersBuilder {
             layers.trails.mapNotNull { bufferedLatLng(it, TRAIL_RADIUS_M) } +
             layers.wild.mapNotNull { (pts, level) -> bufferedLatLng(pts, maxOf(TRAIL_RADIUS_M, REVEAL_BY_LEVEL_M[level.coerceIn(1, 5)] - 5)) } +
             layers.water.mapNotNull { (pts, level) -> bufferedLatLng(pts, REVEAL_BY_LEVEL_M[level.coerceIn(1, 5)] + 20) } +
-            layers.landmarks.filter { it.third <= CLEAR_PLACES_UNDER_M2 }.mapNotNull { (_, rings, _) -> placePolygon(rings) }
+            layers.landmarks.filter { it.third <= CLEAR_PLACES_UNDER_M2 }.mapNotNull { (_, rings, _) -> placePolygon(rings) } +
+            clearings.mapNotNull { circle(it, WAYSTONE_CLEARING_M) }
         val explored: Geometry? = if (revealed.isEmpty()) null else try { fillSmallHoles(UnaryUnionOp.union(revealed)) } catch (_: Exception) { null }
         val fog: Geometry = explored?.let { try { world.difference(it) } catch (_: Exception) { world } } ?: world
         fun fc(g: Geometry?) = FeatureCollection.fromFeatures(polygons(g).map { Feature.fromGeometry(toGeo(it)) })
@@ -171,6 +178,12 @@ object MapLayersBuilder {
             sum += proj.x(a) * proj.y(b) - proj.x(b) * proj.y(a)
         }
         return kotlin.math.abs(sum) / 2
+    }
+
+    private fun circle(c: LatLng, radiusM: Double): Geometry? {
+        val proj = LocalProjection(c)
+        val pts = (0..24).map { i -> val a = 2 * Math.PI * (i % 24) / 24; proj.toLatLng(radiusM * Math.cos(a), radiusM * Math.sin(a)) }
+        return try { gf.createPolygon(pts.map { Coordinate(it.lng, it.lat) }.toTypedArray()) } catch (_: Exception) { null }
     }
 
     /** Buffers a line in local meters, then returns the outline in lat/lng degrees. */

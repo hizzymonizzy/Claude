@@ -38,6 +38,7 @@ import world.wander.engine.TrackProcessor
 import world.wander.engine.WorldEngine
 import world.wander.engine.WorldInput
 import world.wander.engine.WorldState
+import world.wander.engine.Yields
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -52,6 +53,9 @@ data class MapLayers(
     /** Water routes you've paddled, with a wear level 1–5. */
     val water: List<Pair<List<LatLng>, Int>> = emptyList(),
 )
+
+/** The nearest place to gather one resource: where it is, what it's called, and how far. */
+data class ResourceTarget(val resource: String, val name: String, val point: LatLng, val distanceM: Double)
 
 /** Everything the UI, the tracking service and the daily worker share. */
 class Repository(context: Context) {
@@ -303,11 +307,16 @@ class Repository(context: Context) {
      * "moving around a building" recording still marks where you were.
      */
     private fun arrivalSincePrevious(seg: SegmentEntity, pts: List<TrackPointEntity>): Arrival? {
-        val first = pts.firstOrNull { it.accuracyM <= 50f } ?: return null
+        val good = pts.filter { it.accuracyM <= 50f }
+        val first = good.firstOrNull() ?: return null
         val prev = dao.previousSegment(seg.startMs, seg.id) ?: return null
         val last = dao.points(prev.id).lastOrNull { it.accuracyM <= 50f } ?: return null
         if (Geo.distanceM(last.lat, last.lng, first.lat, first.lng) < 2_000) return null
-        return Arrival(TrackProcessor(zone).dayOf(first.timeMs), first.lat, first.lng)
+        // Where you set off on foot: the middle of the first couple of minutes, so one stray fix can't move it.
+        val start = good.takeWhile { it.timeMs - first.timeMs <= 120_000 }.take(8)
+        val lat = start.map { it.lat }.sorted()[start.size / 2]
+        val lng = start.map { it.lng }.sorted()[start.size / 2]
+        return Arrival(TrackProcessor(zone).dayOf(first.timeMs), lat, lng)
     }
 
     // ---- Building the world ----
@@ -377,6 +386,38 @@ class Repository(context: Context) {
         _layers.value = MapLayers(discoveredEntities, peek, trails, wild, shownLandmarks, water)
         _world.value = state
         state
+    }
+
+    /**
+     * The nearest source of each resource, from map data already on the phone (nothing is fetched):
+     * wood from woods and parks, food from water and beaches, metal from places you haven't discovered yet
+     * (then ones you have), stone from the nearest street you haven't walked. Null where none is near.
+     */
+    suspend fun nearestSources(from: LatLng): List<ResourceTarget> = withContext(Dispatchers.IO) {
+        val tiles = Cells.disk(Cells.tile(from.lat, from.lng), 2)
+        val places = dao.landmarksInTiles(tiles).distinctBy { it.id }.mapNotNull {
+            try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
+        }
+        val water = dao.waterAreasInTiles(tiles).distinctBy { it.id }.mapNotNull {
+            try { Landmark(it.id, "Water", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
+        }
+        val discovered = _world.value?.landmarks.orEmpty().map { it.id }.toSet()
+        fun reach(l: Landmark): Pair<LatLng, Double> =
+            if (l.contains(from.lat, from.lng)) from to 0.0
+            else l.rings.flatten().minBy { Geo.distanceM(from, it) }.let { it to Geo.distanceM(from, it) }
+        fun best(resource: String, candidates: List<Landmark>): ResourceTarget? =
+            candidates.map { it to reach(it) }.minByOrNull { it.second.second }
+                ?.let { (l, r) -> ResourceTarget(resource, l.name, r.first, r.second) }
+        val metal = places.filter { it.kind in Yields.METAL_KINDS }
+        val streets = _layers.value.peek.mapNotNull { e ->
+            Overpass.decode(e.geometry).minByOrNull { Geo.distanceM(from, it) }?.let { pt -> Triple(e.name ?: "A new street", pt, Geo.distanceM(from, pt)) }
+        }.minByOrNull { it.third }
+        listOfNotNull(
+            best("wood", places.filter { it.kind in Yields.WOOD_KINDS }),
+            best("food", places.filter { it.kind in Yields.FOOD_KINDS } + water),
+            streets?.let { ResourceTarget("stone", it.first, it.second, it.third) },
+            best("metal", metal.filter { it.id !in discovered }) ?: best("metal", metal),
+        ).filter { it.distanceM <= 8_000 }
     }
 
     fun dispatchFor(state: WorldState, day: Int): Dispatch = DispatchWriter.write(state, day)
@@ -462,7 +503,7 @@ class Repository(context: Context) {
          * v4: paddling (water routes) and wider place categories.
          * v5: paddling detected from being on water (water areas, coast).
          */
-        const val PROCESSING_VERSION = 5
+        const val PROCESSING_VERSION = 6
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }

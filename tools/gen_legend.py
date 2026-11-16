@@ -90,6 +90,25 @@ def roads():
     for x in range(14, W - 14, 14):
         pd.line([(x, y), (x + 6, y)], fill=(160, 140, 115), width=4)
     out["legend_road_peek"] = peek
+    # The capital medallion as the map draws it: star upper right, monument upper left (see MapScreen.capitalMedal).
+    medal = Image.open(RES / "oad_medal_tier_2.png").convert("RGBA")
+    star = Image.open(RES / "badge_capital.png").convert("RGBA")
+    mon = Image.open(RES / "oad_medal_monument.png").convert("RGBA")
+    pad = 26
+    cap = Image.new("RGBA", (medal.width + 2 * pad, medal.height + 2 * pad), (0, 0, 0, 0))
+    cap.alpha_composite(medal, (pad, pad))
+    sz = int(medal.width * 0.42)
+    cap.alpha_composite(mon.resize((sz, sz * mon.height // mon.width), Image.LANCZOS), (2, 2))
+    cap.alpha_composite(star.resize((sz, sz), Image.LANCZOS), (cap.width - sz - 2, 2))
+    out["oad_legend_capital"] = cap
+    # A resource pointer waiting at the edge of the map.
+    ptr = Image.new("RGBA", (120, 120), (0, 0, 0, 0))
+    pdr = ImageDraw.Draw(ptr)
+    pdr.ellipse([22, 22, 98, 98], fill=(244, 236, 216, 235), outline=(138, 106, 58), width=5)
+    wood = Image.open(RES / "oad_res_wood.png").convert("RGBA").resize((52, 52), Image.LANCZOS)
+    ptr.alpha_composite(wood, (34, 34))
+    pdr.polygon([(104, 46), (118, 60), (104, 74)], fill=(91, 70, 54))
+    out["oad_legend_pointer"] = ptr
     out["legend_ground_fog"] = Image.open(RES / "fog_parchment.png").convert("RGB").resize((W, H))
     out["oad_legend_ground_explored"] = grass()
     out["oad_legend_ground_woods"] = tile("oad_ground_forest", (W, H))
@@ -133,10 +152,10 @@ LEGEND = [
     ("oad_medal_tier_5", "City", "150 visit-days."),
     ("oad_medal_tier_6", "Metropolis", "Capital only, 400."),
     ("oad_medal_tier_0", "Ruins", "Faded from neglect; never lost."),
-    ("badge_capital", "Capital", "Your home. Never falls below Village once it gets there."),
+    ("oad_legend_capital", "Capital", "Your home: star badge; an obelisk once you raise a monument."),
     ("Markers", None, None),
     ("oad_medal_waypoint", "Waypoint", "Any area you've walked in."),
-    ("medal_waystone", "Waystone", "Where a drive set you down, away from known ground."),
+    ("medal_waystone", "Waystone", "Where you set off on foot after a drive, away from home and known ground."),
     ("medal_waystone_great", "Great waystone", "Arrival in a new region; links regions."),
     ("Places", None, None),
     ("oad_medal_place_park", "Park", "Green space."),
@@ -162,9 +181,10 @@ LEGEND = [
     ("oad_medal_gold", "Gold", "Your weekly-goal effort and distance."),
     ("oad_res_wood", "Wood", "Time in woods and parks."),
     ("oad_res_food", "Food", "Paddling, beaches and lakes."),
-    ("oad_res_stone", "Stone", "Kilometres walked on roads."),
-    ("oad_res_metal", "Metal", "Discovering and revisiting places."),
+    ("oad_res_stone", "Stone", "Kilometres walked on roads; points to streets you haven't walked."),
+    ("oad_res_metal", "Metal", "Discovering and revisiting places; points to undiscovered ones."),
     ("oad_medal_monument", "Monument", "A milestone, raised at your capital."),
+    ("oad_legend_pointer", "Nearest source", "Points to the closest wood, food, stone or metal. Tap to go there."),
     ("You", None, None),
     ("sprite_wanderer", "Walking", ""),
     ("sprite_wanderer_paddle", "Paddling", ""),

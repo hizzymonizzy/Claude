@@ -35,8 +35,13 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
         var dormant = false
     }
 
-    private class WaystoneAcc(val id: Int, val center: LatLng, val great: Boolean, val regionId: Int, val foundDay: Int) {
+    /** A waystone sits at the average of every arrival that found or returned to it: it settles on the car park. */
+    private class WaystoneAcc(val id: Int, first: LatLng, val great: Boolean, val regionId: Int, val foundDay: Int) {
         var trips = 1
+        private var sumLat = first.lat
+        private var sumLng = first.lng
+        var center = first; private set
+        fun add(pt: LatLng) { trips++; sumLat += pt.lat; sumLng += pt.lng; center = LatLng(sumLat / trips, sumLng / trips) }
     }
 
     private class AreaAcc {
@@ -177,11 +182,12 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                 val (rid, created) = regionFor(pt, day)
                 if (created) announceRegion(rid, day, from)
                 val existing = waystones.firstOrNull { Geo.distanceM(it.center, pt) <= p.waystoneReturnM }
+                val nearHome = input.homePoint?.let { Geo.distanceM(it, pt) < p.waystoneMinDistanceM } == true
                 if (existing != null) {
-                    existing.trips++
+                    existing.add(pt)
                     events += WorldEvent.WaystoneReturned(day, existing.id)
                     if (existing.great && from != null && from != rid) portals.merge(portalKey(from, rid), 1, Int::plus)
-                } else if (familiarity.keys.none { Geo.distanceM(centerOf(it), pt) < p.waystoneMinDistanceM }) {
+                } else if (!nearHome && familiarity.keys.none { Geo.distanceM(centerOf(it), pt) < p.waystoneMinDistanceM }) {
                     // Great only when arriving in a different region than the one you came from.
                     val great = from != null && from != rid
                     val ws = WaystoneAcc(waystones.size + 1, pt, great, rid, day)

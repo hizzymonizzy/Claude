@@ -32,6 +32,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("autoTracking", false)
         set(v) = sp.edit { putBoolean("autoTracking", v) }
 
+    /** Pointers on the map toward the nearest wood, food, stone and metal. */
+    var resourcePointers: Boolean
+        get() = sp.getBoolean("resourcePointers", true)
+        set(v) = sp.edit { putBoolean("resourcePointers", v) }
+
     var goalLocked: Boolean
         get() = sp.getBoolean("goalLocked", false)
         set(v) = sp.edit { putBoolean("goalLocked", v) }

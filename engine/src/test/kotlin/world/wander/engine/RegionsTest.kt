@@ -115,4 +115,21 @@ class RegionsTest {
         assertTrue(!ws.great)
         assertTrue(s.portals.isEmpty())
     }
+
+    @Test
+    fun noWaystoneAtHomeEvenOnTheFirstDay() {
+        val inp = input(emptyList(), listOf(Arrival(start, homePt.lat + 0.002, homePt.lng))).copy(homePoint = homePt)
+        val s = WorldEngine().build(inp, start + 1)
+        assertTrue(s.waystones.isEmpty())
+    }
+
+    @Test
+    fun repeatArrivalsSettleTheWaystoneOnTheirAverage() {
+        val a = LatLng(40.60, -74.00)
+        val b = LatLng(40.6018, -74.00)    // ~200 m north: same car park, other end
+        val s = WorldEngine().build(input(emptyList(), listOf(Arrival(start, a.lat, a.lng), Arrival(start + 3, b.lat, b.lng))), start + 4)
+        val ws = s.waystones.single()
+        assertEquals(2, ws.trips)
+        assertEquals(40.6009, ws.center.lat, 1e-6)
+    }
 }

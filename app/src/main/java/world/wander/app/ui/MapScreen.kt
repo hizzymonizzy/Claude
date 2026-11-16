@@ -2,7 +2,11 @@ package world.wander.app.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
 import world.wander.app.R
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +32,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import world.wander.engine.Geo
+import world.wander.app.data.ResourceTarget
+import world.wander.app.data.MapLayers
+import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
@@ -54,16 +65,10 @@ import org.maplibre.android.style.expressions.Expression.match
 import org.maplibre.android.style.expressions.Expression.stop
 import org.maplibre.android.style.expressions.Expression.zoom
 import org.maplibre.android.style.layers.BackgroundLayer
-import org.maplibre.android.style.layers.CircleLayer
-import org.maplibre.android.style.layers.PropertyFactory.circleColor
-import org.maplibre.android.style.layers.PropertyFactory.circleRadius
-import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
-import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
 import org.maplibre.android.style.expressions.Expression.gte
 import org.maplibre.android.style.expressions.Expression.eq
 import org.maplibre.android.style.expressions.Expression.all
 import org.maplibre.android.style.layers.PropertyFactory.lineOffset
-import org.maplibre.android.style.layers.PropertyFactory.iconOffset
 import org.maplibre.android.style.expressions.Expression.lt
 import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
@@ -75,6 +80,12 @@ import org.maplibre.android.style.layers.PropertyFactory.iconAnchor
 import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconSize
+import org.maplibre.android.style.layers.PropertyFactory.textIgnorePlacement
+import org.maplibre.android.style.layers.PropertyFactory.textAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.symbolSortKey
+import org.maplibre.android.style.layers.PropertyFactory.textPadding
+import org.maplibre.android.style.layers.PropertyFactory.iconPadding
+import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.PropertyFactory.lineBlur
 import org.maplibre.android.style.layers.PropertyFactory.visibility
 import org.maplibre.android.style.layers.PropertyFactory.textOptional
@@ -121,6 +132,10 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     var style by remember { mutableStateOf<Style?>(null) }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var centered by remember { mutableStateOf(false) }
+    var cameraTick by remember { mutableIntStateOf(0) }
+    var topInsetPx by remember { mutableFloatStateOf(0f) }
+    var targets by remember { mutableStateOf<List<ResourceTarget>>(emptyList()) }
+    val showPointers = remember { repo.prefs.resourcePointers }
     val scope = rememberCoroutineScope()
     // Show where you are as soon as the map opens, not only while recording.
     LaunchedEffect(Unit) { if (repo.lastLocation.value == null) currentLocation(context)?.let { repo.lastLocation.value = it } }
@@ -130,6 +145,8 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             onCreate(null)
             getMapAsync { m ->
                 map = m
+                m.addOnCameraMoveListener { cameraTick++ }
+                m.addOnCameraIdleListener { cameraTick++ }
                 m.uiSettings.isCompassEnabled = true
                 m.uiSettings.isAttributionEnabled = true
                 m.cameraPosition = CameraPosition.Builder().target(MlLatLng(40.73, -74.17)).zoom(13.0).build()
@@ -173,7 +190,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             src.setGeoJson(fc)
             fc.features()?.size ?: 0
         } catch (e: Exception) { errors += "$id: ${e.javaClass.simpleName} ${e.message}"; -1 }
-        val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogAndExplored(layers) } } catch (e: Exception) { errors += "fog: $e"; null }
+        val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogAndExplored(layers, world?.waystones.orEmpty().map { it.center }) } } catch (e: Exception) { errors += "fog: $e"; null }
         if (fe != null) { update("fog") { fe.first }; update("explored") { fe.second } }
         val kinds = world?.landmarks.orEmpty().associate { it.name to it.kind }
         val counts = linkedMapOf(
@@ -215,10 +232,32 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         }
     }
 
+    // Nearest source of each resource, from where you are (or home), refreshed as you move or the world changes.
+    var targetsFrom by remember { mutableStateOf<Pair<WLatLng, MapLayers>?>(null) }
+    LaunchedEffect(me, layers) {
+        val from = me ?: repo.prefs.homeLat?.let { lat -> repo.prefs.homeLng?.let { WLatLng(lat, it) } } ?: return@LaunchedEffect
+        val last = targetsFrom
+        if (last != null && last.second === layers && Geo.distanceM(last.first, from) < 40) return@LaunchedEffect
+        targetsFrom = from to layers
+        targets = try { repo.nearestSources(from) } catch (e: Exception) { repo.log("map", "Resource search failed: ${e.message}"); emptyList() }
+    }
+
     Box(modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+        if (showPointers && targets.isNotEmpty()) {
+            ResourcePointers(
+                targets = targets,
+                project = { p -> map?.projection?.toScreenLocation(MlLatLng(p.lat, p.lng))?.let { it.x to it.y } },
+                topInsetPx = topInsetPx,
+                onPick = { repo.focus.value = it.point },
+                cameraTick = cameraTick,
+            )
+        }
 
-        Column(Modifier.align(Alignment.TopCenter).padding(12.dp).fillMaxWidth()) {
+        Column(
+            Modifier.align(Alignment.TopCenter).padding(12.dp).fillMaxWidth()
+                .onGloballyPositioned { topInsetPx = it.boundsInParent().bottom },
+        ) {
             val today = world?.let { repo.dispatchFor(it, it.today) }
             Card(
                 onClick = onOpenDispatch,
@@ -233,6 +272,10 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
                         Text("Week: %.0f / %d min · %s".format(g.trailing7Minutes, g.goal, g.protection.label), style = MaterialTheme.typography.labelSmall)
                     }
                 }
+            }
+            world?.let { w ->
+                Spacer(Modifier.height(6.dp))
+                InventoryBar(w.treasury, targets) { repo.focus.value = it.point }
             }
         }
 
@@ -278,9 +321,8 @@ private fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 private val OUR_LAYERS = listOf(
     "explored", "green-places", "fog", "fog-edge", "peek", "roads-edge", "roads-trail", "roads-dirt", "roads-cobble",
     "roads-trees-l", "roads-trees-r", "wild-1", "wild-2", "wild-3", "wild-gravel", "wild-cairns-l", "wild-cairns-r",
-    "sand-places", "water-route", "water-light", "capital-badge",
-    "landmark-icons", "landmark-names", "road-names", "track", "waypoints", "waypoint-labels", "waystones", "waystone-labels",
-    "settlement-dots", "settlements", "settlement-labels", "me",
+    "sand-places", "water-route", "water-light",
+    "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels", "me",
 )
 
 private fun addWorldLayers(s: Style, problems: MutableList<String>) {
@@ -417,94 +459,52 @@ private fun addWorldLayers(s: Style, problems: MutableList<String>) {
             lineCap(Property.LINE_CAP_ROUND), lineColor("#E8833A"), lineWidth(5f), lineOffset(-8f), lineDasharray(arrayOf(0.01f, 6f)),
         ).also { it.setFilter(wildLevel(5)) })
     }
-    s.addLayer(
-        SymbolLayer("landmark-icons", "landmarks").withProperties(
-            iconImage(get("icon")), iconSize(interpolate(linear(), zoom(), stop(10, 0.3f), stop(16, 0.5f))),
-            iconAnchor(Property.ICON_ANCHOR_BOTTOM), iconAllowOverlap(true), iconIgnorePlacement(true),
-        ),
-    )
-    guard(problems, "landmark-names") {
-        s.addLayer(
-            SymbolLayer("landmark-names", "landmarks").withProperties(
-                textField(get("name")), textFont(FONT), textSize(12f), textColor("#2E5E3A"), textHaloColor("#F4ECD8"), textHaloWidth(2f),
-                textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.2f)),
-            ),
-        )
-    }
+    s.addLayer(LineLayer("track", "track").withProperties(lineColor("#C0392B"), lineWidth(3f), lineOpacity(0.8f)))
     guard(problems, "road-names") { s.addLayer(
         SymbolLayer("road-names", "roads").withProperties(
             symbolPlacement(Property.SYMBOL_PLACEMENT_LINE), textField(get("name")), textFont(FONT), textSize(11f),
             textColor(INK), textHaloColor("#FFFFFF"), textHaloWidth(1.2f),
         ).also { it.minZoom = 14f },
     ) }
-    s.addLayer(LineLayer("track", "track").withProperties(lineColor("#C0392B"), lineWidth(3f), lineOpacity(0.8f)))
-    // Waypoints: a signpost for every area you've walked in, readable from far out.
-    s.addLayer(
-        SymbolLayer("waypoints", "waypoints").withProperties(
-            iconImage("medal_waypoint"), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
-            iconSize(interpolate(linear(), zoom(), stop(8, 0.25f), stop(13, 0.35f), stop(17, 0.5f))),
-        ),
-    )
-    guard(problems, "waypoint-labels") {
-        s.addLayer(
-            SymbolLayer("waypoint-labels", "waypoints").withProperties(
-                textField(get("name")), textFont(FONT), textSize(interpolate(linear(), zoom(), stop(8, 10f), stop(15, 13f))),
-                textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f),
-                textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.2f)),
-            ),
-        )
-    }
-    s.addLayer(
-        SymbolLayer("waystones", "waystones").withProperties(
-            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
-            iconSize(interpolate(linear(), zoom(), stop(9, 0.3f), stop(14, 0.45f), stop(17, 0.6f))),
-        ).also { it.minZoom = 9f },
-    )
-    guard(problems, "waystone-labels") {
-        s.addLayer(
-            SymbolLayer("waystone-labels", "waystones").withProperties(
-                textField(get("label")), textFont(FONT), textSize(10f), textColor("#2E4A6B"), textHaloColor("#F4ECD8"), textHaloWidth(2f),
-                textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 1.6f)),
-            ).also { it.minZoom = 12f },
-        )
-    }
-    // A gold dot under each medallion, so a settlement always shows even if its image fails.
-    s.addLayer(
-        CircleLayer("settlement-dots", "settlements").withProperties(
-            circleColor("#C4A052"), circleStrokeColor("#4A3A28"), circleStrokeWidth(2f),
-            circleRadius(interpolate(linear(), zoom(), stop(8, 3f), stop(16, 5f))),
-        ),
-    )
+    // Markers, least important first. MapLibre places the top layer first, so settlements claim their
+    // space, then waystones, then places, then waypoints; anything that would overlap a more important
+    // marker hides until you zoom in far enough for both. Each marker's name rides in the same symbol
+    // and drops (text-optional) before the icon does.
+    fun marker(id: String, source: String, icon: Expression, text: Expression, size: Expression, color: String, minZoom: Float, sort: Float) =
+        SymbolLayer(id, source).withProperties(
+            iconImage(icon), iconSize(size), iconAnchor(Property.ICON_ANCHOR_CENTER), iconPadding(4f),
+            iconAllowOverlap(false), iconIgnorePlacement(false),
+            textField(text), textFont(FONT), textSize(interpolate(linear(), zoom(), stop(10, 10f), stop(16, 13f))),
+            textColor(color), textHaloColor("#F4ECD8"), textHaloWidth(2f),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 1.3f)), textOptional(true), textPadding(2f),
+            symbolSortKey(sort),
+        ).also { it.minZoom = minZoom }
+    guard(problems, "waypoints") { s.addLayer(marker(
+        "waypoints", "waypoints", literal("medal_waypoint"), get("name"),
+        interpolate(linear(), zoom(), stop(8, 0.3f), stop(13, 0.36f), stop(17, 0.5f)), INK, 0f, 3f,
+    )) }
+    guard(problems, "landmark-icons") { s.addLayer(marker(
+        "landmark-icons", "landmarks", get("icon"), get("name"),
+        interpolate(linear(), zoom(), stop(10, 0.3f), stop(14, 0.36f), stop(17, 0.5f)), "#2E5E3A", 11f, 2f,
+    )) }
+    guard(problems, "waystones") { s.addLayer(marker(
+        "waystones", "waystones", get("icon"), get("label"),
+        interpolate(linear(), zoom(), stop(9, 0.36f), stop(14, 0.45f), stop(17, 0.6f)), "#2E4A6B", 9f, 1f,
+    )) }
+    // Settlements always show. Their medallion has the capital star and monument baked in, so the
+    // badges scale with it instead of drifting apart as you zoom.
     s.addLayer(
         SymbolLayer("settlements", "settlements").withProperties(
-            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true),
-            iconSize(interpolate(linear(), zoom(), stop(8, 0.3f), stop(14, 0.45f), stop(17, 0.65f))),
+            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(false), iconPadding(6f),
+            iconSize(interpolate(linear(), zoom(), stop(8, 0.34f), stop(12, 0.42f), stop(15, 0.5f), stop(17, 0.62f))),
             iconAnchor(Property.ICON_ANCHOR_CENTER),
         ),
     )
-    guard(problems, "capital-monument") {
-        s.addLayer(
-            SymbolLayer("capital-monument", "settlements").withProperties(
-                iconImage("medal_monument"), iconAllowOverlap(true), iconIgnorePlacement(true),
-                iconSize(interpolate(linear(), zoom(), stop(8, 0.18f), stop(14, 0.25f), stop(17, 0.35f))),
-                iconOffset(arrayOf(-170f, -150f)),
-            ).also { it.setFilter(eq(get("monument"), literal(true))) },
-        )
-    }
-    guard(problems, "capital-badge") {
-        s.addLayer(
-            SymbolLayer("capital-badge", "settlements").withProperties(
-                iconImage("badge_capital"), iconAllowOverlap(true), iconIgnorePlacement(true),
-                iconSize(interpolate(linear(), zoom(), stop(8, 0.35f), stop(14, 0.5f), stop(17, 0.7f))),
-                iconOffset(arrayOf(42f, -42f)),
-            ).also { it.setFilter(eq(get("capital"), literal(true))) },
-        )
-    }
     guard(problems, "settlement-labels") { s.addLayer(
         SymbolLayer("settlement-labels", "settlements").withProperties(
             textField(get("label")), textFont(FONT), textSize(interpolate(linear(), zoom(), stop(10, 11f), stop(16, 15f))),
-            textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f),
-            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.2f)),
+            textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f), textAllowOverlap(true), textIgnorePlacement(false),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.4f)),
         ),
     ) }
     s.addLayer(
@@ -524,7 +524,29 @@ private val SPRITES: Map<String, Int> get() = MapIcons.images
 
 private fun addSprites(s: Style, context: Context) {
     val opts = BitmapFactory.Options().apply { inScaled = false }
-    for ((name, res) in SPRITES) BitmapFactory.decodeResource(context.resources, res, opts)?.let { s.addImage(name, it) }
+    val loaded = SPRITES.mapNotNull { (name, res) -> BitmapFactory.decodeResource(context.resources, res, opts)?.let { name to it } }.toMap()
+    for ((name, bmp) in loaded) s.addImage(name, bmp)
+    // Capital medallions with the star (and monument, once raised) baked in, one image per tier.
+    val star = loaded["badge_capital"] ?: return
+    val monument = loaded["medal_monument"]
+    for (tier in 0..6) {
+        val medal = loaded["medal_tier_$tier"] ?: continue
+        s.addImage("medal_tier_${tier}_cap", capitalMedal(medal, star, null))
+        if (monument != null) s.addImage("medal_tier_${tier}_capmon", capitalMedal(medal, star, monument))
+    }
+}
+
+/** A settlement medallion with the capital star at its upper right and, if given, a small monument at its upper left. */
+private fun capitalMedal(medal: Bitmap, star: Bitmap, monument: Bitmap?): Bitmap {
+    val pad = 26
+    val out = Bitmap.createBitmap(medal.width + 2 * pad, medal.height + 2 * pad, Bitmap.Config.ARGB_8888)
+    val c = Canvas(out)
+    val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    c.drawBitmap(medal, pad.toFloat(), pad.toFloat(), paint)
+    val sz = (medal.width * 0.42f)
+    if (monument != null) c.drawBitmap(monument, null, RectF(2f, 2f, 2f + sz, 2f + sz * monument.height / monument.width), paint)
+    c.drawBitmap(star, null, RectF(out.width - sz - 2f, 2f, out.width - 2f, 2f + sz), paint)
+    return out
 }
 
 /** The base map's own font stack; text in any other font fails to load and hides the whole layer. */
