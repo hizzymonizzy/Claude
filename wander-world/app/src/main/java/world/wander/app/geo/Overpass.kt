@@ -97,6 +97,15 @@ object Overpass {
     fun fetchLandmarks(tile: String): TileExtras {
         val boundary = Cells.boundary(tile)
         val bbox = "${boundary.minOf { it.lat }},${boundary.minOf { it.lng }},${boundary.maxOf { it.lat }},${boundary.maxOf { it.lng }}"
+        val json = postWithRetry(landmarkQuery(bbox))
+        val coastal = try {
+            JSONObject(postWithRetry(coastQuery(bbox))).getJSONArray("elements").length() > 0
+        } catch (_: Exception) { false }
+        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal)
+    }
+
+    /** The places-and-water query for a tile. `nwr`/`wr` lines are spelled out per element type. */
+    internal fun landmarkQuery(bbox: String): String {
         val lines = AREA_FILTERS.replace("BBOX", bbox).lines().map { it.trim() }.filter { it.isNotEmpty() }
         val parts = lines.flatMap { l ->
             when {
@@ -105,13 +114,11 @@ object Overpass {
                 else -> listOf(l)
             }
         }
-        val query = "[out:json][timeout:90];(" + parts.joinToString("") + ");out body geom;"
-        val json = postWithRetry(query)
-        val coastal = try {
-            JSONObject(postWithRetry(COAST_QUERY.replace("BBOX", bbox))).getJSONArray("elements").length() > 0
-        } catch (_: Exception) { false }
-        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal)
+        return "[out:json][timeout:90];(" + parts.joinToString("") + ");out body geom;"
     }
+
+    /** Sea features only tell us the tile is coastal: ids only, never their (huge) geometry. */
+    internal fun coastQuery(bbox: String): String = COAST_QUERY.replace("BBOX", bbox)
 
     private fun isWater(t: JSONObject) = t.optString("natural") == "water" ||
         t.optString("waterway") == "riverbank" || t.optString("landuse") in setOf("reservoir", "basin")

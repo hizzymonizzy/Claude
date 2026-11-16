@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The gate every change passes before it is committed, and what CI runs on every push.
-#   1. engine tests   2. app build (dependency verification on)   3. lint (errors fail)
+#   1. engine + app unit tests (rules, DB migrations, Overpass parsing, map layers)
+#   2. app build (dependency verification on)   3. lint (errors fail)
 #   4. privacy/security policy: permissions, exported components, hosts and risky APIs must match
 #      tools/policy/*.txt exactly. A difference fails until the policy file AND docs/security.md are updated.
 #
@@ -10,7 +11,7 @@ cd "$(dirname "$0")/.."
 fail=0
 
 echo "== 1-3. Tests, build, lint"
-./gradlew -q :engine:test :app:assembleDebug :app:lintDebug
+./gradlew -q :engine:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 
 M=app/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml
 policy() { grep -vE '^\s*(#|$)' "tools/policy/$1"; }

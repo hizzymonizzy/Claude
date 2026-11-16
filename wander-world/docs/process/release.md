@@ -1,5 +1,7 @@
 # Release checklist (every alpha)
 
+Paths are relative to `wander-world/`.
+
 Every APK that goes to the phone follows these steps, in order. If a step doesn't apply, say so in the commit.
 
 1. **Scope.** Each user request is listed in the commit message. Anything deferred is named in the reply.
@@ -7,8 +9,10 @@ Every APK that goes to the phone follows these steps, in order. If a step doesn'
    the field gets a test that reproduces it first.
 3. **Processing change → version bump.** If walk processing changes (TrackProcessor, arrivals, map
    matching), bump `Repository.PROCESSING_VERSION` so stored walks are reprocessed.
-4. **Schema change → migration.** A Room entity change needs a new DB version and a `Migration`. Never
-   use destructive fallback. Data the player made (walks, decisions) must survive.
+4. **Schema change → migration.** A Room entity change needs a new step in `data/DbMigrations.kt`, a bump of
+   `DbMigrations.LATEST`, and the new `app/schemas/…/N.json` committed. `MigrationTest` replays every upgrade
+   on real SQLite and fails if the result differs from the schema Room expects. Never use destructive fallback.
+   Data the player made (walks, decisions) must survive.
 5. **New dependency, asset or host → intake.** Follow `docs/security.md` §3. For art, run
    `tools/asset_intake.py` and record the license in `CREDITS.md`. For a new host, add a row to §2 and
    to `tools/policy/hosts.txt`.

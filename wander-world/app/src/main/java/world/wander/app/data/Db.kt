@@ -327,75 +327,22 @@ interface WanderDao {
         LandmarkTileEntity::class, LandmarkVisitEntity::class, ArrivalEntity::class, WaterTrailEntity::class, WakeEntity::class,
         WaterAreaEntity::class, WaterTileEntity::class, ProjectDecisionEntity::class,
     ],
-    version = 6,
+    version = DbMigrations.LATEST,
     exportSchema = true,
 )
 abstract class WanderDb : RoomDatabase() {
     abstract fun dao(): WanderDao
 
     companion object {
-        /** v2 adds walked trails; existing walks are re-processed once so their trails exist too. */
-        private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("CREATE TABLE IF NOT EXISTS `trail` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `day` INTEGER NOT NULL, `geometry` TEXT NOT NULL)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_trail_segmentId` ON `trail` (`segmentId`)")
-                db.execSQL("UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL")
+        /** Each step of [DbMigrations] as a Room migration. */
+        private val MIGRATIONS = DbMigrations.steps.map { (from, sql) ->
+            object : Migration(from, from + 1) {
+                override fun migrate(db: SupportSQLiteDatabase) = sql.forEach(db::execSQL)
             }
-        }
-
-        /** v3 adds named areas (landmarks) and your own paths; walks are re-processed once to find them. */
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("CREATE TABLE IF NOT EXISTS `wild_trail` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `day` INTEGER NOT NULL, `geometry` TEXT NOT NULL)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_wild_trail_segmentId` ON `wild_trail` (`segmentId`)")
-                db.execSQL("CREATE TABLE IF NOT EXISTS `trodden` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `cell` TEXT NOT NULL, `day` INTEGER NOT NULL)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_trodden_segmentId` ON `trodden` (`segmentId`)")
-                db.execSQL("CREATE TABLE IF NOT EXISTS `landmark` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `kind` TEXT NOT NULL, `geometry` TEXT NOT NULL, `areaM2` REAL NOT NULL, `tile` TEXT NOT NULL, PRIMARY KEY(`id`))")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_landmark_tile` ON `landmark` (`tile`)")
-                db.execSQL("CREATE TABLE IF NOT EXISTS `landmark_tile` (`tile` TEXT NOT NULL, `fetchedMs` INTEGER NOT NULL, `count` INTEGER NOT NULL, PRIMARY KEY(`tile`))")
-                db.execSQL("CREATE TABLE IF NOT EXISTS `landmark_visit` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `landmarkId` TEXT NOT NULL, `day` INTEGER NOT NULL, `seconds` REAL NOT NULL)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_landmark_visit_segmentId` ON `landmark_visit` (`segmentId`)")
-                db.execSQL("UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL")
-            }
-        }
-
-        /** v4 adds arrivals (waystones, regions); walks are re-processed once to find them. */
-        private val MIGRATION_3_4 = object : Migration(3, 4) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("CREATE TABLE IF NOT EXISTS `arrival` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `day` INTEGER NOT NULL, `lat` REAL NOT NULL, `lng` REAL NOT NULL)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrival_segmentId` ON `arrival` (`segmentId`)")
-                db.execSQL("UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL")
-            }
-        }
-
-        /** v5: paddling (water routes, wake, paddled distance); places re-fetched for the new categories. */
-        private val MIGRATION_4_5 = object : Migration(4, 5) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("CREATE TABLE IF NOT EXISTS `water_trail` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `day` INTEGER NOT NULL, `geometry` TEXT NOT NULL)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_water_trail_segmentId` ON `water_trail` (`segmentId`)")
-                db.execSQL("CREATE TABLE IF NOT EXISTS `wake` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `cell` TEXT NOT NULL, `day` INTEGER NOT NULL)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_wake_segmentId` ON `wake` (`segmentId`)")
-                db.execSQL("ALTER TABLE `day_movement` ADD COLUMN `waterMeters` REAL NOT NULL DEFAULT 0")
-                db.execSQL("DELETE FROM `landmark_tile`")
-                db.execSQL("DELETE FROM `landmark`")
-                db.execSQL("UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL")
-            }
-        }
-
-        /** v6: water areas and coast flags (automatic paddling), project decisions (economy). */
-        private val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("CREATE TABLE IF NOT EXISTS `water_area` (`id` TEXT NOT NULL, `tile` TEXT NOT NULL, `geometry` TEXT NOT NULL, PRIMARY KEY(`id`))")
-                db.execSQL("CREATE INDEX IF NOT EXISTS `index_water_area_tile` ON `water_area` (`tile`)")
-                db.execSQL("CREATE TABLE IF NOT EXISTS `water_tile` (`tile` TEXT NOT NULL, `coastal` INTEGER NOT NULL, PRIMARY KEY(`tile`))")
-                db.execSQL("CREATE TABLE IF NOT EXISTS `project_decision` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `day` INTEGER NOT NULL, `areaId` TEXT NOT NULL, `projectId` TEXT NOT NULL, `approve` INTEGER NOT NULL, `madeMs` INTEGER NOT NULL)")
-                db.execSQL("DELETE FROM `landmark_tile`")
-                db.execSQL("UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL")
-            }
-        }
+        }.toTypedArray()
 
         fun create(context: Context): WanderDb =
             Room.databaseBuilder(context, WanderDb::class.java, "wander.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
+                .addMigrations(*MIGRATIONS).build()
     }
 }

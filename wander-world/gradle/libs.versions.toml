@@ -15,6 +15,8 @@ jts = "1.20.0"
 healthConnect = "1.2.0-alpha06"
 coroutines = "1.10.2"
 junit = "4.13.2"
+sqliteJdbc = "3.50.3.0"
+orgJson = "20250517"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -38,6 +40,9 @@ health-connect = { module = "androidx.health.connect:connect-client", version.re
 coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 coroutines-play = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }
 junit = { module = "junit:junit", version.ref = "junit" }
+# Test only: real SQLite on the JVM for migration tests, and real org.json for parser tests (Android's is stubbed).
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqliteJdbc" }
+org-json = { module = "org.json:json", version.ref = "orgJson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

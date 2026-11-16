@@ -1,14 +1,19 @@
-# Runs the same gate as tools/check.sh on every push and pull request: engine tests, app build with
+# Wander World only. Runs the same gate as wander-world/tools/check.sh on every push and pull request: engine tests, app build with
 # dependency verification, lint, and the privacy & security policy (tools/policy/*.txt).
-name: check
+name: wander-world
 on:
   push:
+    paths: ["wander-world/**", ".github/workflows/wander-world.yml"]
   pull_request:
+    paths: ["wander-world/**", ".github/workflows/wander-world.yml"]
 permissions:
   contents: read
 jobs:
   check:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wander-world
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -34,5 +39,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lint-report
-          path: app/build/reports/lint-results-debug.html
+          path: wander-world/app/build/reports/lint-results-debug.html
           if-no-files-found: ignore

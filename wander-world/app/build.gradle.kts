@@ -81,4 +81,8 @@ dependencies {
     implementation(libs.health.connect)
     implementation(libs.coroutines.android)
     implementation(libs.coroutines.play)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.sqlite.jdbc)
+    testImplementation(libs.org.json)
 }

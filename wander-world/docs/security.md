@@ -31,7 +31,7 @@ Unofficial Overpass mirrors were removed in 0.2.0, because each request reveals 
 `tools/check.sh` enforces the outcome on every commit and in CI: the merged manifest's permissions and exported
 components, and every https host in our code, must match `tools/policy/*.txt` exactly. Risky APIs must be
 absent, backups off and cleartext traffic off. To change any of these, update the policy file and this document
-in the same commit. The `security-reviewer` agent (`.claude/agents/`) reviews such changes.
+in the same commit. The `wander-world-security-reviewer` agent (repository `.claude/agents/`) reviews such changes.
 
 Before adding anything third-party:
 
@@ -48,6 +48,15 @@ Before adding anything third-party:
 | **Pinning** | `./gradlew --write-verification-metadata sha256 …` updated, and the diff of `gradle/verification-metadata.xml` reviewed |
 
 **Dependency verification is on.** `gradle/verification-metadata.xml` pins SHA-256 checksums for all 412 build and runtime files. A changed or unreviewed library fails the build.
+
+### Test-only libraries (not in the APK)
+
+| Library | Why | Review |
+|---|---|---|
+| `org.xerial:sqlite-jdbc` 3.50.3.0 (Apache-2.0, Maven Central) | Real SQLite for `MigrationTest` | Test classpath only; contains native SQLite builds for the build machine; pinned by SHA-256 |
+| `org.json:json` 20250517 (Public Domain, Maven Central) | Android's `org.json` is stubbed in unit tests; needed to run the Overpass parser | Test classpath only; pinned by SHA-256 |
+
+`tools/check.sh` §4 confirms neither reaches the app: permissions, exported components and hosts are unchanged.
 
 ## 4. App hardening
 
