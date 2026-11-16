@@ -47,6 +47,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -239,7 +240,10 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         val last = targetsFrom
         if (last != null && last.second === layers && Geo.distanceM(last.first, from) < 40) return@LaunchedEffect
         targetsFrom = from to layers
-        targets = try { repo.nearestSources(from) } catch (e: Exception) { repo.log("map", "Resource search failed: ${e.message}"); emptyList() }
+        // A newer search may cancel this one (the world just rebuilt); let it, rather than blanking the pointers.
+        targets = try { repo.nearestSources(from) } catch (e: CancellationException) { targetsFrom = null; throw e }
+            catch (e: Exception) { repo.log("map", "Resource search failed: ${e.message}"); targets }
+        repo.log("map", "Resource pointers: " + targets.joinToString { "${it.resource} ${formatDistance(it.distanceM)}" }.ifEmpty { "none nearby yet" })
     }
 
     Box(modifier.fillMaxSize()) {

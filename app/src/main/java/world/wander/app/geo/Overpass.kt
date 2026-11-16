@@ -75,11 +75,17 @@ object Overpass {
         nwr["man_made"="lighthouse"](BBOX);
         nwr["historic"~"^(monument|memorial|castle|fort|ruins|archaeological_site|battlefield|building)$"]["name"](BBOX);
         way["shop"]["name"]["building"](BBOX);
-        wr["natural"~"^(water|bay|strait)$"](BBOX);
+        wr["natural"="water"](BBOX);
         wr["waterway"="riverbank"](BBOX);
         wr["landuse"~"^(reservoir|basin)$"](BBOX);
-        way["natural"="coastline"](BBOX);
     """
+
+    /**
+     * Sea features only need to tell us the tile is coastal. Their geometry can be enormous (a whole bay or
+     * the ocean's coastline), which made the server time out, so we ask for tags only.
+     */
+    private const val COAST_QUERY =
+        "[out:json][timeout:30];(way[\"natural\"=\"coastline\"](BBOX);way[\"natural\"~\"^(bay|strait)$\"](BBOX);relation[\"natural\"~\"^(bay|strait)$\"](BBOX););out ids 1;"
 
     /** Named places, plus every water area (named or not) and whether the tile touches the coast. */
     data class TileExtras(val landmarks: List<LandmarkEntity>, val water: List<WaterAreaEntity>, val coastal: Boolean)
@@ -101,12 +107,13 @@ object Overpass {
         }
         val query = "[out:json][timeout:90];(" + parts.joinToString("") + ");out body geom;"
         val json = postWithRetry(query)
-        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), JSONObject(json).getJSONArray("elements").let { els ->
-            (0 until els.length()).any { els.getJSONObject(it).optJSONObject("tags")?.optString("natural") == "coastline" }
-        })
+        val coastal = try {
+            JSONObject(postWithRetry(COAST_QUERY.replace("BBOX", bbox))).getJSONArray("elements").length() > 0
+        } catch (_: Exception) { false }
+        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal)
     }
 
-    private fun isWater(t: JSONObject) = t.optString("natural") in setOf("water", "bay", "strait") ||
+    private fun isWater(t: JSONObject) = t.optString("natural") == "water" ||
         t.optString("waterway") == "riverbank" || t.optString("landuse") in setOf("reservoir", "basin")
 
     /** Every water area (lakes, ponds, rivers, bays), named or not: where you're paddling. */
