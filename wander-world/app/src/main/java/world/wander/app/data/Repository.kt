@@ -76,6 +76,9 @@ class Repository(context: Context) {
     /** Live track of the current capture, for the map. */
     val liveTrack = MutableStateFlow<List<LatLng>>(emptyList())
     val lastLocation = MutableStateFlow<LatLng?>(null)
+    /** Whether the map shows pointers to the nearest resources; Settings changes it, the map follows at once. */
+    val resourcePointers = MutableStateFlow(prefs.resourcePointers)
+    fun setResourcePointers(on: Boolean) { prefs.resourcePointers = on; resourcePointers.value = on }
     /** Set by the Atlas / search to fly the map somewhere; the map clears it after moving. */
     val focus = MutableStateFlow<LatLng?>(null)
     val trackingStatus = MutableStateFlow("Idle")
@@ -146,7 +149,8 @@ class Repository(context: Context) {
                 tileRetry.remove(key)
                 val again = dao.allPresenceCells().filter { Cells.parent(it.cell, Cells.TILE_RES) == tile }.map { it.segmentId }.toSet()
                 again.forEach { dao.markProcessed(it, false, "re-processing for named places") }
-                log("geo", "Fetched ${lms.size} named places for tile $tile; re-processing ${again.size} walk(s)")
+                log("geo", "Fetched ${lms.size} named places, ${extras.water.size} water areas for tile $tile" +
+                    (if (extras.skippedLarge > 0) " (${extras.skippedLarge} very large areas skipped)" else "") + "; re-processing ${again.size} walk(s)")
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -394,7 +398,10 @@ class Repository(context: Context) {
      * (then ones you have), stone from the nearest street you haven't walked. Null where none is near.
      */
     suspend fun nearestSources(from: LatLng): List<ResourceTarget> = withContext(Dispatchers.IO) {
-        val tiles = Cells.disk(Cells.tile(from.lat, from.lng), 2)
+        // Map data for where you are now, even if you haven't walked here yet (one tile, same request a walk makes).
+        val here = Cells.tile(from.lat, from.lng)
+        if (ensureTiles(listOf(here))) ensureLandmarks(listOf(here))
+        val tiles = Cells.disk(here, 2)
         val places = dao.landmarksInTiles(tiles).distinctBy { it.id }.mapNotNull {
             try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
         }
@@ -419,7 +426,9 @@ class Repository(context: Context) {
             candidates.map { it to reach(it) }.minByOrNull { (l, r) -> (r.second + 300) / worth(l) }
                 ?.let { (l, r) -> ResourceTarget(resource, l.name, r.first, r.second, note(l)) }
         val metal = places.filter { it.kind in Yields.METAL_KINDS }
-        val streets = _layers.value.peek.mapNotNull { e ->
+        // Stone: the nearest street you haven't walked yet (any mapped road nearby, not only ones next to explored ground).
+        val walked = world?.edges.orEmpty().filterValues { it.discovered }.keys
+        val streets = dao.edgesInTiles(Cells.disk(here, 1)).asSequence().filter { it.id !in walked }.mapNotNull { e ->
             Overpass.decode(e.geometry).minByOrNull { Geo.distanceM(from, it) }?.let { pt -> Triple(e.name ?: "A new street", pt, Geo.distanceM(from, pt)) }
         }.minByOrNull { it.third }
         listOfNotNull(

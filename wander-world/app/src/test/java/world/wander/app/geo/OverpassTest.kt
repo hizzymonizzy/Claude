@@ -116,4 +116,19 @@ class OverpassTest {
         assertTrue("ids only", coast.endsWith("out ids 1;"))
         assertFalse(coast.contains("BBOX"))
     }
+
+    @Test
+    fun relationsComeAsBoundingBoxesFirstAndOnlySmallOnesAreFetchedWhole() {
+        // Alpha 0.9.2: one river-sized water relation with full geometry kept a tile's places from loading at all.
+        val q = Overpass.landmarkQuery("40.0,-74.1,40.1,-74.0")
+        val (geomPart, bbPart) = q.split("out body geom;")
+        assertFalse("no relation fetched with its outline up front", geomPart.contains("relation["))
+        assertTrue(bbPart.contains("relation[\"natural\"=\"water\"]") && bbPart.trimEnd().endsWith("out tags bb;"))
+        val els = JSONObject("""{"elements":[
+            {"type":"relation","id":1,"bounds":{"minlat":40.0,"minlon":-74.0,"maxlat":40.01,"maxlon":-73.99}},
+            {"type":"relation","id":2,"bounds":{"minlat":40.0,"minlon":-74.5,"maxlat":40.3,"maxlon":-74.0}},
+            {"type":"way","id":3}]}""").getJSONArray("elements")
+        assertEquals(listOf(1L) to 1, Overpass.relationsToFetch(els))
+        assertEquals("[out:json][timeout:90];relation(id:1,5);out body geom;", Overpass.relationQuery(listOf(1, 5)))
+    }
 }

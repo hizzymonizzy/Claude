@@ -79,7 +79,8 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     var cameraTick by remember { mutableIntStateOf(0) }
     var topInsetPx by remember { mutableFloatStateOf(0f) }
     var targets by remember { mutableStateOf<List<ResourceTarget>>(emptyList()) }
-    val showPointers = remember { repo.prefs.resourcePointers }
+    var searching by remember { mutableStateOf(false) }
+    val showPointers by repo.resourcePointers.collectAsState()
     val scope = rememberCoroutineScope()
     // Show where you are as soon as the map opens, not only while recording.
     LaunchedEffect(Unit) { if (repo.lastLocation.value == null) currentLocation(context)?.let { repo.lastLocation.value = it } }
@@ -183,9 +184,11 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         val last = targetsFrom
         if (last != null && last.second === layers && Geo.distanceM(last.first, from) < 40) return@LaunchedEffect
         targetsFrom = from to layers
+        searching = true
         // A newer search may cancel this one (the world just rebuilt); let it, rather than blanking the pointers.
         targets = try { repo.nearestSources(from) } catch (e: CancellationException) { targetsFrom = null; throw e }
             catch (e: Exception) { repo.log("map", "Resource search failed: ${e.message}"); targets }
+        searching = false
         repo.log("map", "Resource pointers: " + targets.joinToString { "${it.resource} ${formatDistance(it.distanceM)}" }.ifEmpty { "none nearby yet" })
     }
 
@@ -223,6 +226,13 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             world?.let { w ->
                 Spacer(Modifier.height(6.dp))
                 InventoryBar(w.treasury, targets) { repo.focus.value = it.point }
+                if (showPointers && targets.isEmpty()) {
+                    Text(
+                        if (searching) "Looking for resources nearby…" else "No wood, food, stone or metal mapped near here yet",
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(start = 8.dp, top = 2.dp),
+                    )
+                }
             }
         }
 

@@ -25,7 +25,9 @@ choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/p
 - Likes: the legend, the top-down 0 A.D. look, everything automatic (no mode buttons), discovery over routine.
   Rejected: the isometric diorama, manual start/stop for paddling.
 - Field facts learned so far:
-  - Overpass often returns 502/429, and large sea geometry times out (ADR 0002).
+  - Overpass often returns 502/429. Large geometry (sea, river-sized relations) times out a tile's whole
+    request, so relations come as bounding boxes first (ADR 0002).
+  - Map data exists only for tiles you've walked in or stood in; "no walk" stops (stores) used to leave no data.
   - Activity Recognition starts tracking from the background reliably.
   - Indoor pottering yields "no walk" captures; that's expected.
 

@@ -173,7 +173,7 @@ fun SettingsScreen(repo: Repository) {
             )
 
             SectionTitle("4 · Your goal")
-            ToggleRow("Point to the nearest wood, food, stone and metal on the map", prefs.resourcePointers) { prefs.resourcePointers = it; refresh++ }
+            ToggleRow("Resource pointers on the map", prefs.resourcePointers) { repo.setResourcePointers(it); refresh++ }
             ToggleRow("Lock my weekly goal", prefs.goalLocked) { prefs.goalLocked = it; scope.launch { repo.rebuild() }; refresh++ }
             ToggleRow("Rest mode (pause decay)", prefs.resting) { on ->
                 val today = repo.today()
@@ -306,7 +306,8 @@ private fun PermRow(label: String, granted: Boolean, onGrant: () -> Unit) {
 @Composable
 private fun ToggleRow(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+        // The label takes what's left, so the switch is never pushed off screen.
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 12.dp))
         Switch(checked = value, onCheckedChange = onChange)
     }
 }

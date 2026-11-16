@@ -88,23 +88,54 @@ object Overpass {
         "[out:json][timeout:30];(way[\"natural\"=\"coastline\"](BBOX);way[\"natural\"~\"^(bay|strait)$\"](BBOX);relation[\"natural\"~\"^(bay|strait)$\"](BBOX););out ids 1;"
 
     /** Named places, plus every water area (named or not) and whether the tile touches the coast. */
-    data class TileExtras(val landmarks: List<LandmarkEntity>, val water: List<WaterAreaEntity>, val coastal: Boolean)
+    data class TileExtras(val landmarks: List<LandmarkEntity>, val water: List<WaterAreaEntity>, val coastal: Boolean, val skippedLarge: Int = 0)
 
     /** Points of interest mapped as a single point get a small circle you can walk through. */
     private const val POINT_RADIUS_M = 35.0
 
-    /** Named places in a tile: parks, woods, beaches, lakes, civic buildings, big stores. Small shops are dropped. */
+    /** Relations whose bounding box is wider than this are skipped: a whole river or bay outline can time out the server. */
+    private const val MAX_RELATION_SPAN_M = 6_000.0
+
+    /**
+     * Named places in a tile: parks, woods, beaches, lakes, civic buildings, big stores. Small shops are dropped.
+     * Ways and points come with their outlines in one request; relations (multi-part areas) come first as
+     * bounding boxes only, then a second request fetches outlines for the ones of a sensible size.
+     */
     fun fetchLandmarks(tile: String): TileExtras {
         val boundary = Cells.boundary(tile)
         val bbox = "${boundary.minOf { it.lat }},${boundary.minOf { it.lng }},${boundary.maxOf { it.lat }},${boundary.maxOf { it.lng }}"
-        val json = postWithRetry(landmarkQuery(bbox))
+        val first = JSONObject(postWithRetry(landmarkQuery(bbox))).getJSONArray("elements")
+        val (small, skipped) = relationsToFetch(first)
+        val elements = org.json.JSONArray()
+        for (i in 0 until first.length()) first.getJSONObject(i).let { if (it.getString("type") != "relation") elements.put(it) }
+        if (small.isNotEmpty()) {
+            val rel = JSONObject(postWithRetry(relationQuery(small))).getJSONArray("elements")
+            for (i in 0 until rel.length()) elements.put(rel.getJSONObject(i))
+        }
+        val json = JSONObject().put("elements", elements).toString()
         val coastal = try {
             JSONObject(postWithRetry(coastQuery(bbox))).getJSONArray("elements").length() > 0
         } catch (_: Exception) { false }
-        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal)
+        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal, skippedLarge = skipped)
     }
 
-    /** The places-and-water query for a tile. `nwr`/`wr` lines are spelled out per element type. */
+    /** Ids of relations small enough to fetch whole, and how many were too large. */
+    internal fun relationsToFetch(elements: org.json.JSONArray): Pair<List<Long>, Int> {
+        val ids = mutableListOf<Long>(); var skipped = 0
+        for (i in 0 until elements.length()) {
+            val el = elements.getJSONObject(i)
+            if (el.getString("type") != "relation") continue
+            val b = el.optJSONObject("bounds") ?: continue
+            val span = Geo.distanceM(LatLng(b.getDouble("minlat"), b.getDouble("minlon")), LatLng(b.getDouble("maxlat"), b.getDouble("maxlon")))
+            if (span <= MAX_RELATION_SPAN_M) ids += el.getLong("id") else skipped++
+        }
+        return ids to skipped
+    }
+
+    /**
+     * The places-and-water query for a tile: points and ways with their outlines, then relations as bounding
+     * boxes only (`out tags bb`). `nwr`/`wr` lines are spelled out per element type.
+     */
     internal fun landmarkQuery(bbox: String): String {
         val lines = AREA_FILTERS.replace("BBOX", bbox).lines().map { it.trim() }.filter { it.isNotEmpty() }
         val parts = lines.flatMap { l ->
@@ -114,8 +145,12 @@ object Overpass {
                 else -> listOf(l)
             }
         }
-        return "[out:json][timeout:90];(" + parts.joinToString("") + ");out body geom;"
+        val (relations, rest) = parts.partition { it.startsWith("relation[") }
+        return "[out:json][timeout:90];(" + rest.joinToString("") + ");out body geom;(" + relations.joinToString("") + ");out tags bb;"
     }
+
+    /** Full outlines for the given relations. */
+    internal fun relationQuery(ids: List<Long>): String = "[out:json][timeout:90];relation(id:${ids.joinToString(",")});out body geom;"
 
     /** Sea features only tell us the tile is coastal: ids only, never their (huge) geometry. */
     internal fun coastQuery(bbox: String): String = COAST_QUERY.replace("BBOX", bbox)
