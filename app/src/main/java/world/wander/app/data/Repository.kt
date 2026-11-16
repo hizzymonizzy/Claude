@@ -203,6 +203,11 @@ class Repository(context: Context) {
     // ---- Processing captured tracks into observations ----
 
     suspend fun processPending(): Int = withContext(Dispatchers.IO) {
+        if (prefs.processingVersion < PROCESSING_VERSION) {
+            val n = dao.resetProcessed()
+            prefs.processingVersion = PROCESSING_VERSION
+            log("process", "Processing rules updated (v$PROCESSING_VERSION): re-processing $n walk(s)")
+        }
         var done = processOnce()
         // Places for tiles we have roads for; if that re-queued walks, process them again.
         val tiles = dao.allPresenceCells().map { Cells.parent(it.cell, Cells.TILE_RES) }.toSet()
@@ -219,7 +224,15 @@ class Repository(context: Context) {
                 if (pts.size < 2) { dao.markProcessed(seg.id, true, "too few points"); continue }
                 val processor = TrackProcessor(zone)
                 val usable = processor.usablePoints(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) })
-                if (usable.isEmpty()) { dao.markProcessed(seg.id, true, "no walkable points (vehicle or poor GPS)"); continue }
+                if (usable.isEmpty()) {
+                    // Still record nothing for it, but clear anything an older version credited.
+                    db.runInTransaction {
+                        dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
+                        dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
+                        dao.markProcessed(seg.id, true, "no walk: moving around a building, in a vehicle, or poor GPS")
+                    }
+                    continue
+                }
                 val tiles = usable.map { Cells.tile(it.lat, it.lng) }.toSet()
                 if (!ensureTiles(tiles)) continue // map data not available yet; this walk waits, others carry on
                 val graph = dao.edgesInTiles(tiles.toList()).map {
@@ -244,7 +257,11 @@ class Repository(context: Context) {
                     dao.insertPresence(r.presence.map { CellPresenceEntity(segmentId = seg.id, cell = it.cell, day = it.day, seconds = it.seconds, mode = it.mode.name) })
                     dao.insertMovement(r.movement.map { DayMovementEntity(segmentId = seg.id, day = it.day, footMeters = it.footMeters, cycleMeters = it.cycleMeters) })
                     assignAreas(r.presence.map { it.cell }.toSet())
-                    dao.markProcessed(seg.id, true, "kept ${r.keptPoints}, dropped ${r.droppedPoints}, matched ${r.matchedPoints}")
+                    dao.markProcessed(
+                        seg.id, true,
+                        if (r.keptPoints == 0 && r.stationaryPoints > 0) "moving around a building (${r.stationaryPoints} pts), not a walk"
+                        else "kept ${r.keptPoints}, dropped ${r.droppedPoints}, still ${r.stationaryPoints}, matched ${r.matchedPoints}",
+                    )
                 }
                 log("process", "Segment ${seg.id} (${seg.source}): ${pts.size} pts → ${r.coverage.size} road stretches, ${r.presence.size} cell visits, matched ${r.matchedPoints}/${r.keptPoints}")
                 done++
@@ -360,7 +377,8 @@ class Repository(context: Context) {
                 appendLine("Waystones: ${w.waystones.size} (${w.waystones.count { it.great }} great) · portals: ${w.portals.size}")
                 appendLine("Places discovered: " + w.landmarks.joinToString { "${it.name} (${it.kind}, ${it.visitDays}d)" }.ifEmpty { "none" })
                 appendLine("Goal: %.0f / %d min (ratio %.2f, %s)".format(w.goal.trailing7Minutes, w.goal.goal, w.goal.ratio, w.goal.protection))
-                for (st in w.settlements) appendLine("  ${st.name} [${st.areaId}] ${st.tier} (peak ${st.peakTier}) D=%.1f days=${st.areaDays} cells=${st.exploredCells}".format(st.development))
+                for (st in w.settlements) appendLine("  ${st.name} [${st.areaId}] ${st.tier} (peak ${st.peakTier}) D=%.1f days=${st.areaDays} cells=${st.exploredCells} at %.4f,%.4f".format(st.development, st.position.lat, st.position.lng))
+                appendLine("Waypoints: ${w.exploredAreas.count { !it.settled }} · map layers: see [map] lines in the log")
                 appendLine("Last 14 days (intensity min · walked km):")
                 for (d in w.today - 13..w.today) {
                     val s = w.days[d] ?: continue
@@ -390,6 +408,8 @@ class Repository(context: Context) {
     }
 
     companion object {
+        /** v2: stretches that stay within 45 m (moving around a building) are no longer walks. */
+        const val PROCESSING_VERSION = 2
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }

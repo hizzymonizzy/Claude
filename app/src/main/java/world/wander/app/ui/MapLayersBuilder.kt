@@ -20,7 +20,11 @@ import org.maplibre.geojson.Polygon as GeoPolygon
 /** Turns world state into GeoJSON for the map: fog, worn roads, peeks, settlements. */
 object MapLayersBuilder {
     private val gf = GeometryFactory()
-    private const val REVEAL_RADIUS_M = 40.0
+    /**
+     * Fog cleared either side of a charted road, by wear level (1 faint trail … 5 avenue). Roads you walk
+     * often clear wider, so a loop you repeat gradually fills in. Index 0 is unused.
+     */
+    val REVEAL_BY_LEVEL_M = doubleArrayOf(40.0, 40.0, 55.0, 75.0, 100.0, 130.0)
     /** How far fog clears either side of the path you actually walked. */
     private const val TRAIL_RADIUS_M = 35.0
     /** Discovered places up to this size clear completely (a small park, a store); bigger ones just get named. */
@@ -101,7 +105,7 @@ object MapLayersBuilder {
     fun settlements(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
         state?.settlements.orEmpty().map { s ->
             Feature.fromGeometry(Point.fromLngLat(s.position.lng, s.position.lat)).apply {
-                addStringProperty("label", (if (s.isCapital) "★ " else "") + s.name + "\n" + s.tier.label)
+                addStringProperty("label", s.name + "\n" + (if (s.isCapital) "Capital · " else "") + s.tier.label)
                 addNumberProperty("tier", s.tier.ordinal)
                 addStringProperty("icon", "medal_tier_${s.tier.ordinal}")
                 addNumberProperty("liveliness", s.liveliness)
@@ -114,8 +118,9 @@ object MapLayersBuilder {
         val world = gf.createPolygon(
             arrayOf(Coordinate(-180.0, -85.0), Coordinate(180.0, -85.0), Coordinate(180.0, 85.0), Coordinate(-180.0, 85.0), Coordinate(-180.0, -85.0)),
         )
-        val revealed = layers.discovered.mapNotNull { (e, _) -> bufferedLatLng(Overpass.decode(e.geometry), REVEAL_RADIUS_M) } +
+        val revealed = layers.discovered.mapNotNull { (e, st) -> bufferedLatLng(Overpass.decode(e.geometry), REVEAL_BY_LEVEL_M[st.level.coerceIn(1, 5)]) } +
             layers.trails.mapNotNull { bufferedLatLng(it, TRAIL_RADIUS_M) } +
+            layers.wild.mapNotNull { (pts, level) -> bufferedLatLng(pts, maxOf(TRAIL_RADIUS_M, REVEAL_BY_LEVEL_M[level.coerceIn(1, 5)] - 5)) } +
             layers.landmarks.filter { it.third <= CLEAR_PLACES_UNDER_M2 }.mapNotNull { (_, rings, _) -> placePolygon(rings) }
         val explored: Geometry? = if (revealed.isEmpty()) null else try { fillSmallHoles(UnaryUnionOp.union(revealed)) } catch (_: Exception) { null }
         val fog: Geometry = explored?.let { try { world.difference(it) } catch (_: Exception) { world } } ?: world

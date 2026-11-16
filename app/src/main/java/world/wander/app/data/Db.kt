@@ -198,6 +198,7 @@ interface WanderDao {
     @Query("SELECT * FROM segment WHERE endMs IS NULL") fun openSegments(): List<SegmentEntity>
     @Query("SELECT * FROM segment WHERE startMs < :endMs AND (endMs IS NULL OR endMs > :startMs)") fun segmentsOverlapping(startMs: Long, endMs: Long): List<SegmentEntity>
     @Query("SELECT COUNT(*) FROM segment") fun segmentCount(): Int
+    @Query("UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL") fun resetProcessed(): Int
     @Query("SELECT * FROM segment ORDER BY startMs DESC LIMIT :limit") fun recentSegments(limit: Int): List<SegmentEntity>
     @Insert fun insertPoints(p: List<TrackPointEntity>)
     @Query("SELECT * FROM track_point WHERE segmentId = :segmentId ORDER BY timeMs") fun points(segmentId: Long): List<TrackPointEntity>

@@ -57,6 +57,11 @@ class Prefs(context: Context) {
         get() = sp.getInt("lastDispatchDay", -1)
         set(v) = sp.edit { putInt("lastDispatchDay", v) }
 
+    /** Bumped when walk processing changes, so stored walks are re-processed once with the new rules. */
+    var processingVersion: Int
+        get() = sp.getInt("processingVersion", 1)
+        set(v) = sp.edit { putInt("processingVersion", v) }
+
     var lastHealthSyncMs: Long
         get() = sp.getLong("lastHealthSync", 0)
         set(v) = sp.edit { putLong("lastHealthSync", v) }

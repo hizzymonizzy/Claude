@@ -42,6 +42,23 @@ class MapMatcherTest {
     }
 
     @Test
+    fun potteringAroundTheHouseEarnsNothing() {
+        val zone = ZoneId.of("America/New_York")
+        val t0 = 1_767_600_000_000L
+        val rnd = java.util.Random(4)
+        // 10 minutes of fixes wandering within ~20 m (moving room to room, GPS drifting indoors).
+        val indoor = (0 until 120).map {
+            val p = at(50.0 + rnd.nextGaussian() * 12, 50.0 + rnd.nextGaussian() * 12)
+            TrackPoint(t0 + it * 5_000L, p.lat, p.lng, 15f)
+        }
+        val r = TrackProcessor(zone).process(indoor, null, edges)
+        assertTrue(r.presence.isEmpty())
+        assertTrue(r.coverage.isEmpty())
+        assertTrue(r.trails.isEmpty())
+        assertTrue(r.stationaryPoints > 100)
+    }
+
+    @Test
     fun trackProcessorDropsVehicleSpeedAndProducesObservations() {
         val zone = ZoneId.of("America/New_York")
         val t0 = 1_767_600_000_000L

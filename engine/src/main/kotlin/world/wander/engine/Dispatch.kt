@@ -75,13 +75,20 @@ object DispatchWriter {
                 "A new land: ${state.regionName(e.regionId)}. A great waystone now links it to ${state.regionName(e.fromRegionId)}."
             else "A new land: ${state.regionName(e.regionId)}."
             is WorldEvent.RegionWoke -> lines += "${state.regionName(e.regionId)} stirs. The townspeople remember you."
-            is WorldEvent.WaystoneFound -> if (!e.great) lines += "You found a waystone in ${state.regionName(e.regionId)}. Walk from it to join it to the lands you know."
-            is WorldEvent.WaystoneReturned -> lines += "A waystone hums again as you return."
+            is WorldEvent.WaystoneFound, is WorldEvent.WaystoneReturned -> {} // summarized below
             is WorldEvent.GoalChanged -> lines += if (e.to > e.from)
                 "You've been steady. Your weekly goal rises to ${e.to} minutes."
             else "Your weekly goal eases to ${e.to} minutes. Rest is part of the journey."
             else -> {}
         }
+
+        // Waystones, summarized per region.
+        events.filterIsInstance<WorldEvent.WaystoneFound>().filter { !it.great }.groupBy { it.regionId }.forEach { (rid, found) ->
+            lines += if (found.size == 1) "You found a waystone in ${state.regionName(rid)}. Walk from it to join it to the lands you know."
+            else "You found ${found.size} waystones in ${state.regionName(rid)}. Walk between them to join them to the lands you know."
+        }
+        val returned = events.count { it is WorldEvent.WaystoneReturned }
+        if (returned > 0) lines += if (returned == 1) "A waystone hums again as you return." else "$returned waystones hum again as you return."
 
         // Goal line.
         if (summary != null) {

@@ -149,6 +149,13 @@ Field testing showed roads alone miss much of real walking: stores, parking lots
 | **Named places** | OSM parks, gardens, woods, beaches, nature reserves, cemeteries, campuses, zoos, big-box stores (≥ 2,000 m²) | ≥ 60 s inside on a day discovers it ("Discovered Thompson Park"); places ≤ 5 ha clear completely; listed in the Atlas |
 | **Your own paths** | Stretches ≥ 30 m with no mapped way within 25 m (cut-throughs, park lawns, unmapped trails) | Drawn as footpaths; wear per H3 res-11 cell (~25 m) by distinct days, same levels and decay as roads |
 
+## 4.7 Field-test tuning (alpha 0.4.1)
+
+- **Moving around a building isn't a walk.** A stretch whose GPS fixes stay within 45 m of their centre (pottering at home, GPS drifting indoors) earns nothing: no roads, fog, familiarity or arrivals. Raw points are kept, so the threshold can change and walks get re-processed (`PROCESSING_VERSION`). No data is lost.
+- **Worn roads clear more fog.** The cleared radius grows with wear level: 40 / 55 / 75 / 100 / 130 m for levels 1–5, and the same for your own paths (minimum 35 m). A loop you walk often fills in over time; new routes fill faster.
+- **Great waystones** only appear when arriving in a different region than the one you came from.
+- **Dispatch** groups waystone finds into one line per region.
+
 ## 5. Geo data
 
 ### 5.1 Sources

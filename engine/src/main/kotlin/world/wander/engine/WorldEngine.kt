@@ -149,7 +149,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             lastRegion = rid
         }
         fun announceRegion(rid: Int, day: Int, from: Int?) {
-            if (rid > 0) events += WorldEvent.RegionFounded(day, rid, from)
+            if (rid > 0 && from != null) events += WorldEvent.RegionFounded(day, rid, from)
         }
 
         for (day in startDay..today) {
@@ -167,7 +167,8 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                     events += WorldEvent.WaystoneReturned(day, existing.id)
                     if (existing.great && from != null && from != rid) portals.merge(portalKey(from, rid), 1, Int::plus)
                 } else if (familiarity.keys.none { Geo.distanceM(centerOf(it), pt) < p.waystoneMinDistanceM }) {
-                    val great = created || (from != null && from != rid)
+                    // Great only when arriving in a different region than the one you came from.
+                    val great = from != null && from != rid
                     val ws = WaystoneAcc(waystones.size + 1, pt, great, rid, day)
                     waystones += ws
                     events += WorldEvent.WaystoneFound(day, ws.id, great, rid)

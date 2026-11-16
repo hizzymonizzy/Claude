@@ -86,6 +86,27 @@ class RegionsTest {
     }
 
     @Test
+    fun anArrivalBeforeAnyWalkingIsNotAGreatWaystone() {
+        // First day: drove somewhere and walked; there was no previous region to come from.
+        val presence = walk(park, start)
+        val s = WorldEngine().build(input(presence, listOf(Arrival(start, parkPt.lat, parkPt.lng))), start)
+        assertTrue(s.waystones.none { it.great })
+        assertTrue(s.events.none { it is WorldEvent.RegionFounded })
+    }
+
+    @Test
+    fun severalWaystonesInOneDayAreOneDispatchLine() {
+        val far1 = LatLng(40.30, -74.05); val far2 = LatLng(40.48, -74.45)
+        val presence = (0 until 5).flatMap { walk(home, start + it) }
+        val s = WorldEngine().build(
+            input(presence, listOf(Arrival(start + 4, far1.lat, far1.lng), Arrival(start + 4, far2.lat, far2.lng))), start + 4,
+        )
+        assertEquals(2, s.waystones.size)
+        val text = DispatchWriter.write(s, start + 4).text
+        assertTrue(text, text.contains("You found 2 waystones"))
+    }
+
+    @Test
     fun aDriveWithinTheRegionFindsALesserWaystone() {
         val presence = (0 until 10).flatMap { walk(home, start + it) } + walk(park, start + 12)
         val s = WorldEngine().build(input(presence, listOf(Arrival(start + 12, parkPt.lat, parkPt.lng))), start + 12)

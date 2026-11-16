@@ -24,6 +24,8 @@ data class TrackResult(
     val landmarkVisits: List<LandmarkVisit>,
     /** Where walking resumed after vehicle-speed travel within this track. */
     val arrivals: List<Arrival> = emptyList(),
+    /** Fixes in stretches that never went anywhere (moving around a building). */
+    val stationaryPoints: Int = 0,
     val presence: List<CellPresence>,
     val movement: List<DayMovement>,
     val keptPoints: Int,
@@ -42,13 +44,22 @@ class TrackProcessor(
     private val cycleSpeedMps: Double = 5.0,
     private val maxGapSeconds: Double = 60.0,
     private val maxGapMeters: Double = 100.0,
+    /** A stretch whose fixes stay within this radius of their centre is pottering, not walking. */
+    private val minSpreadM: Double = 45.0,
 ) {
     fun dayOf(timeMs: Long): Int = Instant.ofEpochMilli(timeMs).atZone(zone).toLocalDate().toEpochDay().toInt()
 
     /** The fixes that survive filtering (no vehicle-speed legs, no inaccurate fixes): the only ones needing map data. */
     fun usablePoints(points: List<TrackPoint>): List<TrackPoint> = runs(points).runs.flatten()
 
-    private class Split(val runs: List<List<TrackPoint>>, val dropped: Int, val arrivals: List<TrackPoint>)
+    private class Split(val runs: List<List<TrackPoint>>, val dropped: Int, val arrivals: List<TrackPoint>, val stationary: Int)
+
+    /** How far a stretch's fixes reach from their centre. Pottering around a house stays within a few dozen metres. */
+    private fun spreadM(run: List<TrackPoint>): Double {
+        val lat = run.sumOf { it.lat } / run.size
+        val lng = run.sumOf { it.lng } / run.size
+        return run.maxOf { Geo.distanceM(lat, lng, it.lat, it.lng) }
+    }
 
     private fun runs(points: List<TrackPoint>): Split {
         val sorted = points.filter { it.accuracyM <= maxAccuracyM }.sortedBy { it.timeMs }
@@ -93,7 +104,11 @@ class TrackProcessor(
             }
         }
         close()
-        return Split(runs, dropped, arrivals)
+        // Moving around a building (or GPS drifting indoors) is not a walk: those stretches earn nothing.
+        // Their raw points stay in the database, so a different threshold can re-process them later.
+        val (moving, still) = runs.partition { spreadM(it) >= minSpreadM }
+        val stillFirsts = still.map { it.first() }.toSet()
+        return Split(moving, dropped, arrivals.filter { a -> a !in stillFirsts }, still.sumOf { it.size })
     }
 
     fun process(points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>, landmarks: List<Landmark> = emptyList()): TrackResult {
@@ -157,6 +172,7 @@ class TrackProcessor(
             trodden = trodden.toList(),
             landmarkVisits = visits.map { (k, v) -> LandmarkVisit(k.first, k.second, v) },
             arrivals = split.arrivals.map { Arrival(dayOf(it.timeMs), it.lat, it.lng) },
+            stationaryPoints = split.stationary,
             presence = presence.map { (k, v) -> CellPresence(k.first, k.second, v, k.third) },
             movement = movement.map { (d, v) -> DayMovement(d, v[0], v[1]) },
             keptPoints = kept,
