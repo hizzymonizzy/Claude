@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import world.wander.engine.SettlementState
+import world.wander.engine.RegionState
 import world.wander.engine.Tier
 import world.wander.engine.WorldParams
 import java.time.LocalDate
@@ -114,6 +115,7 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
     val index = remember(w, layers) {
         val hits = mutableListOf<AtlasHit>()
         w?.settlements?.forEach { hits += AtlasHit(it.name, it.tier.label, it.position) }
+        w?.regions?.forEach { r -> hits += AtlasHit(r.name, if (r.isHome) "Home region" else "Region", r.center) }
         w?.exploredAreas?.filter { !it.settled }?.forEach { hits += AtlasHit(it.name, "Waypoint", it.center) }
         layers.landmarks.forEach { (name, rings, _) ->
             val r = rings.maxBy { it.size }
@@ -153,7 +155,11 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
             return@LazyColumn
         }
 
-        val list = w?.settlements.orEmpty().sortedWith(compareByDescending<SettlementState> { it.isCapital }.thenByDescending { it.tier.ordinal })
+        val regionOrder = w?.regions.orEmpty().sortedWith(compareByDescending<RegionState> { it.isHome }.thenBy { it.dormant }.thenByDescending { it.lastPresenceDay })
+        val list = w?.settlements.orEmpty().sortedWith(
+            compareBy<SettlementState> { s -> regionOrder.indexOfFirst { it.id == s.regionId }.let { if (it < 0) 99 else it } }
+                .thenByDescending { it.isCapital }.thenByDescending { it.tier.ordinal },
+        )
         item { SectionTitle("Settlements") }
         if (list.isEmpty()) item {
             Text(
@@ -162,6 +168,15 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
             )
         }
         items(list, key = { it.areaId }) { s ->
+            val first = list.first { it.regionId == s.regionId } === s
+            if (first && (w?.regions?.size ?: 0) > 1) {
+                val r = w!!.regions.first { it.id == s.regionId }
+                Text(
+                    (if (r.isHome) "Home · " else "") + r.name + if (r.dormant) " · dormant (resting while you're away)" else "",
+                    style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                )
+            }
             Card(onClick = { go(s.position) }, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -192,6 +207,24 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
             item { SectionTitle("Waypoints") }
             items(waypoints, key = { "wp-" + it.id }) { a ->
                 HitRow(a.name, "${a.cells} block${if (a.cells == 1) "" else "s"} · last ${dayLabel(a.lastVisitDay)}", R.drawable.sprite_waypoint) { go(a.center) }
+            }
+        }
+
+        val stones = w?.waystones.orEmpty().sortedByDescending { it.foundDay }
+        if (stones.isNotEmpty()) {
+            item { SectionTitle("Waystones") }
+            items(stones, key = { "ws-" + it.id }) { st ->
+                val kind = if (st.great) "Great waystone" else "Waystone"
+                HitRow(
+                    "$kind · ${w!!.regionName(st.regionId)}",
+                    "Found ${dayLabel(st.foundDay)} · ${st.trips} arrival${if (st.trips == 1) "" else "s"}", R.drawable.sprite_waystone,
+                ) { go(st.center) }
+            }
+            val links = w!!.portals
+            if (links.isNotEmpty()) item {
+                links.forEach { l ->
+                    Text("Portal: ${w.regionName(l.regionA)} ↔ ${w.regionName(l.regionB)} · ${l.trips} trip${if (l.trips == 1) "" else "s"}", style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
 

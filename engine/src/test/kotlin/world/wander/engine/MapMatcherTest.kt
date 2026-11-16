@@ -55,6 +55,12 @@ class MapMatcherTest {
         val walkedM = r.movement.sumOf { it.footMeters }
         assertTrue("walked $walkedM", walkedM in 180.0..220.0)
         assertTrue(r.presence.sumOf { it.seconds } in 130.0..150.0)
+        // Driving 1 km then walking again is an arrival.
+        val walkAfter = (1..10).map { TrackPoint(t0 + 200_000L + it * 7_000L, at(200.0, 1000.0 + it * 10.0).lat, at(200.0, 1000.0 + it * 10.0).lng, 5f) }
+        val r2 = TrackProcessor(zone).process(walk + drive + walkAfter, null, edges)
+        assertEquals(1, r2.arrivals.size)
+        assertTrue(Geo.distanceM(LatLng(r2.arrivals[0].lat, r2.arrivals[0].lng), at(200.0, 1010.0)) < 15)
+        assertTrue(r.arrivals.isEmpty())
         // The walked path is kept (simplified: a straight walk needs only its ends), the drive is not.
         val trail = r.trails.single().points
         assertTrue("trail ${trail.size}", trail.size in 2..4)

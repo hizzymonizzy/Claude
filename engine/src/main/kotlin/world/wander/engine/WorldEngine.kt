@@ -28,6 +28,16 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
         var position: LatLng? = null
     }
 
+    private class RegionAcc(val id: Int, val seed: LatLng, val firstDay: Int) {
+        var lastPresence = firstDay
+        var firstAreaId: String? = null
+        var dormant = false
+    }
+
+    private class WaystoneAcc(val id: Int, val center: LatLng, val great: Boolean, val regionId: Int, val foundDay: Int) {
+        var trips = 1
+    }
+
     private class AreaAcc {
         var d = 0.0
         var lastAreaDay = Int.MIN_VALUE
@@ -49,6 +59,17 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
         val landmarkDays = HashMap<String, Int>()
         val landmarkLast = HashMap<String, Int>()
         val trodden = HashMap<String, Double>()
+
+        // Regions, dormancy and waystones.
+        val regions = mutableListOf<RegionAcc>()
+        val cellRegion = HashMap<String, Int>()
+        val areaRegion = HashMap<String, Int>()
+        val waystones = mutableListOf<WaystoneAcc>()
+        val portals = HashMap<Pair<Int, Int>, Int>()
+        val arrivalsByDay = input.arrivals.groupBy { it.day }
+        val centerCache = HashMap<String, LatLng>()
+        var lastRegion: Int? = null
+        var homeRegion: Int? = null
 
         val edges = HashMap<String, EdgeAcc>()
         val familiarity = HashMap<String, Double>()
@@ -111,8 +132,49 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             events += WorldEvent.Founded(day, areaId, capital)
         }
 
+        fun centerOf(cell: String) = centerCache.getOrPut(cell) { Cells.center(cell) }
+        fun portalKey(a: Int, b: Int) = if (a < b) a to b else b to a
+        /** The region a point belongs to, creating one if it's far from all others. */
+        fun regionFor(pt: LatLng, day: Int): Pair<Int, Boolean> {
+            val near = regions.minByOrNull { Geo.distanceM(it.seed, pt) }
+            if (near != null && Geo.distanceM(near.seed, pt) <= p.regionRadiusM) return near.id to false
+            val r = RegionAcc(regions.size, pt, day)
+            regions += r
+            return r.id to true
+        }
+        fun touchRegion(rid: Int, day: Int) {
+            val r = regions[rid]
+            if (r.dormant) { r.dormant = false; events += WorldEvent.RegionWoke(day, rid) }
+            r.lastPresence = day
+            lastRegion = rid
+        }
+        fun announceRegion(rid: Int, day: Int, from: Int?) {
+            if (rid > 0) events += WorldEvent.RegionFounded(day, rid, from)
+        }
+
         for (day in startDay..today) {
             val resting = isResting(day)
+
+            // 0. Arrivals by car or plane: waystones and new regions.
+            arrivalsByDay[day]?.forEach { arr ->
+                val pt = LatLng(arr.lat, arr.lng)
+                val from = lastRegion
+                val (rid, created) = regionFor(pt, day)
+                if (created) announceRegion(rid, day, from)
+                val existing = waystones.firstOrNull { Geo.distanceM(it.center, pt) <= p.waystoneReturnM }
+                if (existing != null) {
+                    existing.trips++
+                    events += WorldEvent.WaystoneReturned(day, existing.id)
+                    if (existing.great && from != null && from != rid) portals.merge(portalKey(from, rid), 1, Int::plus)
+                } else if (familiarity.keys.none { Geo.distanceM(centerOf(it), pt) < p.waystoneMinDistanceM }) {
+                    val great = created || (from != null && from != rid)
+                    val ws = WaystoneAcc(waystones.size + 1, pt, great, rid, day)
+                    waystones += ws
+                    events += WorldEvent.WaystoneFound(day, ws.id, great, rid)
+                    if (great && from != null && from != rid) portals.merge(portalKey(from, rid), 1, Int::plus)
+                }
+                touchRegion(rid, day)
+            }
 
             // 1. Roads: discovery and wear.
             val newlyDiscovered = mutableListOf<String>()
@@ -160,7 +222,16 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                     foot >= p.cellPresenceSeconds -> familiarity.merge(cell, 1.0, Double::plus)
                     cycle >= p.cellPresenceSeconds -> familiarity.merge(cell, p.cyclingWeight, Double::plus)
                 }
+                val rid = cellRegion.getOrPut(cell) {
+                    val from = lastRegion
+                    val (r, created) = regionFor(centerOf(cell), day)
+                    if (created) announceRegion(r, day, from)
+                    r
+                }
+                touchRegion(rid, day)
                 val areaId = input.cellArea[cell] ?: return@forEach
+                areaRegion.putIfAbsent(areaId, rid)
+                if (regions[rid].firstAreaId == null) regions[rid].firstAreaId = areaId
                 areas.getOrPut(areaId) { AreaAcc() }.also { it.cells += cell; it.lastSeenDay = day }
                 footByArea.merge(areaId, foot / 60.0, Double::plus)
                 cycleByArea.merge(areaId, cycle / 60.0, Double::plus)
@@ -202,6 +273,13 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             // 4. Growth tier changes.
             for (s in settlements.values) updateTier(day, s, areas.getValue(s.areaId))
 
+            // 4b. Home region, and regions going quiet.
+            if (homeRegion == null) homeRegion = input.homeAreaId?.let { areaRegion[it] }
+            val home = homeRegion ?: 0
+            for (r in regions) {
+                if (r.id != home && !r.dormant && day - r.lastPresence >= p.dormantAfterDays) r.dormant = true
+            }
+
             // 5. Protection: decay or restoration, at the end of the day.
             val minutes7 = trailing7(day)
             val ratio = minutes7 / goal
@@ -219,7 +297,8 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                 for (s in settlements.values) {
                     if (m > 0) {
                         val floorD = p.tierThresholds[floorTier(s).ordinal]
-                        val loss = max(0.0, s.d - floorD) * p.baseDecayDaily * m * p.sturdiness[s.tier.ordinal]
+                        val dormancy = areaRegion[s.areaId]?.let { if (regions[it].dormant) p.dormantDecay else 1.0 } ?: 1.0
+                        val loss = max(0.0, s.d - floorD) * p.baseDecayDaily * m * p.sturdiness[s.tier.ordinal] * dormancy
                         s.d -= loss
                     }
                     if (ratio > 1.0) {
@@ -327,6 +406,8 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                     exploredCells = a.cells.count { (familiarity[it] ?: 0.0) >= 1.0 },
                     liveliness = 0.5.pow((today - a.lastAreaDay).coerceAtLeast(0) / p.livelinessHalfLifeDays),
                     position = s.position ?: LatLng(0.0, 0.0),
+                    regionId = areaRegion[s.areaId] ?: 0,
+                    dormant = areaRegion[s.areaId]?.let { regions[it].dormant } ?: false,
                 )
             },
             goal = goalState,
@@ -338,6 +419,16 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                 LandmarkState(id, info.name, info.kind, info.areaM2, first, landmarkDays[id] ?: 0, landmarkLast[id] ?: first)
             },
             troddenWear = trodden,
+            regions = regions.map { r ->
+                val homeId = homeRegion ?: 0
+                RegionState(
+                    id = r.id,
+                    name = r.firstAreaId?.let { areaNames[it] } ?: "Unnamed lands",
+                    center = r.seed, isHome = r.id == homeId, dormant = r.dormant, lastPresenceDay = r.lastPresence,
+                )
+            },
+            waystones = waystones.map { WaystoneState(it.id, it.center, it.great, it.regionId, it.foundDay, it.trips) },
+            portals = portals.map { (k, v) -> PortalLink(k.first, k.second, v) },
             exploredAreas = areas.filter { (id, a) -> a.cells.isNotEmpty() || id in settlements }
                 .map { (id, a) ->
                     val known = a.cells.filter { (familiarity[it] ?: 0.0) > 0 }.ifEmpty { a.cells.toList() }

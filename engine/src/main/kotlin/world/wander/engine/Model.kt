@@ -62,7 +62,12 @@ data class WorldInput(
     val landmarks: Map<String, LandmarkInfo> = emptyMap(),
     val landmarkVisits: List<LandmarkVisit> = emptyList(),
     val trodden: List<TroddenCell> = emptyList(),
+    /** Where you started walking after a car ride or flight. */
+    val arrivals: List<Arrival> = emptyList(),
 )
+
+/** The first walking point after travelling by vehicle or plane. */
+data class Arrival(val day: Int, val lat: Double, val lng: Double)
 
 /** All tuning numbers in one place. Changing them and replaying rebuilds the world. */
 data class WorldParams(
@@ -104,6 +109,16 @@ data class WorldParams(
     val wearLevels: List<Double> = listOf(1.0, 3.0, 10.0, 30.0, 100.0),
     /** Seconds inside a named area on one day to discover it. */
     val landmarkSeconds: Double = 60.0,
+    /** Places this far apart belong to different regions. */
+    val regionRadiusM: Double = 100_000.0,
+    /** A region other than home goes dormant after this many days without a visit. */
+    val dormantAfterDays: Int = 14,
+    /** Decay multiplier in a dormant region. */
+    val dormantDecay: Double = 0.1,
+    /** An arrival this far from any explored ground finds a waystone. */
+    val waystoneMinDistanceM: Double = 2_000.0,
+    /** Arriving within this distance of an existing waystone counts as a return trip. */
+    val waystoneReturnM: Double = 500.0,
 )
 
 // ---- Derived state ----
@@ -134,6 +149,8 @@ data class SettlementState(
     val exploredCells: Int,
     val liveliness: Double,
     val position: LatLng,
+    val regionId: Int = 0,
+    val dormant: Boolean = false,
 )
 
 data class WeekRecord(val weekStartDay: Int, val goal: Int, val minutes: Double)
@@ -152,9 +169,26 @@ sealed class WorldEvent {
     data class Founded(override val day: Int, val areaId: String, val capital: Boolean) : WorldEvent()
     data class TierChanged(override val day: Int, val areaId: String, val from: Tier, val to: Tier) : WorldEvent()
     data class RoadsCharted(override val day: Int, val edgeIds: List<String>) : WorldEvent()
+    data class RegionFounded(override val day: Int, val regionId: Int, val fromRegionId: Int?) : WorldEvent()
+    data class RegionWoke(override val day: Int, val regionId: Int) : WorldEvent()
+    data class WaystoneFound(override val day: Int, val waystoneId: Int, val great: Boolean, val regionId: Int) : WorldEvent()
+    data class WaystoneReturned(override val day: Int, val waystoneId: Int) : WorldEvent()
     data class LandmarkDiscovered(override val day: Int, val landmarkId: String) : WorldEvent()
     data class GoalChanged(override val day: Int, val from: Int, val to: Int) : WorldEvent()
 }
+
+data class RegionState(
+    val id: Int,
+    val name: String,
+    val center: LatLng,
+    val isHome: Boolean,
+    val dormant: Boolean,
+    val lastPresenceDay: Int,
+)
+
+data class WaystoneState(val id: Int, val center: LatLng, val great: Boolean, val regionId: Int, val foundDay: Int, val trips: Int)
+
+data class PortalLink(val regionA: Int, val regionB: Int, val trips: Int)
 
 /** Any area you've walked in, settled or not: a waypoint on the map. */
 data class AreaState(
@@ -200,7 +234,12 @@ data class WorldState(
     /** Wear on your own paths, per fine cell. */
     val troddenWear: Map<String, Double> = emptyMap(),
     val exploredAreas: List<AreaState> = emptyList(),
+    val regions: List<RegionState> = emptyList(),
+    val waystones: List<WaystoneState> = emptyList(),
+    val portals: List<PortalLink> = emptyList(),
 ) {
+    fun regionName(id: Int) = regions.firstOrNull { it.id == id }?.name ?: "a distant land"
+
     /** Visual level (1–5) for a wear value, same scale as roads. */
     fun levelFor(wear: Double, levels: List<Double> = WorldParams().wearLevels): Int {
         var level = 1

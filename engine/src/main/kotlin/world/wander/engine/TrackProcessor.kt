@@ -22,6 +22,8 @@ data class TrackResult(
     val trodden: List<TroddenCell>,
     /** Time spent inside named areas (parks, woods, stores…). */
     val landmarkVisits: List<LandmarkVisit>,
+    /** Where walking resumed after vehicle-speed travel within this track. */
+    val arrivals: List<Arrival> = emptyList(),
     val presence: List<CellPresence>,
     val movement: List<DayMovement>,
     val keptPoints: Int,
@@ -44,17 +46,33 @@ class TrackProcessor(
     fun dayOf(timeMs: Long): Int = Instant.ofEpochMilli(timeMs).atZone(zone).toLocalDate().toEpochDay().toInt()
 
     /** The fixes that survive filtering (no vehicle-speed legs, no inaccurate fixes): the only ones needing map data. */
-    fun usablePoints(points: List<TrackPoint>): List<TrackPoint> = runs(points).first.flatten()
+    fun usablePoints(points: List<TrackPoint>): List<TrackPoint> = runs(points).runs.flatten()
 
-    private fun runs(points: List<TrackPoint>): Pair<List<List<TrackPoint>>, Int> {
+    private class Split(val runs: List<List<TrackPoint>>, val dropped: Int, val arrivals: List<TrackPoint>)
+
+    private fun runs(points: List<TrackPoint>): Split {
         val sorted = points.filter { it.accuracyM <= maxAccuracyM }.sortedBy { it.timeMs }
         // Split into runs on gaps and vehicle-speed legs.
         val runs = mutableListOf<MutableList<TrackPoint>>()
         var current = mutableListOf<TrackPoint>()
         var dropped = points.size - sorted.size
+        // Arrival detection: walking resumes > 1 km from where it stopped, after vehicle-speed travel.
+        var beforeVehicle: TrackPoint? = null
+        var arrivalCandidate: TrackPoint? = null
+        val arrivals = mutableListOf<TrackPoint>()
+        fun close() {
+            if (current.size > 1) {
+                runs.add(current)
+                if (arrivalCandidate != null && current.first() === arrivalCandidate) { arrivals += arrivalCandidate!!; arrivalCandidate = null }
+            }
+        }
         for (p in sorted) {
             val prev = current.lastOrNull()
-            if (prev == null) { current.add(p); continue }
+            if (prev == null) {
+                val bv = beforeVehicle
+                if (bv != null && Geo.distanceM(bv.lat, bv.lng, p.lat, p.lng) > 1_000) arrivalCandidate = p
+                current.add(p); continue
+            }
             val dt = (p.timeMs - prev.timeMs) / 1000.0
             if (dt <= 0) { dropped++; continue }
             val d = Geo.distanceM(prev.lat, prev.lng, p.lat, p.lng)
@@ -63,22 +81,25 @@ class TrackProcessor(
                 speed > vehicleSpeedMps -> {
                     // Vehicle movement or a GPS jump: never counts. Start fresh after it.
                     dropped++
-                    if (current.size > 1) runs.add(current)
+                    if (beforeVehicle == null || current.size > 1) beforeVehicle = prev
+                    close()
                     current = mutableListOf()
                 }
                 dt > maxGapSeconds || d > maxGapMeters -> {
-                    if (current.size > 1) runs.add(current)
+                    close()
                     current = mutableListOf(p)
                 }
                 else -> current.add(p)
             }
         }
-        if (current.size > 1) runs.add(current)
-        return runs to dropped
+        close()
+        return Split(runs, dropped, arrivals)
     }
 
     fun process(points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>, landmarks: List<Landmark> = emptyList()): TrackResult {
-        val (runs, dropped) = runs(points)
+        val split = runs(points)
+        val runs = split.runs
+        val dropped = split.dropped
         val matcher = if (edges.isNotEmpty()) MapMatcher(edges) else null
         val coverage = mutableListOf<EdgeCoverage>()
         val presence = HashMap<Triple<String, Int, Mode>, Double>()
@@ -135,6 +156,7 @@ class TrackProcessor(
             wildTrails = wild,
             trodden = trodden.toList(),
             landmarkVisits = visits.map { (k, v) -> LandmarkVisit(k.first, k.second, v) },
+            arrivals = split.arrivals.map { Arrival(dayOf(it.timeMs), it.lat, it.lng) },
             presence = presence.map { (k, v) -> CellPresence(k.first, k.second, v, k.third) },
             movement = movement.map { (d, v) -> DayMovement(d, v[0], v[1]) },
             keptPoints = kept,

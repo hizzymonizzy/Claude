@@ -121,6 +121,16 @@ data class LandmarkVisitEntity(
     val seconds: Double,
 )
 
+/** Where walking resumed after a car ride or flight (source of waystones and new regions). */
+@Entity(tableName = "arrival", indices = [Index("segmentId")])
+data class ArrivalEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val day: Int,
+    val lat: Double,
+    val lng: Double,
+)
+
 @Entity(tableName = "daily_intensity")
 data class DailyIntensityEntity(
     @PrimaryKey val day: Int,
@@ -222,6 +232,10 @@ interface WanderDao {
     @Insert fun insertVisits(v: List<LandmarkVisitEntity>)
     @Query("DELETE FROM landmark_visit WHERE segmentId = :segmentId") fun deleteVisits(segmentId: Long)
     @Query("SELECT * FROM landmark_visit") fun allVisits(): List<LandmarkVisitEntity>
+    @Insert fun insertArrivals(a: List<ArrivalEntity>)
+    @Query("DELETE FROM arrival WHERE segmentId = :segmentId") fun deleteArrivals(segmentId: Long)
+    @Query("SELECT * FROM arrival") fun allArrivals(): List<ArrivalEntity>
+    @Query("SELECT * FROM segment WHERE endMs IS NOT NULL AND endMs <= :beforeMs AND id != :excludeId ORDER BY endMs DESC LIMIT 1") fun previousSegment(beforeMs: Long, excludeId: Long): SegmentEntity?
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertIntensity(d: List<DailyIntensityEntity>)
     @Query("SELECT * FROM daily_intensity") fun allIntensity(): List<DailyIntensityEntity>
 
@@ -259,9 +273,9 @@ interface WanderDao {
         DayMovementEntity::class, DailyIntensityEntity::class, GeoTileEntity::class, EdgeEntity::class,
         PlaceEntity::class, CellAreaEntity::class, AreaEntity::class, DispatchEntity::class, DiagEntity::class,
         TrailEntity::class, WildTrailEntity::class, TroddenEntity::class, LandmarkEntity::class,
-        LandmarkTileEntity::class, LandmarkVisitEntity::class,
+        LandmarkTileEntity::class, LandmarkVisitEntity::class, ArrivalEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class WanderDb : RoomDatabase() {
@@ -293,7 +307,16 @@ abstract class WanderDb : RoomDatabase() {
             }
         }
 
+        /** v4 adds arrivals (waystones, regions); walks are re-processed once to find them. */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `arrival` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `day` INTEGER NOT NULL, `lat` REAL NOT NULL, `lng` REAL NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_arrival_segmentId` ON `arrival` (`segmentId`)")
+                db.execSQL("UPDATE segment SET processed = 0 WHERE endMs IS NOT NULL")
+            }
+        }
+
         fun create(context: Context): WanderDb =
-            Room.databaseBuilder(context, WanderDb::class.java, "wander.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+            Room.databaseBuilder(context, WanderDb::class.java, "wander.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
     }
 }

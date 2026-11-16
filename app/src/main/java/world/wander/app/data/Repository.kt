@@ -27,6 +27,8 @@ import world.wander.engine.Landmark
 import world.wander.engine.LandmarkInfo
 import world.wander.engine.LandmarkVisit
 import world.wander.engine.TroddenCell
+import world.wander.engine.Arrival
+import world.wander.engine.Geo
 import world.wander.engine.Mode
 import world.wander.engine.Place
 import world.wander.engine.TrackPoint
@@ -230,7 +232,10 @@ class Repository(context: Context) {
                 val r = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks)
                 db.runInTransaction {
                     dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
-                    dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id)
+                    dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
+                    dao.insertArrivals((r.arrivals + listOfNotNull(arrivalSincePrevious(seg, usable))).map {
+                        ArrivalEntity(segmentId = seg.id, day = it.day, lat = it.lat, lng = it.lng)
+                    })
                     dao.insertWild(r.wildTrails.map { WildTrailEntity(segmentId = seg.id, day = it.day, geometry = Overpass.encode(it.points)) })
                     dao.insertTrodden(r.trodden.map { TroddenEntity(segmentId = seg.id, cell = it.cell, day = it.day) })
                     dao.insertVisits(r.landmarkVisits.map { LandmarkVisitEntity(segmentId = seg.id, landmarkId = it.landmarkId, day = it.day, seconds = it.seconds) })
@@ -247,6 +252,19 @@ class Repository(context: Context) {
             if (dao.pendingSegments().isNotEmpty()) ProcessWorker.enqueue(app)
             done
         }
+    }
+
+    /**
+     * Did this walk start far (> 2 km) from where the previous recorded walk ended? Then you drove or
+     * flew in between, and its first point is an arrival.
+     */
+    private fun arrivalSincePrevious(seg: SegmentEntity, usable: List<TrackPoint>): Arrival? {
+        val first = usable.firstOrNull() ?: return null
+        val prev = dao.previousSegment(seg.startMs, seg.id) ?: return null
+        val prevPts = TrackProcessor(zone).usablePoints(dao.points(prev.id).map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) })
+        val last = prevPts.lastOrNull() ?: return null
+        if (Geo.distanceM(last.lat, last.lng, first.lat, first.lng) < 2_000) return null
+        return Arrival(TrackProcessor(zone).dayOf(first.timeMs), first.lat, first.lng)
     }
 
     // ---- Building the world ----
@@ -279,6 +297,7 @@ class Repository(context: Context) {
             landmarks = landmarkEntities.mapValues { (_, l) -> LandmarkInfo(l.id, l.name, l.kind, l.areaM2) },
             landmarkVisits = visits.map { LandmarkVisit(it.landmarkId, it.day, it.seconds) },
             trodden = dao.allTrodden().map { TroddenCell(it.cell, it.day) },
+            arrivals = dao.allArrivals().map { Arrival(it.day, it.lat, it.lng) },
         )
         val state = engine.build(input, today)
         // Freeze fallback names the first time an unnamed area earns one.
@@ -337,6 +356,8 @@ class Repository(context: Context) {
             appendLine("== World ==")
             if (w != null) {
                 appendLine("Roads charted: ${w.discoveredCount} · cells known: ${w.cellFamiliarity.size} · own-path cells: ${w.troddenWear.size}")
+                appendLine("Regions: " + w.regions.joinToString { "${it.name}${if (it.isHome) " (home)" else ""}${if (it.dormant) " (dormant)" else ""}" })
+                appendLine("Waystones: ${w.waystones.size} (${w.waystones.count { it.great }} great) · portals: ${w.portals.size}")
                 appendLine("Places discovered: " + w.landmarks.joinToString { "${it.name} (${it.kind}, ${it.visitDays}d)" }.ifEmpty { "none" })
                 appendLine("Goal: %.0f / %d min (ratio %.2f, %s)".format(w.goal.trailing7Minutes, w.goal.goal, w.goal.ratio, w.goal.protection))
                 for (st in w.settlements) appendLine("  ${st.name} [${st.areaId}] ${st.tier} (peak ${st.peakTier}) D=%.1f days=${st.areaDays} cells=${st.exploredCells}".format(st.development))

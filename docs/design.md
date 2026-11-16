@@ -330,7 +330,13 @@ if 1.0 < r ≤ 1.5:
 
 ---
 
-## 9. Regions, waystones and dormancy (Phase 2)
+## 9. Regions, waystones and dormancy (Phase 2, built in alpha 0.3.0)
+
+> **Implementation notes (0.3.0):**
+> - Regions are seeded by the first place you walk in an area more than 100 km from existing regions.
+> - Arrivals are detected two ways: walking resumes more than 1 km away after vehicle-speed travel within one recording, or a recording starts more than 2 km from where the previous one ended.
+> - The home region is the one containing the capital.
+> - Pockets joined by walking (lesser waystones becoming landmarks) are not built yet.
 
 ### 9.1 Regions
 - A **region** is a cluster of areas. The home region is created at onboarding.

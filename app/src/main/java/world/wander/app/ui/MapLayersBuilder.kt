@@ -48,6 +48,15 @@ object MapLayersBuilder {
         },
     )
 
+    fun waystones(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
+        state?.waystones.orEmpty().map { w ->
+            Feature.fromGeometry(Point.fromLngLat(w.center.lng, w.center.lat)).apply {
+                addStringProperty("label", if (w.great) "Great waystone" else "Waystone")
+                addNumberProperty("size", if (w.great) 0.8 else 0.55)
+            }
+        },
+    )
+
     /** Sprite for a kind of place. */
     fun placeIcon(kind: String?): String = when (kind) {
         "park", "garden", "nature_reserve", "wood", "forest", "common", "recreation_ground", "village_green",

@@ -71,6 +71,12 @@ object DispatchWriter {
                 if (e.to == Tier.RUINS) "Moss has claimed ${name(e.areaId)}. Its ruins wait for you."
                 else "${name(e.areaId)} has quieted to a ${e.to.label}."
             }
+            is WorldEvent.RegionFounded -> lines += if (e.fromRegionId != null)
+                "A new land: ${state.regionName(e.regionId)}. A great waystone now links it to ${state.regionName(e.fromRegionId)}."
+            else "A new land: ${state.regionName(e.regionId)}."
+            is WorldEvent.RegionWoke -> lines += "${state.regionName(e.regionId)} stirs. The townspeople remember you."
+            is WorldEvent.WaystoneFound -> if (!e.great) lines += "You found a waystone in ${state.regionName(e.regionId)}. Walk from it to join it to the lands you know."
+            is WorldEvent.WaystoneReturned -> lines += "A waystone hums again as you return."
             is WorldEvent.GoalChanged -> lines += if (e.to > e.from)
                 "You've been steady. Your weekly goal rises to ${e.to} minutes."
             else "Your weekly goal eases to ${e.to} minutes. Rest is part of the journey."

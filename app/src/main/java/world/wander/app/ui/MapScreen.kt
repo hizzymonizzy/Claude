@@ -150,6 +150,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         s.source("landmarks")?.setGeoJson(MapLayersBuilder.landmarkLabels(layers, kinds))
         s.source("settlements")?.setGeoJson(MapLayersBuilder.settlements(world))
         s.source("waypoints")?.setGeoJson(MapLayersBuilder.waypoints(world))
+        s.source("waystones")?.setGeoJson(MapLayersBuilder.waystones(world))
     }
     // Fly to whatever the Atlas or search picked.
     val focus by repo.focus.collectAsState()
@@ -225,7 +226,7 @@ private fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
 private fun addWorldLayers(s: Style) {
     val empty = FeatureCollection.fromFeatures(emptyList())
-    for (id in listOf("fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
+    for (id in listOf("fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "me")) s.addSource(GeoJsonSource(id, empty))
 
     // Fog: parchment you can see the land through, thicker when zoomed out so explored areas pop.
     s.addLayer(
@@ -281,6 +282,13 @@ private fun addWorldLayers(s: Style) {
             textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f),
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.2f)), textOptional(true),
         ),
+    )
+    s.addLayer(
+        SymbolLayer("waystones", "waystones").withProperties(
+            iconImage("waystone"), iconSize(get("size")), iconAllowOverlap(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            textField(get("label")), textSize(10f), textColor("#2E4A6B"), textHaloColor("#F4ECD8"), textHaloWidth(2f),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.2f)), textOptional(true),
+        ).also { it.minZoom = 9f },
     )
     s.addLayer(
         SymbolLayer("settlements", "settlements").withProperties(

@@ -16,7 +16,11 @@ The first build you can carry around. It's the **Phase 1 core loop** with placeh
 | Daily dispatch notification + archive | ✅ |
 | Fold layout: map + side panel when unfolded | ✅ |
 | Diagnostics log for the technical tests | ✅ |
-| World view (3D), regions/waystones, economy, townspeople | ❌ later phases |
+| Waypoints for every area walked, Atlas search, tap to fly the map | ✅ 0.2.1 |
+| Named places (parks, woods, stores) and your own paths | ✅ 0.1.5 |
+| Regions, dormancy, waystones, portal links | ✅ 0.3.0 |
+| Original pixel-art sprites, parchment fog | ✅ 0.2.0 (placeholder art) |
+| World view (3D), economy, townspeople | ❌ later phases |
 
 Visuals are deliberately plain (parchment fog, inked roads, dots for settlements). The look is a separate layer that can be swapped out later without touching the game logic.
 
@@ -63,7 +67,6 @@ Settings → Diagnostics log has everything technical. Screenshots of the log, t
 ## Known limits of this alpha
 
 - Map data comes from the free public Overpass server and is fetched the first time you walk in a new ~5 km² area, so the first walk somewhere new needs signal.
-- Waystones and regions aren't built yet, so a trip far from home will found settlements there that decay at the normal rate.
 - After a phone restart, open the app once to restart all-day tracking.
 - The first few seconds of a capture can be dropped while the recording starts.
 - No backup yet. Uninstalling deletes your world.
