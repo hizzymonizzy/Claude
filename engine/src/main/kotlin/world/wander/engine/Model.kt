@@ -130,6 +130,8 @@ data class WorldParams(
     val waystoneMinDistanceM: Double = 2_000.0,
     /** Arriving within this distance of an existing waystone counts as a return trip. */
     val waystoneReturnM: Double = 500.0,
+    /** Discovery bonus, thinning and regrowth of resource sources. */
+    val harvest: HarvestParams = HarvestParams(),
 )
 
 // ---- Derived state ----
@@ -190,6 +192,8 @@ sealed class WorldEvent {
     data class ProjectBuilt(override val day: Int, val areaId: String, val projectId: String) : WorldEvent()
     data class MonumentRaised(override val day: Int, val monumentId: String) : WorldEvent()
     data class LandmarkDiscovered(override val day: Int, val landmarkId: String) : WorldEvent()
+    /** A place you harvest often has thinned below half; it grows back if left to rest. */
+    data class SourceThinning(override val day: Int, val landmarkId: String) : WorldEvent()
     data class GoalChanged(override val day: Int, val from: Int, val to: Int) : WorldEvent()
 }
 
@@ -261,6 +265,8 @@ data class WorldState(
     val treasury: Treasury = Treasury(),
     val proposal: Proposal? = null,
     val monuments: List<MonumentState> = emptyList(),
+    /** How full each place's resources are today (1 = untouched or fully grown back), by landmark id. */
+    val abundance: Map<String, Double> = emptyMap(),
 ) {
     fun regionName(id: Int) = regions.firstOrNull { it.id == id }?.name ?: "a distant land"
 

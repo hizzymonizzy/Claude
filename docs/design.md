@@ -553,6 +553,23 @@ Automatic on milestones: first 5K / 10K / half-marathon distance in one outdoor 
 
 ---
 
+### 12.x Discovery bonus and harvest pressure (alpha 0.9.0)
+
+Finding new ground should pay better than frequenting the same spot, and an old haunt left alone should become
+worth revisiting. Every source has an **abundance** from 0 to 1: each wood, park, beach or lake (wood/food), each
+place of interest (metal), each street (stone) and each ~25 m patch of water you paddle (food).
+
+- **Discovery bonus:** the first harvest from a source you've never touched pays ×2 (metal: 3 on discovery).
+- **Thinning:** each day you harvest a source, its abundance drops 0.15, down to a floor of 0.3.
+- **Regrowth:** each day it rests, abundance climbs 0.05 back toward 1 (from the floor, ~2 weeks).
+- Yield = base × abundance at the time. A daily park walk settles at about a third of the yield; the same park
+  every third day stays near full.
+- The dispatch notes when a place drops below half ("thinning… give it a rest"). The Atlas shows each place as
+  flourishing, recovering, worn, or thinned.
+- Map pointers pick the best value, yield per distance, so a fresh wood a little further away beats a thinned
+  one next door, and they label never-harvested sources "new".
+- Gold is untouched: effort is never penalized for being routine.
+
 ## 13. Townspeople (Phase 4), outline only
 
 - **Settlement character** from movement mix: mostly running → *messenger hub*; long slow weekend walks → *market town*; hilly → *highland outpost*; coastal → *fishing village*.

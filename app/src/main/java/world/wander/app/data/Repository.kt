@@ -54,8 +54,8 @@ data class MapLayers(
     val water: List<Pair<List<LatLng>, Int>> = emptyList(),
 )
 
-/** The nearest place to gather one resource: where it is, what it's called, and how far. */
-data class ResourceTarget(val resource: String, val name: String, val point: LatLng, val distanceM: Double)
+/** The best nearby place to gather one resource: where, what it's called, how far, and "new" or "thinned". */
+data class ResourceTarget(val resource: String, val name: String, val point: LatLng, val distanceM: Double, val note: String = "")
 
 /** Everything the UI, the tracking service and the daily worker share. */
 class Repository(context: Context) {
@@ -389,7 +389,7 @@ class Repository(context: Context) {
     }
 
     /**
-     * The nearest source of each resource, from map data already on the phone (nothing is fetched):
+     * The best nearby source of each resource (yield per distance), from map data already on the phone (nothing is fetched):
      * wood from woods and parks, food from water and beaches, metal from places you haven't discovered yet
      * (then ones you have), stone from the nearest street you haven't walked. Null where none is near.
      */
@@ -401,13 +401,23 @@ class Repository(context: Context) {
         val water = dao.waterAreasInTiles(tiles).distinctBy { it.id }.mapNotNull {
             try { Landmark(it.id, "Water", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
         }
-        val discovered = _world.value?.landmarks.orEmpty().map { it.id }.toSet()
+        val world = _world.value
+        val discovered = world?.landmarks.orEmpty().map { it.id }.toSet()
+        val abundance = world?.abundance.orEmpty()
         fun reach(l: Landmark): Pair<LatLng, Double> =
             if (l.contains(from.lat, from.lng)) from to 0.0
             else l.rings.flatten().minBy { Geo.distanceM(from, it) }.let { it to Geo.distanceM(from, it) }
+        // What a source would yield now: never-harvested places pay the discovery bonus, thinned ones less.
+        fun worth(l: Landmark) = abundance[l.id] ?: if (l.id in discovered || l.name == "Water") 1.0 else 2.0
+        fun note(l: Landmark) = when {
+            l.name != "Water" && l.id !in discovered && l.id !in abundance -> "new"
+            (abundance[l.id] ?: 1.0) < 0.5 -> "thinned"
+            else -> ""
+        }
+        // Best value for the walk: yield per distance, so a fresh wood a little further beats a thinned one next door.
         fun best(resource: String, candidates: List<Landmark>): ResourceTarget? =
-            candidates.map { it to reach(it) }.minByOrNull { it.second.second }
-                ?.let { (l, r) -> ResourceTarget(resource, l.name, r.first, r.second) }
+            candidates.map { it to reach(it) }.minByOrNull { (l, r) -> (r.second + 300) / worth(l) }
+                ?.let { (l, r) -> ResourceTarget(resource, l.name, r.first, r.second, note(l)) }
         val metal = places.filter { it.kind in Yields.METAL_KINDS }
         val streets = _layers.value.peek.mapNotNull { e ->
             Overpass.decode(e.geometry).minByOrNull { Geo.distanceM(from, it) }?.let { pt -> Triple(e.name ?: "A new street", pt, Geo.distanceM(from, pt)) }
@@ -415,7 +425,7 @@ class Repository(context: Context) {
         listOfNotNull(
             best("wood", places.filter { it.kind in Yields.WOOD_KINDS }),
             best("food", places.filter { it.kind in Yields.FOOD_KINDS } + water),
-            streets?.let { ResourceTarget("stone", it.first, it.second, it.third) },
+            streets?.let { ResourceTarget("stone", it.first, it.second, it.third, "new") },
             best("metal", metal.filter { it.id !in discovered }) ?: best("metal", metal),
         ).filter { it.distanceM <= 8_000 }
     }

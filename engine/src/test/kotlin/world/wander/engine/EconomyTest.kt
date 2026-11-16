@@ -73,4 +73,28 @@ class EconomyTest {
         assertTrue(ids.containsAll(listOf("day_5k", "day_10k", "total_100k")))
         assertTrue("day_21k" !in ids)
     }
+
+    @Test
+    fun newSourcesPayABonusFavouritesThinAndRestedOnesGrowBack() {
+        val h = Harvest()
+        assertEquals(2.0, h.take("park", 0, 1.0), 1e-9)          // discovery bonus
+        assertEquals(0.9, h.take("park", 1, 1.0), 1e-9)          // thinned once, a day's regrowth
+        var last = 0.0
+        for (d in 2..20) last = h.take("park", d, 1.0)            // every day: down to the floor
+        assertEquals(0.35, last, 1e-9)                            // floor plus a day's regrowth
+        assertEquals(0.3 + 0.05 * 8, h.abundance("park", 28), 1e-9)    // eight days' rest
+        assertEquals(1.0, h.abundance("park", 60), 1e-9)               // fully grown back
+        assertEquals(2.0, h.take("new wood", 20, 1.0), 1e-9)      // somewhere new still pays double
+    }
+
+    @Test
+    fun aDailyParkYieldsLessThanTheSameTimeSpreadOverNewWoods() {
+        val parks = (0 until 10).associate { "p$it" to LandmarkInfo("p$it", "Wood $it", "wood", 50_000.0) }
+        val base = input(10, 30.0, 3.0)
+        val same = WorldEngine().build(base.copy(landmarks = parks, landmarkVisits = (0 until 10).map { LandmarkVisit("p0", start + it, 600.0) }), start + 9)
+        val varied = WorldEngine().build(base.copy(landmarks = parks, landmarkVisits = (0 until 10).map { LandmarkVisit("p$it", start + it, 600.0) }), start + 9)
+        assertTrue(varied.treasury.wood > same.treasury.wood * 1.5)
+        assertTrue((same.abundance["p0"] ?: 1.0) < 0.5)
+        assertTrue(DispatchWriter.write(same, same.events.filterIsInstance<WorldEvent.SourceThinning>().first().day).text.contains("Wood 0 is thinning"))
+    }
 }

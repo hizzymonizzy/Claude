@@ -131,7 +131,7 @@ fun ResourcePointers(
                         )
                     }
                     Surface(shape = RoundedCornerShape(6.dp), color = Color(0xE6F4ECD8)) {
-                        Text(formatDistance(t.distanceM), fontSize = 10.sp, color = Color(0xFF5B4636), modifier = Modifier.padding(horizontal = 4.dp))
+                        Text(formatDistance(t.distanceM) + if (t.note == "new") " · new" else "", fontSize = 10.sp, color = Color(0xFF5B4636), modifier = Modifier.padding(horizontal = 4.dp))
                     }
                 }
             }

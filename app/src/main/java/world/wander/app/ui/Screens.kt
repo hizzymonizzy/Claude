@@ -264,7 +264,8 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
             items(places, key = { "lm-" + it.id }) { l ->
                 val hit = index.firstOrNull { it.kind == "Place" && it.name == l.name }
                 HitRow(
-                    l.name, "${l.kind.replace('_', ' ')} · ${l.visitDays} visit-day${if (l.visitDays == 1) "" else "s"} · since ${dayLabel(l.discoveredDay)}",
+                    l.name, "${l.kind.replace('_', ' ')} · ${l.visitDays} visit-day${if (l.visitDays == 1) "" else "s"} · since ${dayLabel(l.discoveredDay)}" +
+                        (w?.abundance?.get(l.id)?.let { " · " + abundanceLabel(it) } ?: ""),
                     MapIcons.drawable(MapIcons.placeIcon(l.kind)),
                 ) { hit?.let { go(it.where) } }
             }
@@ -379,4 +380,12 @@ fun GoalScreen(repo: Repository) {
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
+}
+
+/** How a harvested place is doing: thinned by frequent harvests, or grown back by rest. */
+fun abundanceLabel(a: Double): String = when {
+    a >= 0.95 -> "flourishing"
+    a >= 0.7 -> "recovering"
+    a >= 0.5 -> "worn"
+    else -> "thinned · let it rest"
 }

@@ -81,6 +81,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
 
         // Economy.
         var treasury = Treasury()
+        val harvest = Harvest(p.harvest)
         val built = HashMap<String, MutableList<String>>()          // areaId -> project ids
         val declinedOn = HashMap<Pair<String, String>, Int>()       // (areaId, projectId) -> day
         var pending: Proposal? = null
@@ -167,6 +168,13 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             r.lastPresence = day
             lastRegion = rid
         }
+        /** Harvest from a named place; notes when a favourite spot starts to thin. */
+        fun harvestPlace(id: String, day: Int, base: Double): Double {
+            val before = harvest.abundance("l:$id", day)
+            val got = harvest.take("l:$id", day, base)
+            if (before >= 0.5 && harvest.abundance("l:$id", day) < 0.5) events += WorldEvent.SourceThinning(day, id)
+            return got
+        }
         fun raise(id: String, day: Int) { if (id !in monuments) { monuments[id] = day; events += WorldEvent.MonumentRaised(day, id) } }
         fun announceRegion(rid: Int, day: Int, from: Int?) {
             if (rid > 0 && from != null) events += WorldEvent.RegionFounded(day, rid, from)
@@ -201,6 +209,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             // 1. Roads: discovery and wear.
             val newlyDiscovered = mutableListOf<String>()
             var roadFootM = 0.0
+            var roadStone = 0.0
             coverageByDay[day]?.groupBy { it.edgeId }?.forEach { (edgeId, covs) ->
                 val info = input.edges[edgeId] ?: return@forEach
                 val e = edges.getOrPut(edgeId) { EdgeAcc(info) }
@@ -208,6 +217,7 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
                 val footLen = mergedLength(covs.filter { it.mode == Mode.FOOT }.map { it.fromM to it.toM })
                 val cycleLen = mergedLength(covs.filter { it.mode == Mode.CYCLE }.map { it.fromM to it.toM })
                 roadFootM += footLen
+                roadStone += harvest.take("e:$edgeId", day, footLen / 1000.0)
                 val wearNeed = min(p.wearDayFraction * len, p.wearDayMaxM)
                 when {
                     footLen >= wearNeed -> e.wear += 1.0
@@ -229,15 +239,15 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             visitsByDay[day]?.groupBy { it.landmarkId }?.forEach { (id, vs) ->
                 input.landmarks[id]?.let { info ->
                     val secs = vs.sumOf { it.seconds }
-                    if (info.kind in Yields.WOOD_KINDS) earnWood += secs / 300.0
-                    if (info.kind in Yields.FOOD_KINDS) earnFood += secs / 600.0
+                    if (info.kind in Yields.WOOD_KINDS) earnWood += harvestPlace(id, day, secs / 300.0)
+                    if (info.kind in Yields.FOOD_KINDS) earnFood += harvestPlace(id, day, secs / 600.0)
                 }
                 val info = input.landmarks[id] ?: return@forEach
                 val need = if (info.pointLike) p.pointLandmarkSeconds else p.landmarkSeconds
                 if (vs.sumOf { it.seconds } < need) return@forEach
                 landmarkDays.merge(id, 1, Int::plus)
                 landmarkLast[id] = day
-                if (info.kind in Yields.METAL_KINDS) earnMetal += if (id !in landmarkFirst) 3.0 else 1.0
+                if (info.kind in Yields.METAL_KINDS) earnMetal += harvest.take("m:$id", day, 1.5)
                 if (id !in landmarkFirst) {
                     landmarkFirst[id] = day
                     events += WorldEvent.LandmarkDiscovered(day, id)
@@ -379,10 +389,15 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             val footKm = (mvToday?.sumOf { it.footMeters } ?: 0.0) / 1000
             val waterKm = (mvToday?.sumOf { it.waterMeters } ?: 0.0) / 1000
             val outdoorKm = footKm + (mvToday?.sumOf { it.cycleMeters } ?: 0.0) / 1000 + waterKm
-            earnFood += waterKm * 2
+            // Paddling: 2 food per km, spread over the water you crossed; new water pays the discovery bonus.
+            val wakeCells = wakeByDay[day]?.map { it.cell }?.distinct().orEmpty()
+            if (waterKm > 0) {
+                if (wakeCells.isEmpty()) earnFood += waterKm * 2
+                else wakeCells.forEach { earnFood += harvest.take("w:$it", day, waterKm * 2 / wakeCells.size) }
+            }
             val earned = Treasury(
                 gold = Yields.gold(intensityByDay[day] ?: 0.0, outdoorKm),
-                wood = earnWood, food = earnFood, stone = roadFootM / 1000.0, metal = earnMetal,
+                wood = earnWood, food = earnFood, stone = roadStone, metal = earnMetal,
             )
             treasury += earned
             totalKm += outdoorKm
@@ -518,6 +533,9 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
             portals = portals.map { (k, v) -> PortalLink(k.first, k.second, v) },
             treasury = treasury,
             proposal = pending,
+            abundance = harvest.snapshot(today).keys.filter { it.startsWith("l:") || it.startsWith("m:") }
+                .map { it.substring(2) }.toSet()
+                .associateWith { id -> minOf(harvest.abundance("l:$id", today), harvest.abundance("m:$id", today)) },
             monuments = monuments.map { (id, d) -> Monuments.byId(id).let { MonumentState(it.id, it.name, it.description, d) } },
             exploredAreas = areas.filter { (id, a) -> a.cells.isNotEmpty() || id in settlements }
                 .map { (id, a) ->

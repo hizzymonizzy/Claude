@@ -87,6 +87,10 @@ object DispatchWriter {
 
         // The economy.
         summary?.earned?.takeIf { !it.isEmpty }?.let { lines += "Earned $it." }
+        events.filterIsInstance<WorldEvent.SourceThinning>()
+            .mapNotNull { e -> state.landmarks.firstOrNull { it.id == e.landmarkId }?.name }.distinct().take(2).forEach {
+                lines += "$it is thinning from all your harvesting. Give it a rest and it will grow back; fresh ground yields more."
+            }
         for (e in events) when (e) {
             is WorldEvent.ProjectBuilt -> Projects.byId(e.projectId)?.let { lines += "Built: ${it.name.lowercase().replaceFirstChar(Char::uppercase)} in ${name(e.areaId)}." }
             is WorldEvent.MonumentRaised -> Monuments.byId(e.monumentId).let { lines += "A monument rises at your capital: ${it.name}. ${it.description}" }

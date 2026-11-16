@@ -94,3 +94,51 @@ object Yields {
     fun gold(intensityMinutes: Double, outdoorKm: Double): Double =
         minOf(intensityMinutes, 90.0) + 0.25 * maxOf(0.0, intensityMinutes - 90.0) + 2.0 * outdoorKm
 }
+
+/**
+ * Every source of wood, food, metal or stone (a wood, a beach, a place, a street) has an abundance from
+ * 0 to 1. Harvesting it on a day thins it; leaving it alone lets it grow back. The first harvest from a
+ * source you've never touched pays a discovery bonus. So new ground pays best, a favourite spot pays less
+ * the more you lean on it, and an old haunt left to rest is worth going back to.
+ */
+data class HarvestParams(
+    /** Abundance lost each day a source is harvested. */
+    val depletion: Double = 0.15,
+    /** Abundance regained per day a source rests. */
+    val regenPerDay: Double = 0.05,
+    /** A source never yields less than this share. */
+    val floor: Double = 0.3,
+    /** The first harvest from a new source pays this multiple. */
+    val discoveryBonus: Double = 2.0,
+)
+
+class Harvest(private val p: HarvestParams = HarvestParams()) {
+    private class Source(var abundance: Double, var lastDay: Int)
+    private val sources = HashMap<String, Source>()
+
+    /** Abundance of a source on [day], counting regrowth since it was last harvested (1.0 if never). */
+    fun abundance(id: String, day: Int): Double =
+        sources[id]?.let { minOf(1.0, it.abundance + p.regenPerDay * (day - it.lastDay)) } ?: 1.0
+
+    fun isNew(id: String) = id !in sources
+
+    /**
+     * Harvests [base] from source [id] on [day] and returns what it actually yields. Harvesting the same
+     * source twice in one day thins it only once.
+     */
+    fun take(id: String, day: Int, base: Double): Double {
+        if (base <= 0) return 0.0
+        val s = sources[id]
+        if (s == null) {
+            sources[id] = Source(1.0 - p.depletion, day)
+            return base * p.discoveryBonus
+        }
+        if (s.lastDay == day) return base * (s.abundance + p.depletion).coerceAtMost(1.0)
+        val a = abundance(id, day)
+        s.abundance = maxOf(p.floor, a - p.depletion)
+        s.lastDay = day
+        return base * a
+    }
+
+    fun snapshot(day: Int): Map<String, Double> = sources.keys.associateWith { abundance(it, day) }
+}
