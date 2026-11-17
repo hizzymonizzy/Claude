@@ -19,6 +19,19 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | More food sources, especially for landlocked areas | Food now comes only from shores, paddling and harbours; inland players can't earn it | proposed |
 | Ideas to discuss for food: farmland and orchards (walk along field edges, a line source like shores); allotments and community gardens (nodes); farmers' markets (nodes, today counted as civic → metal); foraging along trails through woods (a little food alongside wood) | Every region should have some food | proposed |
 
+| Wood not credited after a walk past or through a park (0.9.6/0.9.7, node still "new") | Blocks the campfire (5 wood); needs diagnostics to confirm cause | proposed |
+| Per-walk gathering summary in the log: each place's seconds in zone and whether it paid | We can't tell from today's log why a node didn't pay | proposed |
+| Wood as a line source too: park edges and paths through woods | Walking beside a park currently pays nothing (wood needs you inside) | proposed |
+| Bigger resource icons; tap a node for details (name, what it gives, how to gather, state, regrowth) | Icons too small to read; no way to learn what a node is | proposed |
+| Starter projects affordable within a walk or two anywhere | Campfire's 5 wood has blocked the quest loop since day one | proposed |
+
+## Villages that show on the map (player idea, 2026-11-17)
+| Item | Why | Status |
+|---|---|---|
+| Built projects appear on the map at their settlement (campfire, well, market…), as 0 A.D.-style sprites | Villager requests should visibly change the world; buildings are now hidden in explored land | proposed |
+| Upgrade chains: campfire → meeting hall → town hall, etc. | Progression you can see | proposed |
+| Infrastructure grows the green: each built project widens the cleared, developed ground around the settlement | "The green fills in as the infrastructure develops around it" | proposed |
+
 ## Gameplay
 | Item | Why | Status |
 |---|---|---|
