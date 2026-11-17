@@ -124,7 +124,7 @@ class MapLayersBuilderTest {
     fun resourcePointersArePinnedMapPointsWithKnownIcons() {
         // Alpha 0.9.4: they were a screen overlay that didn't follow the map; now they're map features.
         val targets = listOf("wood", "food", "stone", "metal").map {
-            world.wander.app.data.ResourceTarget(it, "x", at(100.0, 0.0), 100.0)
+            world.wander.engine.ResourceTarget(it, "x", at(100.0, 0.0), 100.0)
         }
         val fc = MapLayersBuilder.resources(targets).features()!!
         assertEquals(4, fc.size)

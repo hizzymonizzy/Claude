@@ -90,6 +90,29 @@ object Yields {
     val METAL_KINDS = setOf("hospital", "government", "emergency", "civic", "school", "library", "worship", "culture",
         "sports", "transport", "harbour", "lighthouse", "historic", "store")
 
+    /**
+     * How close to a place's edge counts as being at it: along a shore or beach (food), at the door of a
+     * library or station (metal); for woods and parks you go inside.
+     */
+    fun gatherMarginM(kind: String): Double = when (kind) {
+        in FOOD_KINDS -> 40.0
+        in METAL_KINDS -> 25.0
+        else -> 0.0
+    }
+
+    /** Time at a source that counts as a visit (and gathers). A walk through a small park is about this long. */
+    const val VISIT_SECONDS = 30.0
+
+    /**
+     * What one day's visit to a source yields before thinning and the discovery bonus: one unit just for coming
+     * by (so walking through a node always gathers something), plus more the longer you stay.
+     */
+    fun visitYield(resource: String, seconds: Double): Double = when (resource) {
+        "wood" -> 1.0 + seconds / 300.0
+        "food" -> 1.0 + seconds / 600.0
+        else -> 0.0
+    }
+
     /** Gold for a day: intensity minutes (full rate to 90, then a quarter) plus 2 per outdoor km. */
     fun gold(intensityMinutes: Double, outdoorKm: Double): Double =
         minOf(intensityMinutes, 90.0) + 0.25 * maxOf(0.0, intensityMinutes - 90.0) + 2.0 * outdoorKm
@@ -141,4 +164,7 @@ class Harvest(private val p: HarvestParams = HarvestParams()) {
     }
 
     fun snapshot(day: Int): Map<String, Double> = sources.keys.associateWith { abundance(it, day) }
+
+    /** Sources harvested on [day] (ids as given to [take], e.g. "l:w123"). */
+    fun harvestedOn(day: Int): Set<String> = sources.filterValues { it.lastDay == day }.keys
 }

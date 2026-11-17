@@ -117,7 +117,7 @@ data class WorldParams(
     /** Wear needed for each visual road level (trail, path, cobble, road, avenue). */
     val wearLevels: List<Double> = listOf(1.0, 3.0, 10.0, 30.0, 100.0),
     /** Seconds inside a named area on one day to discover it. */
-    val landmarkSeconds: Double = 60.0,
+    val landmarkSeconds: Double = Yields.VISIT_SECONDS,
     /** Points of interest are small circles; walking past one for this long discovers it. */
     val pointLandmarkSeconds: Double = 15.0,
     /** Places this far apart belong to different regions. */
@@ -267,6 +267,8 @@ data class WorldState(
     val monuments: List<MonumentState> = emptyList(),
     /** How full each place's resources are today (1 = untouched or fully grown back), by landmark id. */
     val abundance: Map<String, Double> = emptyMap(),
+    /** Sources you gathered from today (places and unnamed water), so their nodes show as gathered. */
+    val gatheredToday: Set<String> = emptySet(),
 ) {
     fun regionName(id: Int) = regions.firstOrNull { it.id == id }?.name ?: "a distant land"
 

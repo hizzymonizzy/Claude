@@ -131,8 +131,8 @@ class TrackProcessor(
         return farFromRoads >= 0.7 * run.size && onBeach < 0.3 * run.size && median in 0.4..3.5
     }
 
-    /** Being this close to a place's edge counts as being at it: shores of water and beaches, not woods or buildings. */
-    fun gatherMarginM(kind: String): Double = if (kind in Yields.FOOD_KINDS) 40.0 else 0.0
+    /** Being this close to a place's edge counts as being at it (see [Yields.gatherMarginM]). */
+    fun gatherMarginM(kind: String): Double = Yields.gatherMarginM(kind)
 
     fun process(
         points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>, landmarks: List<Landmark> = emptyList(),

@@ -60,6 +60,7 @@ import org.maplibre.android.style.layers.PropertyFactory.textHaloWidth
 import org.maplibre.android.style.layers.PropertyFactory.textOffset
 import org.maplibre.android.style.layers.PropertyFactory.textSize
 import org.maplibre.android.style.layers.SymbolLayer
+import org.maplibre.android.style.layers.PropertyFactory.iconOpacity
 import org.maplibre.android.style.layers.PropertyFactory.circleRadius
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
@@ -270,20 +271,31 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.4f)),
         ),
     ) }
-    // Nearest resources: drawn in the map so they stay pinned to the ground (gold ring + resource icon).
+    // Resource nodes: fixed spots on places and streets, drawn in the map so they stay pinned to the ground.
+    // Ring: gold = fresh, bright gold + thicker = the one the arrow points to, green = you're in its zone,
+    // grey-green with a tick = gathered today, faded = thinned.
     guard(problems, "resource-rings") { s.addLayer(
         CircleLayer("resource-rings", "resources").withProperties(
-            // Gold ring; green when you're close enough to gather.
-            circleColor("#F4ECD8"), circleOpacity(0.85f),
-            circleStrokeColor(switchCase(eq(get("near"), literal(true)), literal("#3F9D4A"), literal("#C4A052"))),
-            circleStrokeWidth(switchCase(eq(get("near"), literal(true)), literal(4f), literal(2.5f))),
-            circleRadius(interpolate(linear(), zoom(), stop(10, 10f), stop(16, 15f))),
+            circleColor(match(get("state"), literal("#F4ECD8"), stop("gathered", "#DCE8D2"))),
+            circleOpacity(match(get("state"), literal(0.9f), stop("thinned", 0.5f))),
+            circleStrokeColor(switchCase(
+                eq(get("near"), literal(true)), literal("#3F9D4A"),
+                eq(get("state"), literal("gathered")), literal("#6E8F68"),
+                eq(get("best"), literal(true)), literal("#D9A520"),
+                literal("#B89A5A"),
+            )),
+            circleStrokeWidth(switchCase(eq(get("near"), literal(true)), literal(4f), eq(get("best"), literal(true)), literal(3f), literal(2f))),
+            circleRadius(interpolate(linear(), zoom(), stop(10, 9f), stop(16, 14f))),
         ),
     ) }
     guard(problems, "resource-icons") { s.addLayer(
         SymbolLayer("resource-icons", "resources").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
-            iconSize(interpolate(linear(), zoom(), stop(10, 0.28f), stop(16, 0.4f))),
+            iconSize(interpolate(linear(), zoom(), stop(10, 0.26f), stop(16, 0.38f))),
+            iconOpacity(match(get("state"), literal(1f), stop("gathered", 0.55f), stop("thinned", 0.5f))),
+            textField(match(get("state"), literal(""), stop("gathered", "✓"), stop("new", "new"))), textFont(FONT),
+            textSize(11f), textColor("#3F6B3A"), textHaloColor("#F4ECD8"), textHaloWidth(1.5f),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 1.1f)), textAllowOverlap(true),
         ),
     ) }
     s.addLayer(

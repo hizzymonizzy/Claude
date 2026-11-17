@@ -27,7 +27,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import world.wander.engine.Geo
-import world.wander.app.data.ResourceTarget
+import world.wander.engine.ResourceTarget
+import world.wander.engine.Yields
+import world.wander.engine.GATHER_M
 import world.wander.app.data.MapLayers
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -171,9 +173,6 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     LaunchedEffect(style, captureMode) {
         style?.getLayerAs<SymbolLayer>("me")?.setProperties(iconImage(if (captureMode == "WATER") "wanderer_paddle" else "wanderer"))
     }
-    LaunchedEffect(style, targets, showPointers) {
-        style?.source("resources")?.setGeoJson(MapLayersBuilder.resources(if (showPointers) targets else emptyList()))
-    }
     LaunchedEffect(style, track) { style?.source("track")?.setGeoJson(MapLayersBuilder.track(track)) }
     LaunchedEffect(style, me) {
         style?.source("me")?.setGeoJson(MapLayersBuilder.point(me))
@@ -184,40 +183,65 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         }
     }
 
-    // Each pointer keeps aiming at the same spot of the same source as you walk (the nearest edge of a lake would
-    // otherwise slide along with you); it only moves when a different source becomes the best choice.
-    val aimed = remember { HashMap<String, Pair<String, WLatLng>>() }
-    fun steady(found: List<ResourceTarget>, from: WLatLng): List<ResourceTarget> = found.map { t ->
-        val prev = aimed[t.resource]
-        if (prev != null && prev.first == t.sourceId && t.distanceM > GATHER_M) t.copy(point = prev.second, distanceM = Geo.distanceM(from, prev.second))
-        else { aimed[t.resource] = t.sourceId to t.point; t }
-    }
-    // Nearest source of each resource, from where you are (or home), refreshed as you move or the world changes.
+    // Live gathering: seconds spent in each node's zone during the current recording. Once a node passes the
+    // visit threshold it shows as gathered right away; the resources themselves are credited when the walk ends.
+    val dwell = remember { HashMap<String, Double>() }
+    var pendingGathered by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var lastSearch by remember { mutableStateOf<Pair<WLatLng, Long>?>(null) }
+    val recordingNow = captureMode != null
+    LaunchedEffect(recordingNow) { if (!recordingNow) { dwell.clear(); pendingGathered = emptySet() } }
+    // Resource nodes around you (or home), refreshed as you move, while recording every 20 s, and when the world changes.
     var targetsFrom by remember { mutableStateOf<Pair<WLatLng, MapLayers>?>(null) }
     LaunchedEffect(me, layers) {
         val from = me ?: repo.prefs.homeLat?.let { lat -> repo.prefs.homeLng?.let { WLatLng(lat, it) } } ?: return@LaunchedEffect
         val last = targetsFrom
-        if (last != null && last.second === layers && Geo.distanceM(last.first, from) < 40) return@LaunchedEffect
+        val now = System.currentTimeMillis()
+        val stale = recordingNow && (lastSearch?.second?.let { now - it >= 20_000 } ?: true)
+        if (last != null && last.second === layers && Geo.distanceM(last.first, from) < 15 && !stale) return@LaunchedEffect
+        // Time since the previous search counts toward every node you were (and still are) in the zone of.
+        lastSearch?.let { (_, t) ->
+            val dt = ((now - t) / 1000.0).coerceAtMost(30.0)
+            if (recordingNow) for (n in targets) if (n.distanceM <= GATHER_M) dwell.merge(n.sourceId, dt, Double::plus)
+        }
+        lastSearch = from to now
         targetsFrom = from to layers
         searching = true
-        // A newer search may cancel this one (the world just rebuilt); let it, rather than blanking the pointers.
+        // A newer search may cancel this one (the world just rebuilt); let it, rather than blanking the nodes.
         // If this spot's places haven't downloaded yet (the server is often busy), try again a few times.
         for (attempt in 1..6) {
-            targets = try { steady(repo.nearestSources(from), from) } catch (e: CancellationException) { targetsFrom = null; searching = false; throw e }
+            targets = try { repo.nearestSources(from) } catch (e: CancellationException) { targetsFrom = null; searching = false; throw e }
                 catch (e: Exception) { repo.log("map", "Resource search failed: ${e.message}"); targets }
-            repo.log("map", "Resource pointers: " + targets.joinToString { "${it.resource} ${formatDistance(it.distanceM)}" }.ifEmpty { "none nearby yet" })
+            val newlyGathered = targets.filter { (dwell[it.sourceId] ?: 0.0) >= Yields.VISIT_SECONDS && it.sourceId !in pendingGathered }
+            if (newlyGathered.isNotEmpty()) {
+                pendingGathered = pendingGathered + newlyGathered.map { it.sourceId }
+                newlyGathered.forEach { repo.log("gather", "Gathering ${it.resource} at ${it.name}; credited when this walk ends") }
+            }
+            repo.log("map", "Resource nodes: " + targets.groupBy { it.resource }.entries.joinToString { (r, ns) ->
+                "$r ${ns.size}" + (ns.firstOrNull { it.best }?.let { " (best ${it.name} ${formatDistance(it.distanceM)}${if (it.note.isNotEmpty()) " ${it.note}" else ""})" } ?: "")
+            }.ifEmpty { "none nearby yet" })
             if (repo.placesLoadedAt(from)) break
             searching = false
             delay(90_000)
         }
         searching = false
     }
+    // Nodes you've gathered at on this walk show the tick now; the arrow moves on to the nearest one you haven't.
+    val shownNodes = targets.map { if (it.sourceId in pendingGathered && it.note != "gathered") it.copy(note = "gathered", best = false) else it }
+        .let { ns ->
+            val next = ns.groupBy { it.resource }.mapValues { (_, list) ->
+                if (list.any { it.best }) null else list.filter { it.note != "gathered" }.minByOrNull { it.distanceM }?.sourceId
+            }
+            ns.map { n -> if (next[n.resource] == n.sourceId) n.copy(best = true) else n }
+        }
+    LaunchedEffect(style, shownNodes, showPointers) {
+        style?.source("resources")?.setGeoJson(MapLayersBuilder.resources(if (showPointers) shownNodes else emptyList()))
+    }
 
     Box(modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         if (showPointers && targets.isNotEmpty()) {
             ResourcePointers(
-                targets = targets,
+                targets = shownNodes.filter { it.best },
                 project = { p -> map?.projection?.toScreenLocation(MlLatLng(p.lat, p.lng))?.let { it.x to it.y } },
                 topInsetPx = topInsetPx,
                 onPick = { repo.focus.value = it.point },
@@ -246,7 +270,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             }
             world?.let { w ->
                 Spacer(Modifier.height(6.dp))
-                InventoryBar(w.treasury, targets, today = w.days[w.today]?.earned) { repo.focus.value = it.point }
+                InventoryBar(w.treasury, shownNodes.filter { it.best }, today = w.days[w.today]?.earned) { repo.focus.value = it.point }
                 if (showPointers && targets.isEmpty()) {
                     Text(
                         if (searching) "Looking for resources nearby…" else "No wood, food, stone or metal mapped near here yet",

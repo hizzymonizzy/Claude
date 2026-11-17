@@ -42,11 +42,11 @@ internal fun Simulation.places(d: Simulation.Day) {
     visitsByDay[day]?.groupBy { it.landmarkId }?.forEach { (id, vs) ->
         val info = input.landmarks[id] ?: return@forEach
         val secs = vs.sumOf { it.seconds }
-        if (info.kind in Yields.WOOD_KINDS) d.wood += harvestPlace(id, day, secs / 300.0)
-        if (info.kind in Yields.FOOD_KINDS) d.food += harvestPlace(id, day, secs / 600.0)
-        if (info.name.isBlank()) return@forEach // unnamed water: a food source, not a place to discover
         val need = if (info.pointLike) p.pointLandmarkSeconds else p.landmarkSeconds
-        if (secs < need) return@forEach
+        if (secs < need) return@forEach // passing by isn't a visit
+        if (info.kind in Yields.WOOD_KINDS) d.wood += harvestPlace(id, day, Yields.visitYield("wood", secs))
+        if (info.kind in Yields.FOOD_KINDS) d.food += harvestPlace(id, day, Yields.visitYield("food", secs))
+        if (info.name.isBlank()) return@forEach // unnamed water: a food source, not a place to discover
         landmarkDays.merge(id, 1, Int::plus)
         landmarkLast[id] = day
         if (info.kind in Yields.METAL_KINDS) d.metal += harvest.take("m:$id", day, 1.5)

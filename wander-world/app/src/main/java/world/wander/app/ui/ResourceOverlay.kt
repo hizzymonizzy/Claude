@@ -32,7 +32,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import world.wander.app.R
-import world.wander.app.data.ResourceTarget
+import world.wander.engine.ResourceTarget
+import world.wander.engine.GATHER_M
 import world.wander.engine.LatLng
 import world.wander.engine.Treasury
 import kotlin.math.abs
@@ -43,9 +44,6 @@ private val RESOURCE_ICONS = mapOf(
     "gold" to R.drawable.oad_medal_gold, "wood" to R.drawable.oad_res_wood, "food" to R.drawable.oad_res_food,
     "stone" to R.drawable.oad_res_stone, "metal" to R.drawable.oad_res_metal,
 )
-
-/** Within this distance of a pointer you're at the source: its ring turns green ("gathering"). */
-const val GATHER_M = 40.0
 
 fun formatDistance(m: Double): String = if (m < 950) "${(m / 10).roundToInt() * 10} m" else "%.1f km".format(m / 1000)
 

@@ -49,7 +49,9 @@ choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/p
   - Each step has its own file in `sim/`: `Regions`, `RoadsAndPlaces`, `Settlements`, `Goal`, `Economy`.
     `Snapshot.kt` builds the immutable `WorldState`.
   - `TrackProcessor` (GPS filtering, pottering, water detection), `MapMatcher` (HMM map matching),
-    `Economy.kt` (yields, projects, monuments, harvest thinning), `Dispatch.kt` (daily text).
+    `Economy.kt` (yields, projects, monuments, harvest thinning), `Resources.kt` (resource nodes and pointers),
+    `Dispatch.kt` (daily text). `GatheringSimulationTest` walks through nodes end to end; extend it when gathering
+    or pointers change.
   - Tunable numbers live in `WorldParams` / `HarvestParams`.
 - `app/` (`world.wander.app`): Android (Compose, MapLibre, Room, WorkManager, Health Connect, H3).
   - `data/Repository.kt` is the hub (processing, rebuild, diagnostics, nearest resources).

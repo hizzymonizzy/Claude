@@ -12,6 +12,7 @@ import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import world.wander.app.data.MapLayers
 import world.wander.app.geo.Overpass
+import world.wander.engine.GATHER_M
 import world.wander.engine.LatLng
 import world.wander.engine.LocalProjection
 import world.wander.engine.WorldState
@@ -109,12 +110,14 @@ object MapLayersBuilder {
     )
 
     /** Resource pointers as map points, so they stay pinned to the ground while you pan and zoom. */
-    fun resources(targets: List<world.wander.app.data.ResourceTarget>): FeatureCollection = FeatureCollection.fromFeatures(
+    fun resources(targets: List<world.wander.engine.ResourceTarget>): FeatureCollection = FeatureCollection.fromFeatures(
         targets.map { t ->
             Feature.fromGeometry(Point.fromLngLat(t.point.lng, t.point.lat)).apply {
                 addStringProperty("icon", "res_${t.resource}")
                 addStringProperty("name", t.name)
                 addBooleanProperty("near", t.distanceM <= GATHER_M)
+                addStringProperty("state", t.note)
+                addBooleanProperty("best", t.best)
             }
         },
     )

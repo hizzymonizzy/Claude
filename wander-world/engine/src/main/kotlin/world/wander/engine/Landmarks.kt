@@ -33,6 +33,27 @@ class Landmark(
 
     val center: LatLng = rings.maxBy { it.size }.let { r -> LatLng(r.sumOf { it.lat } / r.size, r.sumOf { it.lng } / r.size) }
 
+    /**
+     * A fixed spot for this place's resource node, the same however you approach it. For water it's on the
+     * shore (you gather food along the edge); otherwise it's a point inside the area.
+     */
+    val anchor: LatLng by lazy {
+        val outer = rings.maxBy { ringArea(it) }
+        val c = LatLng(outer.sumOf { it.lat } / outer.size, outer.sumOf { it.lng } / outer.size)
+        when {
+            kind == "water" -> outer.minBy { Geo.distanceM(it, c) }
+            contains(c.lat, c.lng) -> c
+            else -> {
+                // Odd shapes (an L-shaped park): the middle of the widest crossing at the centre's latitude.
+                val xs = (1 until outer.size).mapNotNull { i ->
+                    val a = outer[i - 1]; val b = outer[i]
+                    if ((a.lat > c.lat) != (b.lat > c.lat)) a.lng + (c.lat - a.lat) / (b.lat - a.lat) * (b.lng - a.lng) else null
+                }.sorted()
+                xs.chunked(2).filter { it.size == 2 }.maxByOrNull { it[1] - it[0] }?.let { LatLng(c.lat, (it[0] + it[1]) / 2) } ?: outer.first()
+            }
+        }
+    }
+
     /** Inside, or within [marginM] of the outline (walking a lake's shore or a beach's edge counts as being there). */
     fun near(lat: Double, lng: Double, marginM: Double): Boolean {
         if (contains(lat, lng)) return true

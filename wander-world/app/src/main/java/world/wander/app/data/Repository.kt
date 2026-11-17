@@ -39,6 +39,9 @@ import world.wander.engine.WorldEngine
 import world.wander.engine.WorldInput
 import world.wander.engine.WorldState
 import world.wander.engine.Yields
+import world.wander.engine.ResourceFinder
+import world.wander.engine.ResourceTarget
+import world.wander.engine.Street
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -58,12 +61,6 @@ data class MapLayers(
     val coast: List<List<LatLng>> = emptyList(),
 )
 
-/** The best nearby place to gather one resource: where, what it's called, how far, and "new" or "thinned". */
-data class ResourceTarget(
-    val resource: String, val name: String, val point: LatLng, val distanceM: Double, val note: String = "",
-    /** Which place or street this is, so the map can keep pointing at the same spot as you walk. */
-    val sourceId: String = "",
-)
 
 /** Everything the UI, the tracking service and the daily worker share. */
 class Repository(context: Context) {
@@ -428,37 +425,10 @@ class Repository(context: Context) {
             try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
         }
         val water = dao.waterAreasInTiles(tiles).distinctBy { it.id }.mapNotNull {
-            try { Landmark(it.id, "Water", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
-        }
-        val world = _world.value
-        val discovered = world?.landmarks.orEmpty().map { it.id }.toSet()
-        val abundance = world?.abundance.orEmpty()
-        fun reach(l: Landmark): Pair<LatLng, Double> =
-            if (l.contains(from.lat, from.lng)) from to 0.0
-            else l.rings.flatten().minBy { Geo.distanceM(from, it) }.let { it to Geo.distanceM(from, it) }
-        // What a source would yield now: never-harvested places pay the discovery bonus, thinned ones less.
-        fun worth(l: Landmark) = abundance[l.id] ?: if (l.id in discovered || l.name == "Water") 1.0 else 2.0
-        fun note(l: Landmark) = when {
-            l.name != "Water" && l.id !in discovered && l.id !in abundance -> "new"
-            (abundance[l.id] ?: 1.0) < 0.5 -> "thinned"
-            else -> ""
-        }
-        // Best value for the walk: yield per distance, so a fresh wood a little further beats a thinned one next door.
-        fun best(resource: String, candidates: List<Landmark>): ResourceTarget? =
-            candidates.map { it to reach(it) }.minByOrNull { (l, r) -> (r.second + 300) / worth(l) }
-                ?.let { (l, r) -> ResourceTarget(resource, l.name, r.first, r.second, note(l), sourceId = l.id) }
-        val metal = places.filter { it.kind in Yields.METAL_KINDS }
-        // Stone: the nearest street you haven't walked yet (any mapped road nearby, not only ones next to explored ground).
-        val walked = world?.edges.orEmpty().filterValues { it.discovered }.keys
-        val streets = dao.edgesInTiles(Cells.disk(here, 1)).asSequence().filter { it.id !in walked }.mapNotNull { e ->
-            Overpass.decode(e.geometry).minByOrNull { Geo.distanceM(from, it) }?.let { pt -> Triple(e, pt, Geo.distanceM(from, pt)) }
-        }.minByOrNull { it.third }
-        listOfNotNull(
-            best("wood", places.filter { it.kind in Yields.WOOD_KINDS }),
-            best("food", places.filter { it.kind in Yields.FOOD_KINDS } + water),
-            streets?.let { ResourceTarget("stone", it.first.name ?: "A new street", it.second, it.third, "new", sourceId = it.first.id) },
-            best("metal", metal.filter { it.id !in discovered }) ?: best("metal", metal),
-        ).filter { it.distanceM <= 8_000 }
+            try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
+        }.filter { w -> places.none { it.id == w.id } } // a named lake is already a place
+        val streets = dao.edgesInTiles(Cells.disk(here, 1)).map { Street(it.id, it.name, Overpass.decode(it.geometry)) }
+        ResourceFinder.find(from, places, water, streets, _world.value)
     }
 
     fun dispatchFor(state: WorldState, day: Int): Dispatch = DispatchWriter.write(state, day)
@@ -544,7 +514,7 @@ class Repository(context: Context) {
          * v4: paddling (water routes) and wider place categories.
          * v5: paddling detected from being on water (water areas, coast).
          */
-        const val PROCESSING_VERSION = 7
+        const val PROCESSING_VERSION = 8
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }
