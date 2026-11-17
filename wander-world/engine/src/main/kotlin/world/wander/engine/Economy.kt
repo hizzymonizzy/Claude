@@ -100,6 +100,15 @@ object Yields {
         else -> 0.0
     }
 
+    /** Within this distance of the water's edge (or on a beach) you're walking along a shore. */
+    const val SHORE_M = 40.0
+
+    /** Food per fine cell of shore walked: about 2 per km, like stone from roads (doubled on shore never walked). */
+    const val SHORE_FOOD_PER_CELL = 0.08
+
+    /** Places that are food *nodes* (you go to them). Shores are food *lines* (you walk along them). */
+    val FOOD_NODE_KINDS = setOf("harbour")
+
     /** Time at a source that counts as a visit (and gathers). A walk through a small park is about this long. */
     const val VISIT_SECONDS = 30.0
 

@@ -252,7 +252,7 @@ class Repository(context: Context) {
                     db.runInTransaction {
                         dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
                         dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
-                        dao.deleteWaterTrails(seg.id); dao.deleteWake(seg.id)
+                        dao.deleteWaterTrails(seg.id); dao.deleteWake(seg.id); dao.deleteShore(seg.id)
                         // Even a short stop marks where travel set you down.
                         arrivalSincePrevious(seg, pts)?.let { dao.insertArrivals(listOf(ArrivalEntity(segmentId = seg.id, day = it.day, lat = it.lat, lng = it.lng))) }
                         dao.markProcessed(seg.id, true, "no walk: moving around a building, in a vehicle, or poor GPS")
@@ -274,7 +274,8 @@ class Repository(context: Context) {
                     try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
                 }
                 val coastal = dao.waterTiles(tiles.toList()).any { it.coastal }
-                val r0 = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks, water, coastal)
+                val coast = coastLines(tiles)
+                val r0 = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks, water, coastal, coast)
                 val r = if (!probe) r0 else r0.copy(
                     coverage = emptyList(), presence = emptyList(), trails = emptyList(), wildTrails = emptyList(),
                     trodden = emptyList(), arrivals = emptyList(),
@@ -283,9 +284,10 @@ class Repository(context: Context) {
                 db.runInTransaction {
                     dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
                     dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
-                    dao.deleteWaterTrails(seg.id); dao.deleteWake(seg.id)
+                    dao.deleteWaterTrails(seg.id); dao.deleteWake(seg.id); dao.deleteShore(seg.id)
                     dao.insertWaterTrails(r.waterTrails.filter { it.points.size >= 2 }.map { WaterTrailEntity(segmentId = seg.id, day = it.day, geometry = Overpass.encode(it.points)) })
                     dao.insertWake(r.wake.map { WakeEntity(segmentId = seg.id, cell = it.cell, day = it.day) })
+                    dao.insertShore(r.shore.map { ShoreEntity(segmentId = seg.id, cell = it.cell, day = it.day) })
                     dao.insertArrivals((r.arrivals + listOfNotNull(arrivalSincePrevious(seg, pts))).map {
                         ArrivalEntity(segmentId = seg.id, day = it.day, lat = it.lat, lng = it.lng)
                     })
@@ -375,6 +377,7 @@ class Repository(context: Context) {
             trodden = dao.allTrodden().map { TroddenCell(it.cell, it.day) },
             arrivals = dao.allArrivals().map { Arrival(it.day, it.lat, it.lng) },
             wake = dao.allWake().map { TroddenCell(it.cell, it.day) },
+            shore = dao.allShore().map { TroddenCell(it.cell, it.day) },
         )
         val state = engine.build(input, today)
         // Freeze fallback names the first time an unnamed area earns one.
@@ -384,7 +387,11 @@ class Repository(context: Context) {
         val discoveredEntities = discovered.mapNotNull { s -> edges[s.id]?.let { it to s } }
         val nodes = discoveredEntities.flatMap { listOf(it.first.startNode, it.first.endNode) }.distinct()
         val discoveredIds = discovered.map { it.id }.toSet()
-        val peek = nodes.chunked(400).flatMap { dao.edgesTouching(it) }.filter { it.id !in discoveredIds }.distinctBy { it.id }
+        // Unwalked streets: every mapped street in the tiles you've been in (the map keeps those inside explored
+        // ground, so explored land shows every street's status), plus any touching a street you've walked.
+        val presenceTiles = dao.allPresenceCells().map { Cells.parent(it.cell, Cells.TILE_RES) }.toSet()
+        val peek = (dao.edgesInTiles(presenceTiles.toList()) + nodes.chunked(400).flatMap { dao.edgesTouching(it) })
+            .filter { it.id !in discoveredIds }.distinctBy { it.id }
         val trails = dao.allTrails().map { Overpass.decode(it.geometry) }
         val wild = dao.allWild().map { w ->
             val pts = Overpass.decode(w.geometry)
@@ -413,6 +420,11 @@ class Repository(context: Context) {
      * wood from woods and parks, food from water and beaches, metal from places you haven't discovered yet
      * (then ones you have), stone from the nearest street you haven't walked. Null where none is near.
      */
+    /** Coastlines (lines) mapped in these tiles. */
+    private fun coastLines(tiles: Collection<String>): List<List<LatLng>> =
+        dao.terrainInTiles(tiles.toList()).filter { it.kind == "coast" }.distinctBy { it.id }
+            .flatMap { try { Overpass.decodeRings(it.geometry) } catch (_: Exception) { emptyList() } }
+
     /** Whether places (wood, food, metal sources) have been downloaded for the tile at this point. */
     suspend fun placesLoadedAt(p: LatLng): Boolean = withContext(Dispatchers.IO) { dao.landmarkTile(Cells.tile(p.lat, p.lng)) != null }
 
@@ -428,7 +440,7 @@ class Repository(context: Context) {
             try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
         }.filter { w -> places.none { it.id == w.id } } // a named lake is already a place
         val streets = dao.edgesInTiles(Cells.disk(here, 1)).map { Street(it.id, it.name, Overpass.decode(it.geometry)) }
-        ResourceFinder.find(from, places, water, streets, _world.value)
+        ResourceFinder.find(from, places, water, streets, _world.value, coast = coastLines(tiles))
     }
 
     fun dispatchFor(state: WorldState, day: Int): Dispatch = DispatchWriter.write(state, day)
@@ -514,7 +526,7 @@ class Repository(context: Context) {
          * v4: paddling (water routes) and wider place categories.
          * v5: paddling detected from being on water (water areas, coast).
          */
-        const val PROCESSING_VERSION = 8
+        const val PROCESSING_VERSION = 9
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }

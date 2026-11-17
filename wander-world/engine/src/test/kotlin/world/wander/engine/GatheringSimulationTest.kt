@@ -47,6 +47,7 @@ class GatheringSimulationTest {
             areas = mapOf("home" to AreaInfo("home", "Oakdale", null)),
             landmarks = visits.map { it.landmarkId }.distinct().mapNotNull { all[it] }.associate { it.id to LandmarkInfo(it.id, it.name, it.kind, it.areaM2, center = it.center) },
             landmarkVisits = visits, trodden = results.flatMap { it.trodden }, wake = results.flatMap { it.wake },
+            shore = results.flatMap { it.shore },
         ), today)
     }
 
@@ -84,20 +85,24 @@ class GatheringSimulationTest {
         // 2. Inside the park you're in its gathering zone; along the pond's shore too.
         val inPark = track.filter { park.contains(it.lat, it.lng) }
         org.junit.Assert.assertTrue(inPark.isNotEmpty() && inPark.all { p -> nodes(p, before).first { it.sourceId == "w1" }.distanceM == 0.0 })
-        org.junit.Assert.assertTrue(track.any { p -> nodes(p, before).first { it.sourceId == "w3" }.distanceM == 0.0 })
+        // Food nodes are shore stretches: fixed spots on the shore, never on top of you.
+        val foodSpots = track.flatMap { p -> nodes(p, before).filter { it.resource == "food" }.map { it.sourceId to it.point } }.groupBy({ it.first }, { it.second })
+        org.junit.Assert.assertTrue(foodSpots.values.all { it.toSet().size == 1 })
+        org.junit.Assert.assertTrue(track.any { p -> nodes(p, before).any { it.resource == "food" && it.distanceM == 0.0 } })
         // 3. Walking through each node gathers: wood (new park, double), food from the unnamed pond's shore, metal.
         val r = TrackProcessor(zone).process(track, null, edges, landmarks = listOf(park, wood, library), water = listOf(pond))
         val after = world(listOf(r), start, start)
         org.junit.Assert.assertTrue("wood ${after.treasury.wood}", after.treasury.wood >= 2.0)
-        org.junit.Assert.assertTrue("food ${after.treasury.food}", after.treasury.food >= 1.0)
+        org.junit.Assert.assertTrue("food ${after.treasury.food} from ${r.shore.size} shore cells", r.shore.isNotEmpty() && after.treasury.food > 0.0)
         org.junit.Assert.assertTrue("metal ${after.treasury.metal}", after.treasury.metal >= 3.0)
         org.junit.Assert.assertEquals(setOf("Oakdale Park", "Oakdale Library"), after.landmarks.map { it.name }.toSet())
         // 4. Gathered nodes stay on the map, marked gathered, and the arrow moves on to somewhere you haven't been today.
         val now = nodes(track.last(), after)
         org.junit.Assert.assertEquals("gathered", now.first { it.sourceId == "w1" }.note)
+        org.junit.Assert.assertTrue(now.any { it.resource == "food" && it.note == "gathered" })
         org.junit.Assert.assertEquals(park.anchor, now.first { it.sourceId == "w1" }.point)
         org.junit.Assert.assertEquals("w2", now.first { it.resource == "wood" && it.best }.sourceId)
-        org.junit.Assert.assertTrue(now.none { it.best && it.note == "gathered" })
+        org.junit.Assert.assertTrue(now.filter { it.best && it.note == "gathered" }.toString(), now.none { it.best && it.note == "gathered" })
     }
 
     @Test
@@ -116,5 +121,24 @@ class GatheringSimulationTest {
         org.junit.Assert.assertTrue("visit ${visits.sumOf { it.seconds }} s", visits.sumOf { it.seconds } >= 30)
         org.junit.Assert.assertTrue(w.treasury.wood >= 2.0)
         org.junit.Assert.assertEquals(listOf("Elm Green"), w.landmarks.map { it.name })
+    }
+
+    @Test
+    fun walkingAlongACoastGathersFoodByDistanceLikeStoneFromARoad() {
+        // A straight coastline at y = 200; walk 600 m along it 20 m inland, then the same again tomorrow.
+        val coast = listOf(at(-500.0, 200.0), at(1500.0, 200.0))
+        val day1 = walk(t0, 0.0 to 180.0, 600.0 to 180.0)
+        val r1 = TrackProcessor(zone).process(day1, null, edges, coast = listOf(coast))
+        val w1 = world(listOf(r1), start, start)
+        println("coast walk: ${r1.shore.size} shore cells, food %.2f".format(w1.treasury.food))
+        // About 2 food per km, doubled on shore never walked: 600 m new shore ≈ 2.4.
+        org.junit.Assert.assertTrue("food ${w1.treasury.food}", w1.treasury.food in 1.5..4.0)
+        // The food node aims at the next stretch you haven't walked, not the one under your feet.
+        val here = LatLng(day1.last().lat, day1.last().lng)
+        val next = ResourceFinder.find(here, emptyList(), emptyList(), emptyList(), w1, coast = listOf(coast)).first { it.resource == "food" && it.best }
+        org.junit.Assert.assertNotEquals("gathered", next.note)
+        // Walking a road far from any shore gathers no food.
+        val inland = walk(t0, 0.0 to 0.0, 600.0 to 0.0)
+        org.junit.Assert.assertTrue(TrackProcessor(zone).process(inland, null, edges, coast = listOf(coast)).shore.isEmpty())
     }
 }

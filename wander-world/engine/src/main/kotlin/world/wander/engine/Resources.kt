@@ -39,7 +39,39 @@ object ResourceFinder {
         return (edge - margin).coerceAtLeast(0.0)
     }
 
-    fun find(from: LatLng, places: List<Landmark>, water: List<Landmark>, streets: List<Street>, world: WorldState?): List<ResourceTarget> {
+    /** Shores are split into stretches about this long; each is one food node. */
+    private const val STRETCH_M = 150.0
+
+    /** Cuts a line into stretches of about [STRETCH_M]. */
+    fun stretches(raw: List<LatLng>): List<List<LatLng>> {
+        if (raw.size < 2) return emptyList()
+        // Long straight segments (a mapped coastline can have 2 km between vertices) are split every ~25 m first.
+        val line = mutableListOf(raw.first())
+        for (i in 1 until raw.size) {
+            val a = raw[i - 1]; val b = raw[i]; val n = (Geo.distanceM(a, b) / 25.0).toInt().coerceAtLeast(1)
+            for (k in 1..n) { val t = k.toDouble() / n; line += LatLng(a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t) }
+        }
+        val out = mutableListOf<List<LatLng>>(); var cur = mutableListOf(line.first()); var len = 0.0
+        for (i in 1 until line.size) {
+            len += Geo.distanceM(line[i - 1], line[i]); cur += line[i]
+            if (len >= STRETCH_M) { out += cur; cur = mutableListOf(line[i]); len = 0.0 }
+        }
+        if (cur.size >= 2) out += cur
+        return out
+    }
+
+    /** The fine shore cells a stretch passes through (as harvest keys "s:<cell>"). */
+    fun stretchCells(st: List<LatLng>): Set<String> =
+        (1 until st.size).flatMap { i ->
+            val a = st[i - 1]; val b = st[i]; val n = (Geo.distanceM(a, b) / 20).toInt() + 1
+            (0..n).map { k -> val t = k.toDouble() / n; "s:" + Cells.cellAt(a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t, Cells.TRODDEN_RES) }
+        }.toSet()
+
+    fun find(
+        from: LatLng, places: List<Landmark>, water: List<Landmark>, streets: List<Street>, world: WorldState?,
+        /** Coastlines; water outlines and beaches are added as shores automatically. */
+        coast: List<List<LatLng>> = emptyList(),
+    ): List<ResourceTarget> {
         val discovered = world?.landmarks.orEmpty().map { it.id }.toSet()
         val abundance = world?.abundance.orEmpty()
         val gathered = world?.gatheredToday.orEmpty()
@@ -69,11 +101,71 @@ object ResourceFinder {
         }.sortedBy { it.second }.take(1).toList().map { (s, d) ->
             ResourceTarget("stone", s.name ?: "A new street", s.points[s.points.size / 2], d, "new", s.id, best = true)
         }
-        return nodes("wood", places.filter { it.kind in Yields.WOOD_KINDS }) +
-            nodes("food", places.filter { it.kind in Yields.FOOD_KINDS } + water) +
-            stone + nodes("metal", metal)
+        // Food: shores are lines, like streets for stone. Each ~150 m stretch is a node anchored at its middle;
+        // walking any of it gathers. Harbours are point nodes.
+        val shoreLines = coast + water.flatMap { it.rings } + places.filter { it.kind == "beach" }.flatMap { it.rings }
+        val walkedShore = world?.shoreWalked.orEmpty()
+        val shore = shoreLines.asSequence().flatMap { stretches(it).asSequence() }.mapNotNull { st ->
+            val d = (1 until st.size).minOf { i -> Geo.distanceToSegmentM(from, st[i - 1], st[i]) }
+            if (d > MAX_POINT_M) null else st to (d - Yields.SHORE_M).coerceAtLeast(0.0)
+        }.sortedBy { it.second }.take(40).map { (st, d) ->
+            val cells = stretchCells(st)
+            val note = when {
+                cells.any { it in gathered } -> "gathered"
+                cells.none { it in walkedShore } -> "new"
+                cells.mapNotNull { walkedShore[it] }.average() < 0.5 -> "thinned"
+                else -> ""
+            }
+            val mid = st[st.size / 2]
+            ResourceTarget("food", "Shore", mid, d, note, "shore:%.5f,%.5f".format(java.util.Locale.US, mid.lat, mid.lng))
+        }.toList()
+        val shoreBest = shore.filter { it.note != "gathered" }.minByOrNull { (it.distanceM + 300) / (if (it.note == "new") 2.0 else 1.0) }
+        val harbours = nodes("food", places.filter { it.kind in Yields.FOOD_NODE_KINDS })
+        val harbourBest = harbours.firstOrNull { it.best }
+        val foodBest = listOfNotNull(shoreBest, harbourBest).minByOrNull { it.distanceM }
+        val food = (shore.filter { it.distanceM <= NEARBY_M }.take(PER_RESOURCE) + listOfNotNull(shoreBest)).distinctBy { it.sourceId }
+            .plus(harbours).map { it.copy(best = it.sourceId == foodBest?.sourceId) }
+        return nodes("wood", places.filter { it.kind in Yields.WOOD_KINDS }) + food + stone + nodes("metal", metal)
     }
 }
 
 /** Within this distance of a node's gathering zone the ring turns green. */
 const val GATHER_M = 0.5
+
+/**
+ * Shorelines as segments, for "am I walking along a shore?" (within [Yields.SHORE_M] of an edge, or on a beach).
+ * Segments are bucketed by a coarse grid so long coastlines stay cheap to test.
+ */
+class Shores(lines: List<List<LatLng>>, private val beaches: List<Landmark> = emptyList()) {
+    private val buckets = HashMap<Long, MutableList<Pair<LatLng, LatLng>>>()
+    private fun key(lat: Double, lng: Double) = (Math.floor(lat / 0.002).toLong() shl 32) xor (Math.floor(lng / 0.002).toLong() and 0xffffffffL)
+    init {
+        for (l in lines) for (i in 1 until l.size) {
+            val a = l[i - 1]; val b = l[i]
+            // Register the segment in every grid square it touches (squares ~200 m; segments are short).
+            val steps = (Geo.distanceM(a, b) / 100).toInt() + 1
+            val keys = (0..steps).map { k -> val t = k.toDouble() / steps; key(a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t) }.toSet()
+            for (k in keys) buckets.getOrPut(k) { mutableListOf() } += a to b
+        }
+    }
+    val isEmpty get() = buckets.isEmpty() && beaches.isEmpty()
+    fun near(lat: Double, lng: Double): Boolean = shorePoint(lat, lng) != null
+
+    /**
+     * The point on the shore you're walking along (the nearest point of the nearest edge within [Yields.SHORE_M]),
+     * or where you stand if you're on a beach; null if you're not at a shore. Shore cells are recorded here, on the
+     * shoreline itself, so they line up with the food nodes cut along the same line.
+     */
+    fun shorePoint(lat: Double, lng: Double): LatLng? {
+        val p = LatLng(lat, lng)
+        var best: Pair<LatLng, Double>? = null
+        for (dl in -1..1) for (dg in -1..1) {
+            val segs = buckets[key(lat + dl * 0.002, lng + dg * 0.002)] ?: continue
+            for ((a, b) in segs) {
+                val d = Geo.distanceToSegmentM(p, a, b)
+                if (d <= Yields.SHORE_M && (best == null || d < best.second)) best = Geo.closestOnSegment(p, a, b) to d
+            }
+        }
+        return best?.first ?: if (beaches.any { it.contains(lat, lng) }) p else null
+    }
+}

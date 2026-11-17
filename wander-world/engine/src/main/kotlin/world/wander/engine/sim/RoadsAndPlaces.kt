@@ -45,7 +45,7 @@ internal fun Simulation.places(d: Simulation.Day) {
         val need = if (info.pointLike) p.pointLandmarkSeconds else p.landmarkSeconds
         if (secs < need) return@forEach // passing by isn't a visit
         if (info.kind in Yields.WOOD_KINDS) d.wood += harvestPlace(id, day, Yields.visitYield("wood", secs))
-        if (info.kind in Yields.FOOD_KINDS) d.food += harvestPlace(id, day, Yields.visitYield("food", secs))
+        if (info.kind in Yields.FOOD_NODE_KINDS) d.food += harvestPlace(id, day, Yields.visitYield("food", secs))
         if (info.name.isBlank()) return@forEach // unnamed water: a food source, not a place to discover
         landmarkDays.merge(id, 1, Int::plus)
         landmarkLast[id] = day
@@ -57,6 +57,8 @@ internal fun Simulation.places(d: Simulation.Day) {
     }
     troddenByDay[day]?.map { it.cell }?.distinct()?.forEach { trodden.merge(it, 1.0, Double::plus) }
     wakeByDay[day]?.map { it.cell }?.distinct()?.forEach { wake.merge(it, 1.0, Double::plus) }
+    // Shores: food for every stretch you walked along, like stone from roads; new shore pays double, worn shore less.
+    shoreByDay[day]?.map { it.cell }?.distinct()?.forEach { d.food += harvest.take("s:$it", day, Yields.SHORE_FOOD_PER_CELL) }
 }
 
 /** Harvest from a named place; notes when a favourite spot starts to thin. */

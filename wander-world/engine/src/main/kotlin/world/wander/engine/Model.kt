@@ -71,6 +71,8 @@ data class WorldInput(
     val arrivals: List<Arrival> = emptyList(),
     /** Fine cells paddled on a given day, for water-route wear. */
     val wake: List<TroddenCell> = emptyList(),
+    /** Fine cells walked along shores, per day (food). */
+    val shore: List<TroddenCell> = emptyList(),
     /** Your approvals and declines of project proposals. */
     val decisions: List<ProjectDecision> = emptyList(),
 )
@@ -269,6 +271,8 @@ data class WorldState(
     val abundance: Map<String, Double> = emptyMap(),
     /** Sources you gathered from today (places and unnamed water), so their nodes show as gathered. */
     val gatheredToday: Set<String> = emptySet(),
+    /** Shore cells you've ever walked ("s:<cell>") and how full they are today. */
+    val shoreWalked: Map<String, Double> = emptyMap(),
 ) {
     fun regionName(id: Int) = regions.firstOrNull { it.id == id }?.name ?: "a distant land"
 

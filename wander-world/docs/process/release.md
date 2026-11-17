@@ -2,6 +2,9 @@
 
 Paths are relative to `wander-world/`.
 
+Step 0, before any code: propose the package (diagnosis, scope, what's bundled from `docs/backlog.md`, open
+questions) and wait for the player's go-ahead. See the working agreement in `CLAUDE.md`.
+
 Every APK that goes to the phone follows these steps, in order. If a step doesn't apply, say so in the commit.
 
 1. **Scope.** Each user request is listed in the commit message. Anything deferred is named in the reply.

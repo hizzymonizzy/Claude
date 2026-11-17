@@ -105,9 +105,21 @@ object MapLayersBuilder {
         },
     )
 
-    fun peeks(layers: MapLayers): FeatureCollection = FeatureCollection.fromFeatures(
-        layers.peek.map { Feature.fromGeometry(line(Overpass.decode(it.geometry))) },
-    )
+    /**
+     * Streets you haven't walked that lie in explored ground (or touch a street you have): drawn dashed, so
+     * inside explored land every street shows its status. Base-map streets are hidden there.
+     */
+    fun peeks(layers: MapLayers, explored: Geometry? = null): FeatureCollection {
+        val prepared = explored?.let { org.locationtech.jts.geom.prep.PreparedGeometryFactory.prepare(it) }
+        return FeatureCollection.fromFeatures(
+            layers.peek.mapNotNull { e ->
+                val pts = Overpass.decode(e.geometry)
+                if (pts.size < 2) return@mapNotNull null
+                if (prepared != null && !prepared.intersects(gf.createLineString(pts.map { Coordinate(it.lng, it.lat) }.toTypedArray()))) return@mapNotNull null
+                Feature.fromGeometry(line(pts))
+            },
+        )
+    }
 
     /** Resource pointers as map points, so they stay pinned to the ground while you pan and zoom. */
     fun resources(targets: List<world.wander.engine.ResourceTarget>): FeatureCollection = FeatureCollection.fromFeatures(
@@ -150,7 +162,11 @@ object MapLayersBuilder {
     /** Each waystone sits in a small clearing, so it never floats in the fog. */
     private const val WAYSTONE_CLEARING_M = 45.0
 
-    fun fogAndExplored(layers: MapLayers, clearings: List<LatLng> = emptyList()): Pair<FeatureCollection, FeatureCollection> {
+    fun fogAndExplored(layers: MapLayers, clearings: List<LatLng> = emptyList()): Pair<FeatureCollection, FeatureCollection> =
+        fogExploredGeometry(layers, clearings).let { it.first to it.second }
+
+    /** Fog, explored ground, and the explored geometry itself (for clipping street status to it). */
+    fun fogExploredGeometry(layers: MapLayers, clearings: List<LatLng> = emptyList()): Triple<FeatureCollection, FeatureCollection, Geometry?> {
         val world = gf.createPolygon(
             arrayOf(Coordinate(-180.0, -85.0), Coordinate(180.0, -85.0), Coordinate(180.0, 85.0), Coordinate(-180.0, 85.0), Coordinate(-180.0, -85.0)),
         )
@@ -163,7 +179,7 @@ object MapLayersBuilder {
         val explored: Geometry? = if (revealed.isEmpty()) null else try { fillSmallHoles(UnaryUnionOp.union(revealed)) } catch (_: Exception) { null }
         val fog: Geometry = explored?.let { try { world.difference(it) } catch (_: Exception) { world } } ?: world
         fun fc(g: Geometry?) = FeatureCollection.fromFeatures(polygons(g).map { Feature.fromGeometry(toGeo(it)) })
-        return fc(fog) to fc(explored)
+        return Triple(fc(fog), fc(explored), explored)
     }
 
     private fun polygons(g: Geometry?): List<Polygon> = when (g) {

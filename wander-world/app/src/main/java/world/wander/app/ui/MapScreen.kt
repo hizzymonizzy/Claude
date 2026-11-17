@@ -139,7 +139,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             src.setGeoJson(fc)
             fc.features()?.size ?: 0
         } catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "$id: ${e.javaClass.simpleName} ${e.message}"; -1 }
-        val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogAndExplored(layers, world?.waystones.orEmpty().map { it.center }) } }
+        val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogExploredGeometry(layers, world?.waystones.orEmpty().map { it.center }) } }
             catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "fog: $e"; null }
         if (fe != null) { update("fog") { fe.first }; update("explored") { fe.second } }
         val kinds = world?.landmarks.orEmpty().associate { it.name to it.kind }
@@ -149,7 +149,8 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             "shore" to update("shore") { MapLayersBuilder.shore(layers) },
             "water" to update("water") { MapLayersBuilder.water(layers) },
             "roads" to update("roads") { MapLayersBuilder.roads(layers) },
-            "peek" to update("peek") { MapLayersBuilder.peeks(layers) },
+            "peek" to (withContext(Dispatchers.Default) { try { MapLayersBuilder.peeks(layers, fe?.third) } catch (e: Exception) { null } }
+                ?.let { fc -> update("peek") { fc } } ?: -1),
             "wild" to update("wild") { MapLayersBuilder.wild(layers) },
             "places" to update("landmarks") { MapLayersBuilder.landmarkLabels(layers, kinds) },
             "settlements" to update("settlements") { MapLayersBuilder.settlements(world) },

@@ -27,6 +27,8 @@ data class TrackResult(
     /** Water routes (paddling): no roads or settlements, but they clear fog and wear in. */
     val waterTrails: List<Trail> = emptyList(),
     val wake: List<TroddenCell> = emptyList(),
+    /** Fine cells walked along a shore (water's edge, coastline, beach): food, gathered like stone from roads. */
+    val shore: List<TroddenCell> = emptyList(),
     /** Fixes in stretches that never went anywhere (moving around a building). */
     val stationaryPoints: Int = 0,
     val presence: List<CellPresence>,
@@ -137,7 +139,11 @@ class TrackProcessor(
     fun process(
         points: List<TrackPoint>, modeHint: Mode?, edges: List<GraphEdge>, landmarks: List<Landmark> = emptyList(),
         water: List<Landmark> = emptyList(), coastal: Boolean = false,
+        /** Coastlines near the walk (lines). Water outlines and beaches are shores too. */
+        coast: List<List<LatLng>> = emptyList(),
     ): TrackResult {
+        val shoreline = Shores(coast + water.flatMap { it.rings } + landmarks.filter { it.kind == "beach" }.flatMap { it.rings },
+            landmarks.filter { it.kind == "beach" })
         val split = runs(points)
         // Places you can be "at": named places, plus unnamed lakes and ponds (food from their shores).
         val named = landmarks.map { it.id }.toSet()
@@ -156,6 +162,7 @@ class TrackProcessor(
         val visits = HashMap<Pair<String, Int>, Double>()
         val waterTrails = mutableListOf<Trail>()
         val wake = HashSet<TroddenCell>()
+        val shore = HashSet<TroddenCell>()
 
         for (run in runs) {
             kept += run.size
@@ -184,6 +191,7 @@ class TrackProcessor(
                 val cell = Cells.cell(a.lat, a.lng)
                 for (lm in gatherable) if (lm.near(a.lat, a.lng, gatherMarginM(lm.kind))) visits.merge(lm.id to day, dt, Double::plus)
                 presence.merge(Triple(cell, day, mode), dt, Double::plus)
+                if (mode == Mode.FOOT) shoreline.shorePoint(a.lat, a.lng)?.let { sp -> shore += TroddenCell(Cells.cellAt(sp.lat, sp.lng, Cells.TRODDEN_RES), day) }
                 val m = movement.getOrPut(day) { DoubleArray(3) }
                 m[if (mode == Mode.FOOT) 0 else 1] += Geo.distanceM(a.lat, a.lng, b.lat, b.lng)
             }
@@ -223,6 +231,7 @@ class TrackProcessor(
             movement = movement.map { (d, v) -> DayMovement(d, v[0], v[1], v[2]) },
             waterTrails = waterTrails,
             wake = wake.toList(),
+            shore = shore.toList(),
             keptPoints = kept,
             droppedPoints = dropped,
             matchedPoints = matched,

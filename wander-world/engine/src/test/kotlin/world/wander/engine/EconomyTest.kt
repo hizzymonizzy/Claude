@@ -99,10 +99,14 @@ class EconomyTest {
     }
 
     @Test
-    fun anUnnamedPondGivesFoodButIsNotADiscoveredPlace() {
+    fun foodComesFromWalkingShoresNotFromStandingAtWater() {
+        // Alpha 0.9.7: shores are food lines (like roads for stone). Time at a pond alone gives none.
         val pond = LandmarkInfo("w9", "", "water", 0.0)
-        val w = WorldEngine().build(input(2, 30.0, 3.0).copy(landmarks = mapOf("w9" to pond), landmarkVisits = listOf(LandmarkVisit("w9", start + 1, 600.0))), start + 1)
-        assertTrue(w.treasury.food > 0)
-        assertTrue(w.landmarks.isEmpty())
+        val atPond = WorldEngine().build(input(2, 30.0, 3.0).copy(landmarks = mapOf("w9" to pond), landmarkVisits = listOf(LandmarkVisit("w9", start + 1, 600.0))), start + 1)
+        assertTrue(atPond.treasury.food < 0.01)
+        assertTrue(atPond.landmarks.isEmpty())
+        val cells = (0 until 10).map { TroddenCell("s$it", start + 1) }
+        val alongShore = WorldEngine().build(input(2, 30.0, 3.0).copy(shore = cells), start + 1)
+        assertEquals(10 * Yields.SHORE_FOOD_PER_CELL * 2, alongShore.treasury.food, 1e-9)   // new shore pays double
     }
 }

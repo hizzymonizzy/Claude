@@ -30,6 +30,7 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     val visitsByDay = input.landmarkVisits.groupBy { it.day }
     val troddenByDay = input.trodden.groupBy { it.day }
     val wakeByDay = input.wake.groupBy { it.day }
+    val shoreByDay = input.shore.groupBy { it.day }
     val arrivalsByDay = input.arrivals.groupBy { it.day }
     val decisionsByDay = input.decisions.groupBy { it.day }
 

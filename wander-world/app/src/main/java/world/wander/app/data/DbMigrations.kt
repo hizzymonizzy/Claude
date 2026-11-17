@@ -60,7 +60,12 @@ object DbMigrations {
             "CREATE INDEX IF NOT EXISTS `index_terrain_area_tile` ON `terrain_area` (`tile`)",
             "DELETE FROM `landmark_tile`",
         ),
+        // v8: shore walking (food is gathered along shores, like stone along roads); walks re-processed via PROCESSING_VERSION.
+        7 to listOf(
+            "CREATE TABLE IF NOT EXISTS `shore` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `cell` TEXT NOT NULL, `day` INTEGER NOT NULL)",
+            "CREATE INDEX IF NOT EXISTS `index_shore_segmentId` ON `shore` (`segmentId`)",
+        ),
     )
 
-    const val LATEST = 7
+    const val LATEST = 8
 }

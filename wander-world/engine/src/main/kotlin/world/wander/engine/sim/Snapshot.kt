@@ -90,7 +90,13 @@ internal fun Simulation.snapshot(): WorldState {
         abundance = harvest.snapshot(today).keys.filter { it.startsWith("l:") || it.startsWith("m:") }
             .map { it.substring(2) }.toSet()
             .associateWith { id -> minOf(harvest.abundance("l:$id", today), harvest.abundance("m:$id", today)) },
-        gatheredToday = harvest.harvestedOn(today).filter { it.startsWith("l:") || it.startsWith("m:") }.map { it.substring(2) }.toSet(),
+        // Places by id; shore cells keep their "s:" prefix.
+        gatheredToday = harvest.harvestedOn(today).mapNotNull { k -> when {
+            k.startsWith("l:") || k.startsWith("m:") -> k.substring(2)
+            k.startsWith("s:") -> k
+            else -> null
+        } }.toSet(),
+        shoreWalked = harvest.snapshot(today).filterKeys { it.startsWith("s:") },
         monuments = monuments.map { (id, d) -> Monuments.byId(id).let { MonumentState(it.id, it.name, it.description, d) } },
         exploredAreas = areas.filter { (id, a) -> a.cells.isNotEmpty() || id in settlements }
             .map { (id, a) ->

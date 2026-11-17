@@ -80,7 +80,7 @@ internal const val INK = "#5B4636"
 internal fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
 internal val OUR_LAYERS = listOf(
-    "explored", "green-places", "shore", "fog", "fog-edge", "peek", "roads-edge", "roads-trail", "roads-dirt", "roads-cobble",
+    "explored", "green-places", "shore", "water-over", "fog", "fog-edge", "peek", "roads-edge", "roads-trail", "roads-dirt", "roads-cobble",
     "roads-trees-l", "roads-trees-r", "wild-1", "wild-2", "wild-3", "wild-gravel", "wild-cairns-l", "wild-cairns-r",
     "sand-places", "water-route", "water-light",
     "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
@@ -91,16 +91,24 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     val empty = FeatureCollection.fromFeatures(emptyList())
     for (id in listOf("explored", "green-places", "sand-places", "shore", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "resources", "me")) s.addSource(GeoJsonSource(id, empty))
 
-    // Explored ground: real terrain texture (0 A.D. grass / forest floor), slipped under the base map's
-    // water, roads and buildings so those still show where you've been.
-    val ground = FillLayer("explored", "explored").withProperties(fillPattern("ground_grass"), fillOpacity(0.92f))
+    // Explored ground: real terrain texture (0 A.D. grass / forest floor) laid OVER the base map's streets and
+    // buildings, so inside explored land every street is drawn by its status (walked: trail…avenue; unwalked:
+    // dashed), not by the base map. Under the fog the base map's faint streets still show the lay of the land.
+    val ground = FillLayer("explored", "explored").withProperties(fillPattern("ground_grass"), fillOpacity(1f))
     val woods = FillLayer("green-places", "green-places").withProperties(fillPattern("ground_forest"), fillOpacity(0.85f))
-    val waterId = s.layers.firstOrNull { it is FillLayer && "water" in it.id.lowercase() }?.id
     val sand = FillLayer("sand-places", "sand-places").withProperties(fillPattern("ground_sand"), fillOpacity(0.9f))
-    // Wet sand along coastlines, above beaches, still under the base map's water (so only the land side shows).
+    // Wet sand along coastlines, above beaches, under the water copy below (so only the land side shows).
     val shore = FillLayer("shore", "shore").withProperties(fillPattern("ground_sand_wet"), fillOpacity(0.9f))
-    if (waterId != null) { s.addLayerBelow(ground, waterId); s.addLayerAbove(woods, "explored"); s.addLayerAbove(sand, "green-places"); s.addLayerAbove(shore, "sand-places") }
-    else { s.addLayer(ground); s.addLayer(woods); s.addLayer(sand); s.addLayer(shore) }
+    s.addLayer(ground); s.addLayer(woods); s.addLayer(sand); s.addLayer(shore)
+    // The base map's water, drawn again above explored ground so lakes and sea still show through it.
+    s.layers.filterIsInstance<FillLayer>().firstOrNull { "water" in it.id.lowercase() }?.let { base ->
+        guard(problems, "water-over") {
+            val over = FillLayer("water-over", base.sourceId).withProperties(fillColor("#7FB3C8"), fillPattern("water_sea"))
+            over.sourceLayer = base.sourceLayer
+            base.filter?.let { over.setFilter(it) }
+            s.addLayerAbove(over, "shore")
+        }
+    }
 
     // Fog: parchment you can see the land through, thicker when zoomed out so explored areas pop.
     s.addLayer(

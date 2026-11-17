@@ -15,6 +15,14 @@ A personal, non-competitive Android fitness app for one player. GPS walks, runs,
 Concept: `docs/concept.md`. Rules and their history, the source of truth: `docs/design.md`. Settled
 choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/process/release.md`.
 
+## Working agreement (from the player, 2026-11-17)
+- **Discuss before building.** When feedback or diagnostics arrive, first reply with the diagnosis and a proposed
+  package: what will change, what else is worth bundling, open questions. Build only after the player agrees.
+  Exception: when the player says "these are my final comments, update the APK", build exactly that scope.
+- **Bundle, don't trickle.** Prefer one reviewed, complete release over several small ones. Keep candidate work in
+  `docs/backlog.md` so each package can be planned from it.
+- Simulate before shipping gameplay changes (e.g. `GatheringSimulationTest`), and report what the simulation showed.
+
 ## The player and the feedback loop
 - One tester: Pixel 10 Pro Fold (Android 17) + Pixel Watch 4. Health Connect intensity, exercise sessions and
   routes are granted. Exercise routes needed "Always allow" in Health Connect settings, because the in-app

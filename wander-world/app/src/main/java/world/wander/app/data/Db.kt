@@ -117,6 +117,10 @@ data class WakeEntity(
     val day: Int,
 )
 
+/** Fine cells walked along a shore (food, like stone from roads); recorded at the shoreline itself. */
+@Entity(tableName = "shore", indices = [Index("segmentId")])
+data class ShoreEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val segmentId: Long, val cell: String, val day: Int)
+
 /** The path actually walked (simplified), kept for good: fog clears along it. */
 @Entity(tableName = "trail", indices = [Index("segmentId")])
 data class TrailEntity(
@@ -293,6 +297,9 @@ interface WanderDao {
     @Insert fun insertWake(t: List<WakeEntity>)
     @Query("DELETE FROM wake WHERE segmentId = :segmentId") fun deleteWake(segmentId: Long)
     @Query("SELECT * FROM wake") fun allWake(): List<WakeEntity>
+    @Insert fun insertShore(t: List<ShoreEntity>)
+    @Query("DELETE FROM shore WHERE segmentId = :segmentId") fun deleteShore(segmentId: Long)
+    @Query("SELECT * FROM shore") fun allShore(): List<ShoreEntity>
     @Insert fun insertArrivals(a: List<ArrivalEntity>)
     @Query("DELETE FROM arrival WHERE segmentId = :segmentId") fun deleteArrivals(segmentId: Long)
     @Query("SELECT * FROM arrival") fun allArrivals(): List<ArrivalEntity>
@@ -335,7 +342,7 @@ interface WanderDao {
         PlaceEntity::class, CellAreaEntity::class, AreaEntity::class, DispatchEntity::class, DiagEntity::class,
         TrailEntity::class, WildTrailEntity::class, TroddenEntity::class, LandmarkEntity::class,
         LandmarkTileEntity::class, LandmarkVisitEntity::class, ArrivalEntity::class, WaterTrailEntity::class, WakeEntity::class,
-        WaterAreaEntity::class, WaterTileEntity::class, ProjectDecisionEntity::class, TerrainAreaEntity::class,
+        WaterAreaEntity::class, WaterTileEntity::class, ProjectDecisionEntity::class, TerrainAreaEntity::class, ShoreEntity::class,
     ],
     version = DbMigrations.LATEST,
     exportSchema = true,
