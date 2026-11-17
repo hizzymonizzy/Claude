@@ -86,7 +86,7 @@ object Monuments {
 object Yields {
     val WOOD_KINDS = setOf("wood", "forest", "nature_reserve", "wetland", "heath", "park", "garden", "common",
         "recreation_ground", "village_green", "meadow", "grassland", "dog_park", "golf_course", "cemetery")
-    val FOOD_KINDS = setOf("beach", "water", "harbour")
+    val FOOD_KINDS = setOf("beach", "water", "harbour", "market", "community_garden")
     val METAL_KINDS = setOf("hospital", "government", "emergency", "civic", "school", "library", "worship", "culture",
         "sports", "transport", "harbour", "lighthouse", "historic", "store")
 
@@ -97,8 +97,15 @@ object Yields {
     fun gatherMarginM(kind: String): Double = when (kind) {
         in FOOD_KINDS -> 40.0
         in METAL_KINDS -> 25.0
+        in WOOD_KINDS -> 15.0      // walking along a park's edge counts, like a shore for food
         else -> 0.0
     }
+
+    /** Woods where you also forage a little food. */
+    val FORAGE_KINDS = setOf("wood", "forest", "nature_reserve")
+
+    /** Food from foraging on a day's visit to a wood (before thinning and the new-place bonus). */
+    const val FORAGE_FOOD = 0.5
 
     /** Within this distance of the water's edge (or on a beach) you're walking along a shore. */
     const val SHORE_M = 40.0
@@ -107,7 +114,7 @@ object Yields {
     const val SHORE_FOOD_PER_CELL = 0.08
 
     /** Places that are food *nodes* (you go to them). Shores are food *lines* (you walk along them). */
-    val FOOD_NODE_KINDS = setOf("harbour")
+    val FOOD_NODE_KINDS = setOf("harbour", "market", "community_garden")
 
     /** Time at a source that counts as a visit (and gathers). A walk through a small park is about this long. */
     const val VISIT_SECONDS = 30.0
@@ -120,6 +127,18 @@ object Yields {
         "wood" -> 1.0 + seconds / 300.0
         "food" -> 1.0 + seconds / 600.0
         else -> 0.0
+    }
+
+    /** One line on how to gather from a node, for its details card. */
+    fun howToGather(resource: String, kind: String): String = when {
+        resource == "stone" -> "Walk this street. Stone comes from every road you walk, about 1 per km."
+        kind == "shore" -> "Walk along this shore, within 40 m of the water. About 2 food per km."
+        kind == "field" -> "Walk along the edge of these fields or gardens. About 2 food per km."
+        resource == "wood" -> "Spend 30 s inside or along the edge (15 m). 1 wood, plus 1 per 5 min you stay." +
+            (if (kind in FORAGE_KINDS) " You'll forage a little food too." else "")
+        resource == "food" -> "Spend 30 s here. 1 food, plus 1 per 10 min you stay."
+        resource == "metal" -> "Spend 30 s inside or at the door (25 m). 3 the first time, then 1.5 a day."
+        else -> ""
     }
 
     /** Gold for a day: intensity minutes (full rate to 90, then a quarter) plus 2 per outdoor km. */

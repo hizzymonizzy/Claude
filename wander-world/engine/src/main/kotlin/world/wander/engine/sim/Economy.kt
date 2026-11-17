@@ -20,14 +20,19 @@ internal fun Simulation.economy(d: Simulation.Day) {
     // Paddling: 2 food per km, spread over the water you crossed; new water pays the discovery bonus.
     val wakeCells = wakeByDay[day]?.map { it.cell }?.distinct().orEmpty()
     if (waterKm > 0) {
-        if (wakeCells.isEmpty()) d.food += waterKm * 2
-        else wakeCells.forEach { d.food += harvest.take("w:$it", day, waterKm * 2 / wakeCells.size) }
+        if (wakeCells.isEmpty()) d.gain(null, food = waterKm * 2)
+        else wakeCells.forEach { d.gain(areaOfFine(it), food = harvest.take("w:$it", day, waterKm * 2 / wakeCells.size)) }
     }
-    d.earned = Treasury(
-        gold = Yields.gold(intensityByDay[day] ?: 0.0, outdoorKm),
-        wood = d.wood, food = d.food, stone = d.roadStone, metal = d.metal,
-    )
-    treasury += d.earned
+    // Gold goes to the one purse; everything else to the bank of the area where it was gathered.
+    val goldToday = Yields.gold(intensityByDay[day] ?: 0.0, outdoorKm)
+    gold += goldToday
+    var materials = Treasury()
+    for ((area, t) in d.gains) {
+        val key = area ?: d.mainArea ?: input.homeAreaId ?: NO_AREA
+        banks[key] = (banks[key] ?: Treasury()) + t
+        materials += t
+    }
+    d.earned = materials.copy(gold = goldToday)
     totalKm += outdoorKm
     if (footKm >= 5) raise("day_5k", day)
     if (footKm >= 10) raise("day_10k", day)
@@ -52,8 +57,8 @@ internal fun Simulation.decisions(d: Simulation.Day) {
         if (pr.areaId != dcs.areaId || pr.projectId != dcs.projectId) return@forEach
         val def = Projects.byId(dcs.projectId) ?: return@forEach
         if (dcs.approve) {
-            if (def.cost.affordable(treasury)) {
-                treasury = treasury.spend(def.cost)
+            if (def.cost.affordable(stock(dcs.areaId))) {
+                spend(dcs.areaId, def.cost)
                 built.getOrPut(dcs.areaId) { mutableListOf() } += def.id
                 events += WorldEvent.ProjectBuilt(day, dcs.areaId, def.id)
                 pending = null
@@ -88,4 +93,48 @@ private fun Simulation.propose(day: Int): Proposal? {
         compareByDescending<Pair<SettlementAcc, ProjectDef>> { it.first.lastVisit }.thenBy { it.second.cost.gold },
     ).firstOrNull() ?: return null
     return Proposal(day, pick.first.areaId, pick.second.id)
+}
+
+/** Bank for gains made where no area is known (rare: before any place data). */
+internal const val NO_AREA = "_"
+
+/**
+ * Which network each area belongs to: areas joined by a chain of roads you've walked share one network
+ * (and so one stock). Built from walked road segments meeting at shared junctions.
+ */
+internal fun Simulation.networks(): Map<String, String> {
+    val parent = HashMap<String, String>()
+    fun find(x: String): String { var r = x; while (parent[r] != null && parent[r] != r) r = parent.getValue(r); parent[x] = r; return r }
+    fun union(a: String, b: String) { val ra = find(a); val rb = find(b); if (ra != rb) parent[ra] = rb }
+    for (e in edges.values) {
+        if (e.discoveredDay == null) continue
+        val a = "n:${e.info.startNode}"; val b = "n:${e.info.endNode}"
+        parent.putIfAbsent(a, a); parent.putIfAbsent(b, b)
+        union(a, b)
+        areaAt(e.info.midpoint)?.let { area -> val k = "a:$area"; parent.putIfAbsent(k, k); union(k, a) }
+    }
+    val areaIds = banks.keys + settlements.keys + areas.keys
+    return areaIds.associateWith { id -> if (parent.containsKey("a:$id")) find("a:$id") else "solo:$id" }
+}
+
+/** What a settlement can spend: the one purse of gold, plus the banks of every area in its network. */
+internal fun Simulation.stock(areaId: String): Treasury {
+    val net = networks()
+    val mine = net[areaId] ?: "solo:$areaId"
+    return banks.filterKeys { (net[it] ?: "solo:$it") == mine }.values.fold(Treasury(gold = gold)) { acc, t -> acc + t }
+}
+
+/** Pays a cost from the purse and the network's banks, the settlement's own bank first. */
+internal fun Simulation.spend(areaId: String, cost: world.wander.engine.Cost) {
+    gold -= cost.gold
+    val net = networks()
+    val mine = net[areaId] ?: "solo:$areaId"
+    val order = listOf(areaId) + banks.keys.filter { it != areaId && (net[it] ?: "solo:$it") == mine }.sorted()
+    var w = cost.wood.toDouble(); var f = cost.food.toDouble(); var s = cost.stone.toDouble(); var m = cost.metal.toDouble()
+    for (id in order) {
+        val b = banks[id] ?: continue
+        val tw = minOf(w, b.wood); val tf = minOf(f, b.food); val ts = minOf(s, b.stone); val tm = minOf(m, b.metal)
+        banks[id] = Treasury(wood = b.wood - tw, food = b.food - tf, stone = b.stone - ts, metal = b.metal - tm)
+        w -= tw; f -= tf; s -= ts; m -= tm
+    }
 }

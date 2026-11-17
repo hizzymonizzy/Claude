@@ -131,4 +131,20 @@ class OverpassTest {
         assertEquals(listOf(1L) to 1, Overpass.relationsToFetch(els))
         assertEquals("[out:json][timeout:90];relation(id:1,5);out body geom;", Overpass.relationQuery(listOf(1, 5)))
     }
+
+    @Test
+    fun fieldsAndGardensAreFoodLinesAndMarketsAreFood() {
+        // Alpha 0.10.0: inland food. Unnamed farmland still counts (it's ground to walk along, not a place).
+        val json = response(
+            """{"type":"way","id":20,"tags":{"landuse":"farmland"},"geometry":${square(40.0, -74.0, 300.0)}}""",
+            """{"type":"way","id":21,"tags":{"landuse":"orchard","name":"Elm Orchard"},"geometry":${square(40.01, -74.0, 200.0)}}""",
+            """{"type":"way","id":22,"tags":{"leisure":"garden","garden:type":"community","name":"Oakdale Plots"},"geometry":${square(40.02, -74.0, 60.0)}}""",
+            """{"type":"way","id":23,"tags":{"landuse":"residential"},"geometry":${square(40.03, -74.0, 300.0)}}""",
+        )
+        assertEquals(setOf("fw20", "fw21", "fw22"), Overpass.parseFields(json, tile).map { it.id }.toSet())
+        assertTrue(Overpass.parseFields(json, tile).all { it.kind == "farm" })
+        assertEquals("market", Overpass.categorize(JSONObject(mapOf("amenity" to "marketplace"))))
+        assertEquals("community_garden", Overpass.categorize(JSONObject(mapOf("leisure" to "garden", "garden:type" to "community"))))
+        assertTrue(Overpass.landmarkQuery("40.0,-74.1,40.1,-74.0").contains("farmland|orchard|vineyard|allotments"))
+    }
 }

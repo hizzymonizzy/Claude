@@ -18,7 +18,7 @@ internal fun Simulation.roads(d: Simulation.Day) {
         val len = info.lengthM.coerceAtLeast(1.0)
         val footLen = mergedLength(covs.filter { it.mode == Mode.FOOT }.map { it.fromM to it.toM })
         val cycleLen = mergedLength(covs.filter { it.mode == Mode.CYCLE }.map { it.fromM to it.toM })
-        d.roadStone += harvest.take("e:$edgeId", day, footLen / 1000.0)
+        d.gain(areaAt(info.midpoint), stone = harvest.take("e:$edgeId", day, footLen / 1000.0))
         val wearNeed = min(p.wearDayFraction * len, p.wearDayMaxM)
         when {
             footLen >= wearNeed -> e.wear += 1.0
@@ -44,12 +44,14 @@ internal fun Simulation.places(d: Simulation.Day) {
         val secs = vs.sumOf { it.seconds }
         val need = if (info.pointLike) p.pointLandmarkSeconds else p.landmarkSeconds
         if (secs < need) return@forEach // passing by isn't a visit
-        if (info.kind in Yields.WOOD_KINDS) d.wood += harvestPlace(id, day, Yields.visitYield("wood", secs))
-        if (info.kind in Yields.FOOD_NODE_KINDS) d.food += harvestPlace(id, day, Yields.visitYield("food", secs))
+        val area = areaAt(info.center)
+        if (info.kind in Yields.WOOD_KINDS) d.gain(area, wood = harvestPlace(id, day, Yields.visitYield("wood", secs)))
+        if (info.kind in Yields.FORAGE_KINDS) d.gain(area, food = harvest.take("f:$id", day, Yields.FORAGE_FOOD))
+        if (info.kind in Yields.FOOD_NODE_KINDS) d.gain(area, food = harvestPlace(id, day, Yields.visitYield("food", secs)))
         if (info.name.isBlank()) return@forEach // unnamed water: a food source, not a place to discover
         landmarkDays.merge(id, 1, Int::plus)
         landmarkLast[id] = day
-        if (info.kind in Yields.METAL_KINDS) d.metal += harvest.take("m:$id", day, 1.5)
+        if (info.kind in Yields.METAL_KINDS) d.gain(area, metal = harvest.take("m:$id", day, 1.5))
         if (id !in landmarkFirst) {
             landmarkFirst[id] = day
             events += WorldEvent.LandmarkDiscovered(day, id)
@@ -58,7 +60,7 @@ internal fun Simulation.places(d: Simulation.Day) {
     troddenByDay[day]?.map { it.cell }?.distinct()?.forEach { trodden.merge(it, 1.0, Double::plus) }
     wakeByDay[day]?.map { it.cell }?.distinct()?.forEach { wake.merge(it, 1.0, Double::plus) }
     // Shores: food for every stretch you walked along, like stone from roads; new shore pays double, worn shore less.
-    shoreByDay[day]?.map { it.cell }?.distinct()?.forEach { d.food += harvest.take("s:$it", day, Yields.SHORE_FOOD_PER_CELL) }
+    shoreByDay[day]?.map { it.cell }?.distinct()?.forEach { d.gain(areaOfFine(it), food = harvest.take("s:$it", day, Yields.SHORE_FOOD_PER_CELL)) }
 }
 
 /** Harvest from a named place; notes when a favourite spot starts to thin. */

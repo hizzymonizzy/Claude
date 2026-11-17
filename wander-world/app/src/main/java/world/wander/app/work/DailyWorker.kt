@@ -31,6 +31,12 @@ class DailyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
             repo.log("daily", "Daily run done; dispatch ${if (dispatch != null) "delivered" else "skipped"}")
             if (dispatch != null) notify(dispatch.title, dispatch.body)
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Android stopped the job part-way (battery, Doze, app update…). Say why; WorkManager runs it again,
+            // and the run is safe to repeat (yesterday's dispatch is only written once).
+            val why = if (android.os.Build.VERSION.SDK_INT >= 31) " (stop reason ${stopReason})" else ""
+            repo.log("daily", "Daily run stopped by Android$why; it will run again")
+            throw e
         } catch (e: Exception) {
             repo.log("daily", "Daily run failed: ${e.message}")
             Result.retry()

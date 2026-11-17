@@ -78,6 +78,8 @@ object Overpass {
         way["shop"]["name"]["building"](BBOX);
         wr["natural"="water"](BBOX);
         wr["natural"~"^(beach|sand)$"](BBOX);
+        wr["landuse"~"^(farmland|orchard|vineyard|allotments)$"](BBOX);
+        wr["leisure"="garden"]["garden:type"="community"](BBOX);
         wr["waterway"="riverbank"](BBOX);
         wr["landuse"~"^(reservoir|basin)$"](BBOX);
     """
@@ -127,7 +129,7 @@ object Overpass {
             coast = parseCoast(c, tile)
             JSONObject(c).getJSONArray("elements").length() > 0
         } catch (_: Exception) { false }
-        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal, skippedLarge = skipped, terrain = parseSand(json, tile) + coast)
+        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal, skippedLarge = skipped, terrain = parseSand(json, tile) + parseFields(json, tile) + coast)
     }
 
     /** Ids of relations small enough to fetch whole, and how many were too large. */
@@ -165,6 +167,22 @@ object Overpass {
 
     /** Sea features only tell us the tile is coastal: ids only, never their (huge) geometry. */
     internal fun coastQuery(bbox: String): String = COAST_QUERY.replace("BBOX", bbox)
+
+    /** Farmland, orchards, vineyards, allotments and community gardens: their edges are food lines inland. */
+    internal fun parseFields(json: String, tile: String): List<TerrainAreaEntity> {
+        val elements = JSONObject(json).getJSONArray("elements")
+        val out = mutableListOf<TerrainAreaEntity>()
+        for (i in 0 until elements.length()) {
+            val el = elements.getJSONObject(i)
+            val t = el.optJSONObject("tags") ?: continue
+            val field = t.optString("landuse") in setOf("farmland", "orchard", "vineyard", "allotments") ||
+                (t.optString("leisure") == "garden" && t.optString("garden:type") == "community")
+            if (!field) continue
+            val rings = elementRings(el) ?: continue
+            out += TerrainAreaEntity("f${el.getString("type").first()}${el.getLong("id")}", tile, "farm", rings.joinToString("|") { encode(it) })
+        }
+        return out
+    }
 
     /** Beaches and sand, named or not, as areas to paint (not places to discover). */
     internal fun parseSand(json: String, tile: String): List<TerrainAreaEntity> {
@@ -248,7 +266,9 @@ object Overpass {
             amenity in setOf("hospital", "clinic") -> "hospital"
             amenity in setOf("townhall", "courthouse") || tag("office") == "government" -> "government"
             amenity in setOf("police", "fire_station") -> "emergency"
-            amenity in setOf("post_office", "community_centre", "marketplace") -> "civic"
+            amenity == "marketplace" -> "market"
+            tag("leisure") == "garden" && tag("garden:type") == "community" -> "community_garden"
+            amenity in setOf("post_office", "community_centre") -> "civic"
             amenity in setOf("school", "college", "university", "kindergarten") -> "school"
             amenity == "library" -> "library"
             amenity == "place_of_worship" -> "worship"

@@ -71,12 +71,12 @@ fun SectionTitle(text: String) =
 // ---- Dispatch ----
 
 @Composable
-fun DispatchScreen(repo: Repository) {
+fun DispatchScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
     val world by repo.world.collectAsState()
     val archive by repo.dao.dispatches().collectAsState(initial = emptyList())
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Spacer(Modifier.height(12.dp)) }
-        world?.let { w -> if (w.proposal != null) item { ProposalCard(repo, w) } }
+        world?.let { w -> if (w.proposal != null) item { ProposalCard(repo, w, onShowOnMap) } }
         world?.let { w ->
             item {
                 val d = repo.dispatchFor(w, w.today)
@@ -150,9 +150,10 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
             }
             if (w != null) {
                 Spacer(Modifier.height(8.dp))
-                TreasuryRow(w.treasury)
+                Text("Gold (shared everywhere): ${w.treasury.gold.toInt()}", style = MaterialTheme.typography.bodyMedium)
+                BanksList(w)
                 Spacer(Modifier.height(8.dp))
-                ProposalCard(repo, w)
+                ProposalCard(repo, w, onShowOnMap)
             }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
@@ -281,7 +282,7 @@ fun TreasuryRow(t: Treasury) {
         listOf(
             R.drawable.oad_medal_gold to t.gold, R.drawable.oad_res_wood to t.wood, R.drawable.oad_res_food to t.food,
             R.drawable.oad_res_stone to t.stone, R.drawable.oad_res_metal to t.metal,
-        ).forEach { (icon, v) ->
+        ).filter { (icon, v) -> !(icon == R.drawable.oad_medal_gold && v == 0.0) }.forEach { (icon, v) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(ImageBitmap.imageResource(icon), contentDescription = null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(3.dp))
@@ -293,11 +294,14 @@ fun TreasuryRow(t: Treasury) {
 
 /** The current project proposal, with approve / decline. */
 @Composable
-fun ProposalCard(repo: Repository, w: WorldState) {
+fun ProposalCard(repo: Repository, w: WorldState, onShowOnMap: () -> Unit = {}) {
     val p = w.proposal ?: return
     val def = Projects.byId(p.projectId) ?: return
     val scope = rememberCoroutineScope()
-    val canAfford = def.cost.affordable(w.treasury)
+    // A settlement spends from its own area's bank and any area joined to it by roads you've walked, plus all gold.
+    val stock = w.stock(p.areaId)
+    val canAfford = def.cost.affordable(stock)
+    val nodes by repo.resourceNodes.collectAsState()
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Proposal from ${w.areaNames[p.areaId] ?: "a settlement"}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
@@ -305,14 +309,33 @@ fun ProposalCard(repo: Repository, w: WorldState) {
             Text(def.description + " · +${def.prosperity} prosperity", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(6.dp))
             Text("Costs ${def.cost}", style = MaterialTheme.typography.bodyMedium)
+            Text("Stock here: ${stock.toString().ifEmpty { "nothing yet" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
             if (!canAfford) {
-                val t = w.treasury; val c = def.cost
-                val need = Cost(
-                    gold = (c.gold - t.gold.toInt()).coerceAtLeast(0), wood = (c.wood - t.wood.toInt()).coerceAtLeast(0),
-                    food = (c.food - t.food.toInt()).coerceAtLeast(0), stone = (c.stone - t.stone.toInt()).coerceAtLeast(0),
-                    metal = (c.metal - t.metal.toInt()).coerceAtLeast(0),
-                )
-                Text("Still needed: $need. Keep moving; it'll wait for you.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                val c = def.cost
+                val missing = listOf(
+                    "gold" to c.gold - stock.gold, "wood" to c.wood - stock.wood, "food" to c.food - stock.food,
+                    "stone" to c.stone - stock.stone, "metal" to c.metal - stock.metal,
+                ).filter { it.second > 0.0 }
+                Spacer(Modifier.height(4.dp))
+                for ((res, short) in missing) {
+                    val node = nodes.filter { it.resource == res && it.note != "gathered" }.minByOrNull { it.distanceM }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Need %d more %s".format(kotlin.math.ceil(short).toInt(), res) +
+                                when {
+                                    res == "gold" -> ": from your weekly-goal effort and distance."
+                                    node != null -> ": nearest ${node.name}, ${formatDistance(node.distanceM)}."
+                                    else -> "."
+                                },
+                            style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f),
+                        )
+                        if (node != null && res != "gold") {
+                            androidx.compose.material3.TextButton(onClick = { repo.focus.value = node.point; onShowOnMap() }) { Text("Go") }
+                        }
+                    }
+                }
+                Text("Gather in this settlement's area, or walk the roads that join it to where your stock is.",
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -320,6 +343,20 @@ fun ProposalCard(repo: Repository, w: WorldState) {
                 OutlinedButton(onClick = { scope.launch { repo.decide(p, false) } }) { Text("Decline") }
             }
         }
+    }
+}
+
+/** Banks by network: areas joined by roads you've walked share one stock. */
+@Composable
+fun BanksList(w: WorldState) {
+    val groups = w.banks.filterValues { !it.isEmpty }.keys.groupBy { w.networkOf[it] ?: "solo:$it" }
+    if (groups.isEmpty()) return
+    for ((_, areas) in groups) {
+        val total = areas.fold(Treasury()) { acc, a -> acc + (w.banks[a] ?: Treasury()) }
+        val names = areas.map { w.areaNames[it] ?: "Unmapped" }.sorted()
+        Text(names.joinToString(" + ") + if (areas.size > 1) " (joined by roads)" else "",
+            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(top = 6.dp))
+        TreasuryRow(total.copy(gold = 0.0))
     }
 }
 

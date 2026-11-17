@@ -52,6 +52,8 @@ object MapIcons {
         "beach" -> "medal_place_beach"
         "water" -> "medal_place_water"
         "store" -> "medal_place_store"
+        "market" -> "medal_poi_civic"
+        "community_garden" -> "medal_place_park"
         "hospital", "government", "emergency", "civic", "school", "library", "worship", "culture", "sports",
         "transport", "harbour", "lighthouse", "historic" -> "medal_poi_$kind"
         else -> "medal_place_generic"

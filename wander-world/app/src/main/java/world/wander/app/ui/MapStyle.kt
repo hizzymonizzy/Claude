@@ -38,6 +38,8 @@ import org.maplibre.android.style.layers.PropertyFactory.textPadding
 import org.maplibre.android.style.layers.PropertyFactory.iconPadding
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.expressions.Expression.switchCase
+import org.maplibre.android.style.expressions.Expression.concat
+import org.maplibre.android.style.expressions.Expression.step
 import org.maplibre.android.style.layers.PropertyFactory.lineBlur
 import org.maplibre.android.style.layers.PropertyFactory.visibility
 import org.maplibre.android.style.layers.PropertyFactory.textOptional
@@ -293,17 +295,19 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
                 literal("#B89A5A"),
             )),
             circleStrokeWidth(switchCase(eq(get("near"), literal(true)), literal(4f), eq(get("best"), literal(true)), literal(3f), literal(2f))),
-            circleRadius(interpolate(linear(), zoom(), stop(10, 9f), stop(16, 14f))),
+            circleRadius(interpolate(linear(), zoom(), stop(10, 16f), stop(16, 26f))),
         ),
     ) }
     guard(problems, "resource-icons") { s.addLayer(
         SymbolLayer("resource-icons", "resources").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
-            iconSize(interpolate(linear(), zoom(), stop(10, 0.26f), stop(16, 0.38f))),
+            iconSize(interpolate(linear(), zoom(), stop(10, 0.5f), stop(16, 0.75f))),
             iconOpacity(match(get("state"), literal(1f), stop("gathered", 0.55f), stop("thinned", 0.5f))),
-            textField(match(get("state"), literal(""), stop("gathered", "✓"), stop("new", "new"))), textFont(FONT),
-            textSize(11f), textColor("#3F6B3A"), textHaloColor("#F4ECD8"), textHaloWidth(1.5f),
-            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 1.1f)), textAllowOverlap(true),
+            // State always; the node's name too once you're zoomed in close enough to read it.
+            textField(step(zoom(), match(get("state"), literal(""), stop("gathered", "✓"), stop("new", "new")),
+                stop(15, concat(get("name"), literal("\n"), match(get("state"), literal(""), stop("gathered", "✓ gathered"), stop("new", "new"), stop("thinned", "thinned")))))),
+            textFont(FONT), textSize(12f), textOffset(arrayOf(0f, 1.6f)), textColor("#3F6B3A"), textHaloColor("#F4ECD8"), textHaloWidth(1.5f),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textAllowOverlap(true),
         ),
     ) }
     s.addLayer(

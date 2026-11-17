@@ -63,7 +63,10 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     val weeks = mutableListOf<WeekRecord>()
 
     // Economy.
-    var treasury = Treasury()
+    /** Gold: one purse for the whole world (effort is effort, wherever you are). */
+    var gold = 0.0
+    /** Wood, food, stone and metal, banked in the area where they were gathered. */
+    val banks = HashMap<String, Treasury>()
     val harvest = Harvest(p.harvest)
     val built = HashMap<String, MutableList<String>>()          // areaId -> project ids
     val declinedOn = HashMap<Pair<String, String>, Int>()       // (areaId, projectId) -> day
@@ -78,10 +81,13 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
 
     /** What one day produced so far, handed from step to step. */
     class Day(val day: Int, val resting: Boolean) {
-        var roadStone = 0.0
-        var wood = 0.0
-        var food = 0.0
-        var metal = 0.0
+        /** The area you spent most of today in; gains with no clear place go to its bank. */
+        var mainArea: String? = null
+        /** Today's gains, by the area they were gathered in (null = today's main area). */
+        val gains = HashMap<String?, Treasury>()
+        fun gain(area: String?, wood: Double = 0.0, food: Double = 0.0, stone: Double = 0.0, metal: Double = 0.0) {
+            gains[area] = (gains[area] ?: Treasury()) + Treasury(wood = wood, food = food, stone = stone, metal = metal)
+        }
         var ratio = 0.0
         var protection = Protection.GRACE
         var earned = Treasury()
@@ -105,6 +111,11 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
         }
         return snapshot()
     }
+
+    /** The area a point lies in, if you've been in its cell. */
+    fun areaAt(p: LatLng?): String? = p?.let { input.cellArea[Cells.cell(it.lat, it.lng)] }
+    /** The area of a fine (res 11) cell. */
+    fun areaOfFine(cell: String): String? = try { input.cellArea[Cells.parent(cell, Cells.CELL_RES)] } catch (_: Exception) { null }
 
     fun trailing7(day: Int) = (day - 6..day).sumOf { intensityByDay[it] ?: 0.0 }
     fun isResting(day: Int) = input.restPeriods.any { day in it }

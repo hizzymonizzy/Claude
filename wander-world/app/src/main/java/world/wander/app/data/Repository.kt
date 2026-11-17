@@ -81,6 +81,12 @@ class Repository(context: Context) {
     /** Live track of the current capture, for the map. */
     val liveTrack = MutableStateFlow<List<LatLng>>(emptyList())
     val lastLocation = MutableStateFlow<LatLng?>(null)
+    /** The resource nodes around you, as the map shows them (the proposal card uses them to say where to go). */
+    val resourceNodes = MutableStateFlow<List<ResourceTarget>>(emptyList())
+
+    /** The area (neighbourhood) a point is in, if you've been in its cell. */
+    suspend fun areaAt(p: LatLng): String? = withContext(Dispatchers.IO) { dao.cellArea(Cells.cell(p.lat, p.lng))?.areaId }
+
     /** Whether the map shows pointers to the nearest resources; Settings changes it, the map follows at once. */
     val resourcePointers = MutableStateFlow(prefs.resourcePointers)
     fun setResourcePointers(on: Boolean) { prefs.resourcePointers = on; resourcePointers.value = on }
@@ -138,7 +144,7 @@ class Repository(context: Context) {
      * Named places are a bonus layer: they never hold up a walk. When a tile's places arrive later,
      * walks in that tile are re-processed so their visits count.
      */
-    private suspend fun ensureLandmarks(tiles: Collection<String>) {
+    private suspend fun ensureLandmarks(tiles: Collection<String>, maxWaitMs: Long = 30 * 60_000L) {
         for (tile in tiles) {
             if (dao.tile(tile) == null || dao.landmarkTile(tile) != null) continue
             val key = "lm:$tile"
@@ -160,7 +166,7 @@ class Repository(context: Context) {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val wait = ((retry?.second ?: 30_000L) * 2).coerceAtMost(30 * 60_000L)
+                val wait = ((retry?.second ?: 30_000L) * 2).coerceAtMost(maxWaitMs)
                 tileRetry[key] = (System.currentTimeMillis() + wait) to wait
                 log("geo", "Named places for $tile unavailable (${e.message?.lineSequence()?.firstOrNull()}); walks processed without them, retry in ${wait / 60_000} min")
             }
@@ -275,7 +281,7 @@ class Repository(context: Context) {
                 }
                 val coastal = dao.waterTiles(tiles.toList()).any { it.coastal }
                 val coast = coastLines(tiles)
-                val r0 = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks, water, coastal, coast)
+                val r0 = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks, water, coastal, coast, fieldLines(tiles))
                 val r = if (!probe) r0 else r0.copy(
                     coverage = emptyList(), presence = emptyList(), trails = emptyList(), wildTrails = emptyList(),
                     trodden = emptyList(), arrivals = emptyList(),
@@ -306,6 +312,7 @@ class Repository(context: Context) {
                     )
                 }
                 log("process", "Segment ${seg.id} (${seg.source}): ${pts.size} pts → ${r.coverage.size} road stretches, ${r.presence.size} cell visits, matched ${r.matchedPoints}/${r.keptPoints}")
+                log("gather", gatherSummary(seg.id, r, landmarks + water, tiles))
                 done++
             }
             if (dao.pendingSegments().isNotEmpty()) ProcessWorker.enqueue(app)
@@ -420,6 +427,36 @@ class Repository(context: Context) {
      * wood from woods and parks, food from water and beaches, metal from places you haven't discovered yet
      * (then ones you have), stone from the nearest street you haven't walked. Null where none is near.
      */
+    /**
+     * One line per walk saying what it gathered from and why anything didn't pay, e.g.
+     * "Segment 12: Oakdale Park (park) 45 s ✓ wood · Elm Woods 12 s, needs 30 s · shores/fields 14 cells (~0.6 km)".
+     */
+    private fun gatherSummary(segId: Long, r: world.wander.engine.TrackResult, places: List<Landmark>, tiles: Set<String>): String {
+        val byId = places.associateBy { it.id }
+        val parts = r.landmarkVisits.groupBy { it.landmarkId }.map { (id, vs) ->
+            val l = byId[id]
+            val secs = vs.sumOf { it.seconds }
+            val what = when (l?.kind) {
+                in Yields.WOOD_KINDS -> "wood"
+                in Yields.FOOD_NODE_KINDS -> "food"
+                in Yields.METAL_KINDS -> "metal"
+                else -> "food along its shore"
+            }
+            val name = l?.name?.ifBlank { "unnamed water" } ?: id
+            if (secs >= Yields.VISIT_SECONDS) "$name (${l?.kind}) ${secs.toInt()} s ✓ $what"
+            else "$name ${secs.toInt()} s, needs ${Yields.VISIT_SECONDS.toInt()} s"
+        }
+        val lines = if (r.shore.isNotEmpty()) listOf("shores/fields ${r.shore.size} cells (~%.1f km)".format(r.shore.size * 0.043)) else emptyList()
+        val missing = tiles.filter { dao.landmarkTile(it) == null }
+        val note = if (missing.isNotEmpty()) " · places not downloaded yet for ${missing.size} area(s); this walk is re-checked when they arrive" else ""
+        return "Segment $segId: " + (parts + lines).ifEmpty { listOf("no places or shores on this walk") }.joinToString(" · ") + note
+    }
+
+    /** Outlines of fields, orchards, allotments and community gardens in these tiles (food lines inland). */
+    private fun fieldLines(tiles: Collection<String>): List<List<LatLng>> =
+        dao.terrainInTiles(tiles.toList()).filter { it.kind == "farm" }.distinctBy { it.id }
+            .flatMap { try { Overpass.decodeRings(it.geometry) } catch (_: Exception) { emptyList() } }
+
     /** Coastlines (lines) mapped in these tiles. */
     private fun coastLines(tiles: Collection<String>): List<List<LatLng>> =
         dao.terrainInTiles(tiles.toList()).filter { it.kind == "coast" }.distinctBy { it.id }
@@ -431,7 +468,8 @@ class Repository(context: Context) {
     suspend fun nearestSources(from: LatLng): List<ResourceTarget> = withContext(Dispatchers.IO) {
         // Map data for where you are now, even if you haven't walked here yet (one tile, same request a walk makes).
         val here = Cells.tile(from.lat, from.lng)
-        if (ensureTiles(listOf(here))) ensureLandmarks(listOf(here))
+        // Where you're standing matters now: retry its places within 5 minutes, not 30.
+        if (ensureTiles(listOf(here))) ensureLandmarks(listOf(here), maxWaitMs = 5 * 60_000L)
         val tiles = Cells.disk(here, 2)
         val places = dao.landmarksInTiles(tiles).distinctBy { it.id }.mapNotNull {
             try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
@@ -440,7 +478,7 @@ class Repository(context: Context) {
             try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
         }.filter { w -> places.none { it.id == w.id } } // a named lake is already a place
         val streets = dao.edgesInTiles(Cells.disk(here, 1)).map { Street(it.id, it.name, Overpass.decode(it.geometry)) }
-        ResourceFinder.find(from, places, water, streets, _world.value, coast = coastLines(tiles))
+        ResourceFinder.find(from, places, water, streets, _world.value, coast = coastLines(tiles), fields = fieldLines(tiles))
     }
 
     fun dispatchFor(state: WorldState, day: Int): Dispatch = DispatchWriter.write(state, day)
@@ -454,7 +492,8 @@ class Repository(context: Context) {
 
     /** The daily routine: sync health, process captures, rebuild, and write yesterday's dispatch. */
     suspend fun dailyRun(): DispatchEntity? = withContext(Dispatchers.IO) {
-        try { health.sync(prefs.startDay) } catch (e: Exception) { log("health", "Sync failed: ${e.message}") }
+        try { health.sync(prefs.startDay) } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) { log("health", "Sync failed: ${e.message}") }
         prefs.lastHealthSyncMs = System.currentTimeMillis()
         rebuild()
         processPending()
@@ -526,7 +565,7 @@ class Repository(context: Context) {
          * v4: paddling (water routes) and wider place categories.
          * v5: paddling detected from being on water (water areas, coast).
          */
-        const val PROCESSING_VERSION = 9
+        const val PROCESSING_VERSION = 10
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }

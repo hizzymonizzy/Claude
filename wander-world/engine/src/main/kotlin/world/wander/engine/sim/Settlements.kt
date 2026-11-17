@@ -36,6 +36,7 @@ internal fun Simulation.areas(d: Simulation.Day) {
         footByArea.merge(areaId, foot / 60.0, Double::plus)
         cycleByArea.merge(areaId, cycle / 60.0, Double::plus)
     }
+    d.mainArea = (footByArea.keys + cycleByArea.keys).maxByOrNull { (footByArea[it] ?: 0.0) + (cycleByArea[it] ?: 0.0) }
     for (areaId in footByArea.keys + cycleByArea.keys) {
         val a = areas.getOrPut(areaId) { AreaAcc() }
         val footMin = footByArea[areaId] ?: 0.0

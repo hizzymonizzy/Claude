@@ -125,7 +125,7 @@ fun WanderRoot(repo: Repository, startTab: Tab) {
 private fun TabContent(repo: Repository, tab: Tab, onOpenDispatch: () -> Unit, onShowOnMap: () -> Unit = {}) {
     when (tab) {
         Tab.MAP -> MapScreen(repo, onOpenDispatch)
-        Tab.DISPATCH -> DispatchScreen(repo)
+        Tab.DISPATCH -> DispatchScreen(repo, onShowOnMap)
         Tab.ATLAS -> AtlasScreen(repo, onShowOnMap)
         Tab.GOAL -> GoalScreen(repo)
         Tab.SETTINGS -> SettingsScreen(repo)

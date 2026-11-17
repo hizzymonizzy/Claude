@@ -141,4 +141,69 @@ class GatheringSimulationTest {
         val inland = walk(t0, 0.0 to 0.0, 600.0 to 0.0)
         org.junit.Assert.assertTrue(TrackProcessor(zone).process(inland, null, edges, coast = listOf(coast)).shore.isEmpty())
     }
+
+    @Test
+    fun inlandFoodAndWoodFromEdges() {
+        // Landlocked: a field, a wood, and a park walked along the outside of its edge.
+        val field = listOf(at(0.0, 100.0), at(400.0, 100.0), at(400.0, 400.0), at(0.0, 400.0), at(0.0, 100.0))
+        val forest = rect("w7", "Elm Woods", "wood", 600.0, -100.0, 800.0, 100.0)
+        val green = rect("w8", "Oakdale Green", "park", 900.0, 10.0, 1100.0, 200.0)
+        // Along the field edge (20 m out), through the wood, then along the park's south edge 8 m outside it.
+        val t = walk(t0, 0.0 to 80.0, 400.0 to 80.0, 600.0 to 0.0, 800.0 to 0.0, 900.0 to 2.0, 1100.0 to 2.0)
+        val r = TrackProcessor(zone).process(t, null, edges, landmarks = listOf(forest, green), fields = listOf(field))
+        val w = WorldEngine().build(WorldInput(
+            startDay = start, homeAreaId = "home", edges = edges.associate { it.id to it.toInfo() }, coverage = r.coverage,
+            presence = r.presence, intensity = emptyList(), movement = r.movement, cellArea = r.presence.associate { it.cell to "home" },
+            areas = mapOf("home" to AreaInfo("home", "Oakdale", null)), shore = r.shore,
+            landmarks = listOf(forest, green).associate { it.id to LandmarkInfo(it.id, it.name, it.kind, it.areaM2) },
+            landmarkVisits = r.landmarkVisits,
+        ), start)
+        println("inland: field cells ${r.shore.size}, visits ${r.landmarkVisits.joinToString { "${it.landmarkId}=${it.seconds.toInt()}s" }}, " +
+            "wood %.2f food %.2f".format(w.treasury.wood, w.treasury.food))
+        org.junit.Assert.assertTrue("food from the field edge and foraging", w.treasury.food >= 1.5)
+        org.junit.Assert.assertTrue("wood from the wood and the park's edge", w.treasury.wood >= 4.0)
+        org.junit.Assert.assertEquals(setOf("Elm Woods", "Oakdale Green"), w.landmarks.map { it.name }.toSet())
+    }
+
+    @Test
+    fun banksOnlyShareAcrossRoadsYouHaveWalked() {
+        // Home (x < 1000) and a far area (x >= 1000), joined by a connector road you haven't walked yet.
+        val homeRoad = GraphEdge("h", "Elm Ave", 1, 2, listOf(at(0.0, 0.0), at(500.0, 0.0)))
+        val connector = GraphEdge("c", "Long Rd", 2, 3, listOf(at(500.0, 0.0), at(1500.0, 0.0)))
+        val farRoad = GraphEdge("f", "Oak St", 3, 4, listOf(at(1500.0, 0.0), at(2000.0, 0.0)))
+        val graph = listOf(homeRoad, connector, farRoad)
+        val farPark = rect("w9", "Far Park", "park", 1700.0, 20.0, 1900.0, 220.0)
+        val p = TrackProcessor(zone)
+        val day1 = start; val day2 = start + 1
+        val t1 = LocalDate.ofEpochDay(day1.toLong()).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
+        val t2 = LocalDate.ofEpochDay(day2.toLong()).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
+        // Day 1: a walk at home, then (after a drive) a walk on Oak St with 10 minutes in Far Park.
+        val home1 = p.process(walk(t1, 0.0 to 0.0, 500.0 to 0.0), null, graph)
+        val farWalk = walk(t1 + 3_600_000, 1500.0 to 0.0, 1800.0 to 0.0, 1800.0 to 100.0) +
+            (1..120).map { k -> at(1800.0 + (k % 2) * 3.0, 100.0).let { TrackPoint(t1 + 3_600_000 + 250_000 + k * 5_000L, it.lat, it.lng, 6f) } } +
+            walk(t1 + 3_600_000 + 900_000, 1800.0 to 100.0, 1800.0 to 0.0, 2000.0 to 0.0)
+        val far1 = p.process(farWalk, null, graph, landmarks = listOf(farPark))
+        // Day 2: walk all the way from home to the far area along the connector.
+        val joined = p.process(walk(t2, 0.0 to 0.0, 1500.0 to 0.0), null, graph)
+        fun build(results: List<TrackResult>, today: Int, decisions: List<ProjectDecision>) = WorldEngine().build(WorldInput(
+            startDay = start, homeAreaId = "home", edges = graph.associate { it.id to it.toInfo() },
+            coverage = results.flatMap { it.coverage }, presence = results.flatMap { it.presence },
+            intensity = listOf(DayIntensity(day1, 30.0, 0.0), DayIntensity(day2, 30.0, 0.0)), movement = results.flatMap { it.movement },
+            cellArea = results.flatMap { it.presence }.associate { c -> c.cell to (if (proj.x(Cells.center(c.cell)) < 1000) "home" else "far") },
+            areas = mapOf("home" to AreaInfo("home", "Oakdale", null), "far" to AreaInfo("far", "Farside", null)),
+            landmarks = mapOf("w9" to LandmarkInfo("w9", "Far Park", "park", farPark.areaM2, center = farPark.anchor)),
+            landmarkVisits = results.flatMap { it.landmarkVisits }, decisions = decisions,
+        ), today)
+        val approveBoth = listOf(ProjectDecision(day1, "home", "campfire", true), ProjectDecision(day2, "home", "campfire", true))
+        val w1 = build(listOf(home1, far1), day1, approveBoth.take(1))
+        println("day 1: far bank ${w1.banks["far"]}, home stock ${w1.stock("home")}, networks ${w1.networkOf}")
+        org.junit.Assert.assertTrue("wood is banked where it was gathered", (w1.banks["far"]?.wood ?: 0.0) >= 5.0)
+        org.junit.Assert.assertTrue("home can't use far wood yet", w1.stock("home").wood < 5.0)
+        org.junit.Assert.assertTrue("so the campfire waits", w1.settlements.first { it.areaId == "home" }.projects.isEmpty())
+        val w2 = build(listOf(home1, far1, joined), day2, approveBoth)
+        println("day 2: networks ${w2.networkOf}, home stock ${w2.stock("home")}, built ${w2.settlements.first { it.areaId == "home" }.projects}")
+        org.junit.Assert.assertEquals("walking the connector joins the banks", w2.networkOf["home"], w2.networkOf["far"])
+        org.junit.Assert.assertEquals(listOf("campfire"), w2.settlements.first { it.areaId == "home" }.projects)
+        org.junit.Assert.assertTrue("gold is one purse", w2.treasury.gold >= 0.0)
+    }
 }

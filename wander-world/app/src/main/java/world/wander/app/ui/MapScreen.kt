@@ -78,6 +78,8 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     val status by repo.trackingStatus.collectAsState()
     var style by remember { mutableStateOf<Style?>(null) }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
+    // The resource node whose details card is open (by source id), chosen by tapping it on the map.
+    val selectedNode = remember { mutableStateOf<String?>(null) }
     var centered by remember { mutableStateOf(false) }
     var cameraTick by remember { mutableIntStateOf(0) }
     var topInsetPx by remember { mutableFloatStateOf(0f) }
@@ -94,6 +96,12 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             getMapAsync { m ->
                 map = m
                 m.addOnCameraMoveListener { cameraTick++ }
+                m.addOnMapClickListener { ll ->
+                    val hit = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "resource-icons", "resource-rings")
+                        .firstNotNullOfOrNull { f -> if (f.hasProperty("id")) f.getStringProperty("id") else null }
+                    selectedNode.value = hit
+                    hit != null
+                }
                 m.addOnCameraIdleListener { cameraTick++ }
                 m.uiSettings.isCompassEnabled = true
                 m.uiSettings.isAttributionEnabled = true
@@ -234,6 +242,10 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             }
             ns.map { n -> if (next[n.resource] == n.sourceId) n.copy(best = true) else n }
         }
+    LaunchedEffect(shownNodes) { repo.resourceNodes.value = shownNodes }
+    // Your stock where you stand: the banks of this area's road-connected network, plus the one purse of gold.
+    var localArea by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(me, world) { localArea = me?.let { repo.areaAt(it) } ?: repo.prefs.homeAreaId }
     LaunchedEffect(style, shownNodes, showPointers) {
         style?.source("resources")?.setGeoJson(MapLayersBuilder.resources(if (showPointers) shownNodes else emptyList()))
     }
@@ -271,7 +283,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             }
             world?.let { w ->
                 Spacer(Modifier.height(6.dp))
-                InventoryBar(w.treasury, shownNodes.filter { it.best }, today = w.days[w.today]?.earned) { repo.focus.value = it.point }
+                InventoryBar(w.stock(localArea), shownNodes.filter { it.best }, today = w.days[w.today]?.earned) { repo.focus.value = it.point }
                 if (showPointers && targets.isEmpty()) {
                     Text(
                         if (searching) "Looking for resources nearby…" else "No wood, food, stone or metal mapped near here yet",
@@ -282,6 +294,11 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             }
         }
 
+        shownNodes.firstOrNull { it.sourceId == selectedNode.value }?.let { n ->
+            Box(Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 84.dp)) {
+                NodeDetailsCard(n, onGo = { repo.focus.value = n.point; selectedNode.value = null }, onClose = { selectedNode.value = null })
+            }
+        }
         var showLegend by remember { mutableStateOf(false) }
         if (showLegend) LegendDialog(onDismiss = { showLegend = false })
         SmallFloatingActionButton(

@@ -6,8 +6,8 @@ Candidates for upcoming packages. Each release is planned from here and agreed w
 ## Open questions from field use
 | Item | Why | Status |
 |---|---|---|
-| Daily dispatch run cancelled twice on 11-17 ("Daily run failed: Job was cancelled") | Two workers overlapping; the dispatch still went out, but health sync was cut short | proposed |
-| Overpass back-off reaches 30 min while you're standing somewhere new | Pointers and places stay empty for a long time after a 502/429 | proposed |
+| Daily dispatch run cancelled twice on 11-17 ("Daily run failed: Job was cancelled") | Two workers overlapping; the dispatch still went out, but health sync was cut short | shipped 0.10.0 |
+| Overpass back-off reaches 30 min while you're standing somewhere new | Pointers and places stay empty for a long time after a 502/429 | shipped 0.10.0 |
 | Places that are only nodes in OSM (a church, a fire station) | Their 35 m circle may sit off the building; check against walks | proposed |
 
 ## Next package focus: resources (player, 2026-11-17)
@@ -16,13 +16,13 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 
 | Item | Why | Status |
 |---|---|---|
-| More food sources, especially for landlocked areas | Food now comes only from shores, paddling and harbours; inland players can't earn it | proposed |
+| More food sources, especially for landlocked areas | Food now comes only from shores, paddling and harbours; inland players can't earn it | shipped 0.10.0 |
 | Ideas to discuss for food: farmland and orchards (walk along field edges, a line source like shores); allotments and community gardens (nodes); farmers' markets (nodes, today counted as civic → metal); foraging along trails through woods (a little food alongside wood) | Every region should have some food | proposed |
 
-| Wood not credited after a walk past or through a park (0.9.6/0.9.7, node still "new") | Blocks the campfire (5 wood); needs diagnostics to confirm cause | proposed |
-| Per-walk gathering summary in the log: each place's seconds in zone and whether it paid | We can't tell from today's log why a node didn't pay | proposed |
-| Wood as a line source too: park edges and paths through woods | Walking beside a park currently pays nothing (wood needs you inside) | proposed |
-| Bigger resource icons; tap a node for details (name, what it gives, how to gather, state, regrowth) | Icons too small to read; no way to learn what a node is | proposed |
+| Wood not credited after a walk past or through a park (0.9.6/0.9.7, node still "new") | Blocks the campfire (5 wood); needs diagnostics to confirm cause | shipped 0.10.0 |
+| Per-walk gathering summary in the log: each place's seconds in zone and whether it paid | We can't tell from today's log why a node didn't pay | shipped 0.10.0 |
+| Wood as a line source too: park edges and paths through woods | Walking beside a park currently pays nothing (wood needs you inside) | shipped 0.10.0 |
+| Bigger resource icons; tap a node for details (name, what it gives, how to gather, state, regrowth) | Icons too small to read; no way to learn what a node is | shipped 0.10.0 |
 | Starter projects affordable within a walk or two anywhere | Campfire's 5 wood has blocked the quest loop since day one | proposed |
 
 ## Villages that show on the map (player idea, 2026-11-17)

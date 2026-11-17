@@ -273,7 +273,24 @@ data class WorldState(
     val gatheredToday: Set<String> = emptySet(),
     /** Shore cells you've ever walked ("s:<cell>") and how full they are today. */
     val shoreWalked: Map<String, Double> = emptyMap(),
+    /** Wood, food, stone and metal banked per area (gold is in [treasury] only: one purse everywhere). */
+    val banks: Map<String, Treasury> = emptyMap(),
+    /** Area → network: areas joined by roads you've walked share a network and its stock. */
+    val networkOf: Map<String, String> = emptyMap(),
 ) {
+    /** What a settlement in [areaId] can spend: all gold, plus the banks of its road-connected network. */
+    fun stock(areaId: String?): Treasury {
+        if (areaId == null) return Treasury(gold = treasury.gold)
+        val mine = networkOf[areaId] ?: "solo:$areaId"
+        return banks.filterKeys { (networkOf[it] ?: "solo:$it") == mine }.values.fold(Treasury(gold = treasury.gold)) { a, t -> a + t }
+    }
+
+    /** The areas that share [areaId]'s stock (itself included). */
+    fun network(areaId: String): Set<String> {
+        val mine = networkOf[areaId] ?: return setOf(areaId)
+        return networkOf.filterValues { it == mine }.keys
+    }
+
     fun regionName(id: Int) = regions.firstOrNull { it.id == id }?.name ?: "a distant land"
 
     /** Visual level (1–5) for a wear value, same scale as roads. */

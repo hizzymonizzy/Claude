@@ -141,8 +141,10 @@ class TrackProcessor(
         water: List<Landmark> = emptyList(), coastal: Boolean = false,
         /** Coastlines near the walk (lines). Water outlines and beaches are shores too. */
         coast: List<List<LatLng>> = emptyList(),
+        /** Field, orchard and allotment edges: food lines inland, gathered the same way as shores. */
+        fields: List<List<LatLng>> = emptyList(),
     ): TrackResult {
-        val shoreline = Shores(coast + water.flatMap { it.rings } + landmarks.filter { it.kind == "beach" }.flatMap { it.rings },
+        val shoreline = Shores(coast + fields + water.flatMap { it.rings } + landmarks.filter { it.kind == "beach" }.flatMap { it.rings },
             landmarks.filter { it.kind == "beach" })
         val split = runs(points)
         // Places you can be "at": named places, plus unnamed lakes and ponds (food from their shores).

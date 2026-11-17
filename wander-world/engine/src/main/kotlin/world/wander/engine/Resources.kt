@@ -16,7 +16,25 @@ data class ResourceTarget(
     val sourceId: String = "",
     /** The node the edge arrow points to for this resource: best yield for the distance, not yet gathered today. */
     val best: Boolean = false,
-)
+    /** What kind of source: a place kind ("park", "library"…), "shore", "field" or "street". */
+    val kind: String = "",
+    /** How full it is today (1 = fresh; thinned sources grow back 5% a day). */
+    val abundance: Double = 1.0,
+) {
+    /** Roughly what a visit (or walking 150 m of a line) would give right now. */
+    val expectedYield: Double get() {
+        val bonus = if (note == "new") 2.0 else 1.0
+        return when {
+            note == "gathered" -> 0.0
+            resource == "stone" -> 0.15 * bonus
+            kind == "shore" || kind == "field" -> 0.3 * bonus * abundance
+            resource == "wood" -> 1.1 * bonus * abundance
+            resource == "food" -> 1.05 * bonus * abundance
+            resource == "metal" -> if (note == "new") 3.0 else 1.5 * abundance
+            else -> 0.0
+        }
+    }
+}
 
 /** A mapped street, for stone. */
 data class Street(val id: String, val name: String?, val points: List<LatLng>)
@@ -71,6 +89,8 @@ object ResourceFinder {
         from: LatLng, places: List<Landmark>, water: List<Landmark>, streets: List<Street>, world: WorldState?,
         /** Coastlines; water outlines and beaches are added as shores automatically. */
         coast: List<List<LatLng>> = emptyList(),
+        /** Edges of farmland, orchards and allotments: food lines inland. */
+        fields: List<List<LatLng>> = emptyList(),
     ): List<ResourceTarget> {
         val discovered = world?.landmarks.orEmpty().map { it.id }.toSet()
         val abundance = world?.abundance.orEmpty()
@@ -90,7 +110,7 @@ object ResourceFinder {
             return near.sortedBy { it.second }
                 .filter { (l, d) -> d <= NEARBY_M || l.id == best }
                 .take(PER_RESOURCE).let { list -> if (best != null && list.none { it.first.id == best }) list + near.first { it.first.id == best } else list }
-                .map { (l, d) -> ResourceTarget(resource, l.name.ifBlank { "Water" }, l.anchor, d, note(l), l.id, best = l.id == best) }
+                .map { (l, d) -> ResourceTarget(resource, l.name.ifBlank { "Water" }, l.anchor, d, note(l), l.id, best = l.id == best, kind = l.kind, abundance = abundance[l.id] ?: 1.0) }
         }
         val metal = places.filter { it.kind in Yields.METAL_KINDS }
         // Stone: unwalked streets. The node sits at the street's middle; walking any of it counts.
@@ -99,16 +119,17 @@ object ResourceFinder {
             val d = (1 until s.points.size).minOf { i -> Geo.distanceToSegmentM(from, s.points[i - 1], s.points[i]) }
             s to d
         }.sortedBy { it.second }.take(1).toList().map { (s, d) ->
-            ResourceTarget("stone", s.name ?: "A new street", s.points[s.points.size / 2], d, "new", s.id, best = true)
+            ResourceTarget("stone", s.name ?: "A new street", s.points[s.points.size / 2], d, "new", s.id, best = true, kind = "street")
         }
         // Food: shores are lines, like streets for stone. Each ~150 m stretch is a node anchored at its middle;
         // walking any of it gathers. Harbours are point nodes.
-        val shoreLines = coast + water.flatMap { it.rings } + places.filter { it.kind == "beach" }.flatMap { it.rings }
+        val shoreLines = (coast + water.flatMap { it.rings } + places.filter { it.kind == "beach" }.flatMap { it.rings }).map { it to "shore" } +
+            fields.map { it to "field" }
         val walkedShore = world?.shoreWalked.orEmpty()
-        val shore = shoreLines.asSequence().flatMap { stretches(it).asSequence() }.mapNotNull { st ->
+        val shore = shoreLines.asSequence().flatMap { (l, k) -> stretches(l).asSequence().map { it to k } }.mapNotNull { (st, k) ->
             val d = (1 until st.size).minOf { i -> Geo.distanceToSegmentM(from, st[i - 1], st[i]) }
-            if (d > MAX_POINT_M) null else st to (d - Yields.SHORE_M).coerceAtLeast(0.0)
-        }.sortedBy { it.second }.take(40).map { (st, d) ->
+            if (d > MAX_POINT_M) null else Triple(st, (d - Yields.SHORE_M).coerceAtLeast(0.0), k)
+        }.sortedBy { it.second }.take(40).map { (st, d, k) ->
             val cells = stretchCells(st)
             val note = when {
                 cells.any { it in gathered } -> "gathered"
@@ -117,7 +138,9 @@ object ResourceFinder {
                 else -> ""
             }
             val mid = st[st.size / 2]
-            ResourceTarget("food", "Shore", mid, d, note, "shore:%.5f,%.5f".format(java.util.Locale.US, mid.lat, mid.lng))
+            val full = cells.mapNotNull { walkedShore[it] }.takeIf { it.isNotEmpty() }?.average() ?: 1.0
+            ResourceTarget("food", if (k == "field") "Field edge" else "Shore", mid, d, note,
+                "shore:%.5f,%.5f".format(java.util.Locale.US, mid.lat, mid.lng), kind = k, abundance = full)
         }.toList()
         val shoreBest = shore.filter { it.note != "gathered" }.minByOrNull { (it.distanceM + 300) / (if (it.note == "new") 2.0 else 1.0) }
         val harbours = nodes("food", places.filter { it.kind in Yields.FOOD_NODE_KINDS })

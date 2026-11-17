@@ -129,6 +129,7 @@ object MapLayersBuilder {
                 addStringProperty("name", t.name)
                 addBooleanProperty("near", t.distanceM <= GATHER_M)
                 addStringProperty("state", t.note)
+                addStringProperty("id", t.sourceId)
                 addBooleanProperty("best", t.best)
             }
         },

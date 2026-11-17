@@ -65,7 +65,11 @@ object DbMigrations {
             "CREATE TABLE IF NOT EXISTS `shore` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `cell` TEXT NOT NULL, `day` INTEGER NOT NULL)",
             "CREATE INDEX IF NOT EXISTS `index_shore_segmentId` ON `shore` (`segmentId`)",
         ),
+        // v9: no schema change; places re-fetched to collect fields, orchards and gardens (inland food) and markets.
+        8 to listOf(
+            "DELETE FROM `landmark_tile`",
+        ),
     )
 
-    const val LATEST = 8
+    const val LATEST = 9
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import world.wander.app.R
 import world.wander.engine.ResourceTarget
+import world.wander.engine.Yields
 import world.wander.engine.GATHER_M
 import world.wander.engine.LatLng
 import world.wander.engine.Treasury
@@ -131,6 +133,50 @@ fun ResourcePointers(
                 Surface(shape = RoundedCornerShape(6.dp), color = Color(0xE6F4ECD8)) {
                     Text(formatDistance(t.distanceM) + if (t.note == "new") " · new" else "", fontSize = 10.sp, color = Color(0xFF5B4636), modifier = Modifier.padding(horizontal = 4.dp))
                 }
+            }
+        }
+    }
+}
+
+/** What a resource node is and how to gather from it; opened by tapping the node on the map. */
+@Composable
+fun NodeDetailsCard(n: ResourceTarget, onGo: () -> Unit, onClose: () -> Unit) {
+    val icon = RESOURCE_ICONS[n.resource] ?: return
+    Surface(
+        shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+        border = BorderStroke(1.dp, Color(0x55806040)), shadowElevation = 6.dp,
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(ImageBitmap.imageResource(icon), contentDescription = null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(36.dp))
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(n.name, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "${n.resource.replaceFirstChar { it.uppercase() }} · ${n.kind.replace('_', ' ')}",
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+                Text(if (n.distanceM <= GATHER_M) "you're here" else formatDistance(n.distanceM), style = MaterialTheme.typography.labelLarge)
+            }
+            Spacer(Modifier.height(8.dp))
+            val state = when (n.note) {
+                "new" -> "New: the first gathering here pays double."
+                "gathered" -> "Gathered today. Come back tomorrow, or try somewhere you haven't been."
+                "thinned" -> "Thinned by frequent gathering (${(n.abundance * 100).toInt()}% full). It grows back about 5% a day."
+                else -> if (n.abundance < 0.99) "${(n.abundance * 100).toInt()}% full, growing back about 5% a day." else "Fresh."
+            }
+            Text(state, style = MaterialTheme.typography.bodyMedium)
+            Text(Yields.howToGather(n.resource, n.kind), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+            if (n.expectedYield > 0) {
+                Text("Right now: about %.1f ${n.resource}%s".format(n.expectedYield, if (n.kind in setOf("shore", "field", "street")) " for this stretch" else " a visit"),
+                    style = MaterialTheme.typography.labelMedium, color = Color(0xFF3F7D3A), modifier = Modifier.padding(top = 4.dp))
+            }
+            Text("Banked in this area's stock, usable by any settlement joined to it by roads you've walked. Gold is shared everywhere.",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(top = 6.dp))
+            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.Button(onClick = onGo) { Text("Show on map") }
+                androidx.compose.material3.OutlinedButton(onClick = onClose) { Text("Close") }
             }
         }
     }
