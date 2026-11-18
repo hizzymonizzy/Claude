@@ -131,7 +131,6 @@ object Yields {
 
     /** One line on how to gather from a node, for its details card. */
     fun howToGather(resource: String, kind: String): String = when {
-        resource == "stone" -> "Walk this street. Stone comes from every road you walk, about 1 per km."
         kind == "shore" -> "Walk along this shore, within 40 m of the water. About 2 food per km."
         kind == "field" -> "Walk along the edge of these fields or gardens. About 2 food per km."
         resource == "wood" -> "Spend 30 s inside or along the edge (15 m). 1 wood, plus 1 per 5 min you stay." +

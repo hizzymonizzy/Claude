@@ -7,7 +7,7 @@ package world.wander.engine
 data class ResourceTarget(
     val resource: String,
     val name: String,
-    /** The node's fixed spot (a place's [Landmark.anchor], or the middle of a street). Never follows you. */
+    /** The node's fixed spot (a place's [Landmark.anchor], or the middle of a stretch of shore). Never follows you. */
     val point: LatLng,
     /** How far you are from being able to gather here (0 when you're in its gathering zone). */
     val distanceM: Double,
@@ -16,7 +16,7 @@ data class ResourceTarget(
     val sourceId: String = "",
     /** The node the edge arrow points to for this resource: best yield for the distance, not yet gathered today. */
     val best: Boolean = false,
-    /** What kind of source: a place kind ("park", "library"…), "shore", "field" or "street". */
+    /** What kind of source: a place kind ("park", "library"…), "shore" or "field". */
     val kind: String = "",
     /** How full it is today (1 = fresh; thinned sources grow back 5% a day). */
     val abundance: Double = 1.0,
@@ -26,7 +26,6 @@ data class ResourceTarget(
         val bonus = if (note == "new") 2.0 else 1.0
         return when {
             note == "gathered" -> 0.0
-            resource == "stone" -> 0.15 * bonus
             kind == "shore" || kind == "field" -> 0.3 * bonus * abundance
             resource == "wood" -> 1.1 * bonus * abundance
             resource == "food" -> 1.05 * bonus * abundance
@@ -35,9 +34,6 @@ data class ResourceTarget(
         }
     }
 }
-
-/** A mapped street, for stone. */
-data class Street(val id: String, val name: String?, val points: List<LatLng>)
 
 /**
  * The resource nodes around you. Pure (no Android), so the whole loop of walking, pointing, gathering and
@@ -86,7 +82,7 @@ object ResourceFinder {
         }.toSet()
 
     fun find(
-        from: LatLng, places: List<Landmark>, water: List<Landmark>, streets: List<Street>, world: WorldState?,
+        from: LatLng, places: List<Landmark>, water: List<Landmark>, world: WorldState?,
         /** Coastlines; water outlines and beaches are added as shores automatically. */
         coast: List<List<LatLng>> = emptyList(),
         /** Edges of farmland, orchards and allotments: food lines inland. */
@@ -113,15 +109,7 @@ object ResourceFinder {
                 .map { (l, d) -> ResourceTarget(resource, l.name.ifBlank { "Water" }, l.anchor, d, note(l), l.id, best = l.id == best, kind = l.kind, abundance = abundance[l.id] ?: 1.0) }
         }
         val metal = places.filter { it.kind in Yields.METAL_KINDS }
-        // Stone: unwalked streets. The node sits at the street's middle; walking any of it counts.
-        val walked = world?.edges.orEmpty().filterValues { it.discovered }.keys
-        val stone = streets.asSequence().filter { it.id !in walked && it.points.size >= 2 }.map { s ->
-            val d = (1 until s.points.size).minOf { i -> Geo.distanceToSegmentM(from, s.points[i - 1], s.points[i]) }
-            s to d
-        }.sortedBy { it.second }.take(1).toList().map { (s, d) ->
-            ResourceTarget("stone", s.name ?: "A new street", s.points[s.points.size / 2], d, "new", s.id, best = true, kind = "street")
-        }
-        // Food: shores are lines, like streets for stone. Each ~150 m stretch is a node anchored at its middle;
+        // Food: shores are lines, like roads for stone. Each ~150 m stretch is a node anchored at its middle;
         // walking any of it gathers. Harbours are point nodes.
         val shoreLines = (coast + water.flatMap { it.rings } + places.filter { it.kind == "beach" }.flatMap { it.rings }).map { it to "shore" } +
             fields.map { it to "field" }
@@ -148,7 +136,8 @@ object ResourceFinder {
         val foodBest = listOfNotNull(shoreBest, harbourBest).minByOrNull { it.distanceM }
         val food = (shore.filter { it.distanceM <= NEARBY_M }.take(PER_RESOURCE) + listOfNotNull(shoreBest)).distinctBy { it.sourceId }
             .plus(harbours).map { it.copy(best = it.sourceId == foodBest?.sourceId) }
-        return nodes("wood", places.filter { it.kind in Yields.WOOD_KINDS }) + food + stone + nodes("metal", metal)
+        // Stone has no nodes: it comes from walking any road, so there's nothing to point at.
+        return nodes("wood", places.filter { it.kind in Yields.WOOD_KINDS }) + food + nodes("metal", metal)
     }
 }
 

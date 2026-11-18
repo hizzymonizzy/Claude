@@ -37,6 +37,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("resourcePointers", true)
         set(v) = sp.edit { putBoolean("resourcePointers", v) }
 
+    /** The one-time explanation of area banks has been seen. */
+    var bankTipSeen: Boolean
+        get() = sp.getBoolean("bankTipSeen", false)
+        set(v) = sp.edit { putBoolean("bankTipSeen", v) }
+
     var goalLocked: Boolean
         get() = sp.getBoolean("goalLocked", false)
         set(v) = sp.edit { putBoolean("goalLocked", v) }

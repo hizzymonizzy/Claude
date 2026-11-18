@@ -82,7 +82,7 @@ internal const val INK = "#5B4636"
 internal fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
 internal val OUR_LAYERS = listOf(
-    "explored", "green-places", "shore", "water-over", "fog", "fog-edge", "peek", "roads-edge", "roads-trail", "roads-dirt", "roads-cobble",
+    "explored", "green-places", "shore", "water-over", "fog", "fog-edge", "peek", "roads-edge", "roads-trail-edge", "roads-trail", "roads-dirt", "roads-cobble",
     "roads-trees-l", "roads-trees-r", "wild-1", "wild-2", "wild-3", "wild-gravel", "wild-cairns-l", "wild-cairns-r",
     "sand-places", "water-route", "water-light",
     "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
@@ -122,12 +122,13 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     // Soft edge: a wide blurred line along the fog boundary.
     s.addLayer(LineLayer("fog-edge", "fog").withProperties(lineColor(FOG), lineWidth(12f), lineBlur(10f), lineOpacity(0.6f)))
     s.addLayer(
+        // Unwalked streets in explored land: a clearly dashed, muted path. Walked roads are always solid.
         LineLayer("peek", "peek").withProperties(
-            lineColor(INK), lineOpacity(0.35f), lineWidth(1.5f), lineDasharray(arrayOf(1.5f, 2.5f)),
+            lineColor("#8C7A62"), lineOpacity(0.65f), lineWidth(2f), lineDasharray(arrayOf(2f, 2f)),
         ),
     )
     // Charted roads, five stages by distinct days walked (see the Legend):
-    // 1 Trail (dashed sand) · 2 Footpath (dirt) · 3 Lane (dirt + edge) · 4 Cobbled road · 5 Avenue (cobbles, tree-lined).
+    // 1 Trail (solid sand path with a soft edge) · 2 Footpath (dirt) · 3 Lane (dirt + edge) · 4 Cobbled road · 5 Avenue (cobbles, tree-lined).
     fun level(n: Int) = eq(get("level"), literal(n))
     guard(problems, "roads-edge") {
         s.addLayer(
@@ -138,10 +139,18 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
             ).also { it.setFilter(gte(get("level"), literal(3))) },
         )
     }
+    guard(problems, "roads-trail-edge") {
+        s.addLayer(
+            LineLayer("roads-trail-edge", "roads").withProperties(
+                lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND), lineColor("#9C8458"), lineOpacity(0.55f),
+                lineWidth(6f), lineBlur(1.5f),
+            ).also { it.setFilter(level(1)) },
+        )
+    }
     guard(problems, "roads-trail") {
         s.addLayer(
             LineLayer("roads-trail", "roads").withProperties(
-                lineCap(Property.LINE_CAP_BUTT), lineColor("#E2CDA0"), lineWidth(2.5f), lineDasharray(arrayOf(1.6f, 1.2f)),
+                lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND), lineColor("#E8D4A6"), lineWidth(3.5f),
             ).also { it.setFilter(level(1)) },
         )
     }

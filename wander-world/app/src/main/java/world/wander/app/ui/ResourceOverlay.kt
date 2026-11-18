@@ -172,8 +172,6 @@ fun NodeDetailsCard(n: ResourceTarget, onGo: () -> Unit, onClose: () -> Unit) {
                 Text("Right now: about %.1f ${n.resource}%s".format(n.expectedYield, if (n.kind in setOf("shore", "field", "street")) " for this stretch" else " a visit"),
                     style = MaterialTheme.typography.labelMedium, color = Color(0xFF3F7D3A), modifier = Modifier.padding(top = 4.dp))
             }
-            Text("Banked in this area's stock, usable by any settlement joined to it by roads you've walked. Gold is shared everywhere.",
-                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(top = 6.dp))
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.material3.Button(onClick = onGo) { Text("Show on map") }
                 androidx.compose.material3.OutlinedButton(onClick = onClose) { Text("Close") }

@@ -284,6 +284,22 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             world?.let { w ->
                 Spacer(Modifier.height(6.dp))
                 InventoryBar(w.stock(localArea), shownNodes.filter { it.best }, today = w.days[w.today]?.earned) { repo.focus.value = it.point }
+                // Explained once, the first time your stock is split between unconnected areas.
+                var bankTipSeen by remember { mutableStateOf(repo.prefs.bankTipSeen) }
+                val split = w.banks.filterValues { !it.isEmpty }.keys.map { w.networkOf[it] ?: "solo:$it" }.toSet().size > 1
+                if (split && !bankTipSeen) {
+                    Card(Modifier.padding(top = 6.dp).fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("Your stock is split between areas", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Wood, food, stone and metal stay in the area where you gathered them. Walk the roads between two " +
+                                    "areas to join their stock. Gold is shared everywhere. The bar shows the stock where you are.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            androidx.compose.material3.TextButton(onClick = { repo.prefs.bankTipSeen = true; bankTipSeen = true }) { Text("Got it") }
+                        }
+                    }
+                }
                 if (showPointers && targets.isEmpty()) {
                     Text(
                         if (searching) "Looking for resources nearby…" else "No wood, food, stone or metal mapped near here yet",

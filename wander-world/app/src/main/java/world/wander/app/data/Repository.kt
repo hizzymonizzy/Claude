@@ -41,7 +41,6 @@ import world.wander.engine.WorldState
 import world.wander.engine.Yields
 import world.wander.engine.ResourceFinder
 import world.wander.engine.ResourceTarget
-import world.wander.engine.Street
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -477,8 +476,7 @@ class Repository(context: Context) {
         val water = dao.waterAreasInTiles(tiles).distinctBy { it.id }.mapNotNull {
             try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
         }.filter { w -> places.none { it.id == w.id } } // a named lake is already a place
-        val streets = dao.edgesInTiles(Cells.disk(here, 1)).map { Street(it.id, it.name, Overpass.decode(it.geometry)) }
-        ResourceFinder.find(from, places, water, streets, _world.value, coast = coastLines(tiles), fields = fieldLines(tiles))
+        ResourceFinder.find(from, places, water, _world.value, coast = coastLines(tiles), fields = fieldLines(tiles))
     }
 
     fun dispatchFor(state: WorldState, day: Int): Dispatch = DispatchWriter.write(state, day)

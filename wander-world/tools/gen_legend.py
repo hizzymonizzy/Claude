@@ -47,7 +47,7 @@ def roads():
     grass = lambda: tile("oad_ground_grass", (W, H))
     y = H // 2
     out = {
-        "oad_legend_road_1": textured_line(grass(), (226, 205, 160), 5, y, dash=10),
+        "oad_legend_road_1": textured_line(grass(), (232, 212, 166), 7, y, edge=(156, 132, 88), edge_extra=6),
         "oad_legend_road_2": textured_line(grass(), dirt, 7, y),
         "oad_legend_road_3": textured_line(grass(), dirt, 11, y, edge=(74, 58, 40), edge_extra=5),
         "oad_legend_road_4": textured_line(grass(), cobble, 13, y, edge=(94, 90, 82), edge_extra=6),
@@ -85,10 +85,11 @@ def roads():
         for yy in (y - 16, y + 16):
             ImageDraw.Draw(w5w).ellipse([x - 4, yy - 4, x + 4, yy + 4], fill=(232, 131, 58), outline=(120, 60, 20))
     out["legend_water_5"] = w5w
-    peek = Image.new("RGB", (W, H), (233, 223, 199))
+    # Unwalked street inside explored ground: a clearly dashed, muted path on the grass.
+    peek = tile("oad_ground_grass", (W, H))
     pd = ImageDraw.Draw(peek)
-    for x in range(14, W - 14, 14):
-        pd.line([(x, y), (x + 6, y)], fill=(160, 140, 115), width=4)
+    for x in range(14, W - 14, 16):
+        pd.line([(x, y), (x + 8, y)], fill=(140, 122, 98), width=4)
     out["legend_road_peek"] = peek
     # The capital medallion as the map draws it: star upper right, monument upper left (see MapScreen.capitalMedal).
     medal = Image.open(RES / "oad_medal_tier_2.png").convert("RGBA")
@@ -133,12 +134,12 @@ LEGEND = [
     ("oad_legend_ground_water", "Water", "Clear and blue where you've been; faded under the fog."),
     ("oad_legend_ground_shore", "Shore", "Wet sand along the coast. Walk it for food, like roads for stone."),
     ("Roads", None, None),
-    ("oad_legend_road_1", "Trail", "Walked on 1 day."),
+    ("oad_legend_road_1", "Trail", "Walked on 1 day. Walked roads are always solid."),
     ("oad_legend_road_2", "Footpath", "3 days."),
     ("oad_legend_road_3", "Lane", "10 days."),
     ("oad_legend_road_4", "Cobbled road", "30 days."),
     ("oad_legend_road_5", "Avenue", "100 days. Tree-lined."),
-    ("legend_road_peek", "Unwalked street", "Inside explored ground every street shows its status; dashed = not walked yet."),
+    ("legend_road_peek", "Unwalked street", "Dashed: a mapped street in explored land you haven't walked yet."),
     ("Your own paths", None, None),
     ("legend_wild_1", "Faint track", "Off the map's roads, 1 day."),
     ("legend_wild_2", "Trodden path", "3 days."),
@@ -191,7 +192,7 @@ LEGEND = [
     ("oad_res_stone", "Stone", "Kilometres walked on roads; points to streets you haven't walked."),
     ("oad_res_metal", "Metal", "Discovering and revisiting places; points to undiscovered ones."),
     ("oad_medal_monument", "Monument", "A milestone, raised at your capital."),
-    ("oad_legend_pointer", "Best source", "The arrow points to the best node you haven't gathered today: fresh beats thinned."),
+    ("oad_legend_pointer", "Best source", "Wood, food or metal: the arrow points to the best node you haven't gathered today. Stone needs no pointer: walk any road."),
     ("legend_gathering", "Gathering", "Nodes stay put; tap one for details. Green ring: you're in its zone. 30 s gathers; a tick = gathered today. Resources bank in the area you gather them; roads you've walked join banks."),
     ("You", None, None),
     ("sprite_wanderer", "Walking", ""),

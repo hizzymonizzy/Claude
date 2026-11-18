@@ -21,7 +21,6 @@ class GatheringSimulationTest {
     val wood = rect("w2", "Elm Woods", "wood", 900.0, 300.0, 1300.0, 700.0)
     val pond = rect("w3", "", "water", 700.0, -250.0, 800.0, -150.0)
     val library = rect("n4", "Oakdale Library", "library", 1050.0, -40.0, 1120.0, 30.0)
-    val streets = listOf(Street("s1", "Elm Ave", listOf(at(-200.0, 0.0), at(1400.0, 0.0))))
     val edges = listOf(GraphEdge("s1", "Elm Ave", 1, 2, listOf(at(-200.0, 0.0), at(1400.0, 0.0))))
 
     /** Walk the given waypoints at 1.4 m/s, a fix every 5 s. */
@@ -56,7 +55,7 @@ class GatheringSimulationTest {
     /** Along Elm Ave, into the park and across it, back out, along the pond's shore, to the library. */
     private val track by lazy { walk(t0, 0.0 to 0.0, 300.0 to 0.0, 400.0 to 50.0, 500.0 to 0.0, 700.0 to -120.0, 800.0 to -120.0, 1085.0 to 0.0) }
     private fun nodes(p: TrackPoint, w: WorldState) =
-        ResourceFinder.find(LatLng(p.lat, p.lng), listOf(park, wood, library), listOf(pond), streets, w)
+        ResourceFinder.find(LatLng(p.lat, p.lng), listOf(park, wood, library), listOf(pond), w)
 
     @Test
     fun trace() {
@@ -135,7 +134,7 @@ class GatheringSimulationTest {
         org.junit.Assert.assertTrue("food ${w1.treasury.food}", w1.treasury.food in 1.5..4.0)
         // The food node aims at the next stretch you haven't walked, not the one under your feet.
         val here = LatLng(day1.last().lat, day1.last().lng)
-        val next = ResourceFinder.find(here, emptyList(), emptyList(), emptyList(), w1, coast = listOf(coast)).first { it.resource == "food" && it.best }
+        val next = ResourceFinder.find(here, emptyList(), emptyList(), w1, coast = listOf(coast)).first { it.resource == "food" && it.best }
         org.junit.Assert.assertNotEquals("gathered", next.note)
         // Walking a road far from any shore gathers no food.
         val inland = walk(t0, 0.0 to 0.0, 600.0 to 0.0)
