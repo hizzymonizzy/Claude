@@ -31,7 +31,7 @@ Encrypted export/import of your world; tests for map-server retry; split `Reposi
 ## Later
 Trade between networks and regions (trade posts at waystones); regional specialty goods; townspeople.
 
-## Banks and connections (draft for 0.10)
+## Banks and connections (shipped in 0.10.0; reversal agreed 2026-11-21, see below)
 - **Where things go.** Wood, food, stone and metal you gather go into the bank of the **area** where you gathered
   them (the waypoint or settlement for that neighbourhood).
 - **What connects.** Two areas share their banks only when a chain of roads and paths **you have walked** joins
@@ -40,3 +40,9 @@ Trade between networks and regions (trade posts at waystones); regional specialt
   or walking the roads that join it to home.
 - **Gold.** One purse for the whole world (agreed 2026-11-17).
 - **History.** Replayed like everything else: past gathering is assigned to the area where it happened.
+
+## Shared stock again (proposed, 2026-11-21)
+The player found per-area banks harder to manage than they're worth. Proposal: one shared stock of all five
+resources everywhere; remove area banks, networks, the split-stock tip and the per-network Atlas list. Gathering
+rules (nodes, shores, fields, thinning, bonuses) stay as they are. Market perks in 0.11 need rethinking (they were
+about trade between banks).

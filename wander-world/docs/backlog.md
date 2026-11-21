@@ -35,6 +35,9 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 ## Gameplay
 | Item | Why | Status |
 |---|---|---|
+| Back to one shared stock (remove area banks) | Player: easier to manage than counts per territory | proposed |
+
+|---|---|---|
 | Wood along wooded paths (a "trail through woods" line source), like food along shores | Woods often have paths through them; matches how stone and food work now | proposed |
 | Projects you can actually afford: show what's missing and where to get it (links to nodes) | Campfire has been waiting since day one | proposed |
 | Trade between settlements once two have markets | From the economy design, deferred in 0.7.0 | proposed |
