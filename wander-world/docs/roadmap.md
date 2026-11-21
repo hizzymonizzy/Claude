@@ -44,6 +44,11 @@ agreement in `CLAUDE.md`). Items come from `docs/backlog.md`. Status: proposed �
 4. **One arrow per resource** (two metal labels overlapped).
 5. **Simulation:** an inland trail walk with no park outline yields wood.
 
+## Heat map (designed 2026-11-21; release to be planned)
+ADR 0007 and 0008, design §20: one heat value with five steps; four zoom levels (block, neighbourhood, county,
+beyond) drawn as merging hexes under real roads; weekly cooling when the goal is missed (floor two steps below best),
+recovery when it's exceeded. Prototype and simulate first (§20.4).
+
 ## 0.12 Safe and sturdy (proposed)
 Encrypted export/import of your world; tests for map-server retry; split `Repository.kt`.
 

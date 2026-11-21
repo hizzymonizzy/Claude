@@ -817,3 +817,45 @@ place of interest (metal), each street (stone) and each ~25 m patch of water you
 - Engine choice confirmed by Spike S4 (Godot recommended), when visuals come into scope.
 - Source and budget for 3D assets (deferred with Q7).
 - Whether the real-map view gets a light touch of the diorama style (e.g. settlement miniatures as map pins).
+
+---
+
+## 20. The heat map (designed 2026-11-21, not built)
+
+Decisions: [ADR 0007](decisions/0007-world-is-a-heat-map.md) (heat, five steps, four zoom levels) and
+[ADR 0008](decisions/0008-weekly-cooling.md) (weekly cooling, replacing §8's daily decay for heat).
+Mockups: `docs/art/mockup_hex*.png` (iterations 1–4; `tools/mockups/hex*.py`).
+
+### 20.1 Heat
+- `heat(hex)` = distinct days with ≥ `cellPresenceSeconds` on foot in the hex (cycling at `cyclingWeight`), minus
+  cooling, plus homecoming bonus. Kept per day at H3 res 12; res 10/11 and res 8 count distinct days directly.
+- Steps: 1, 3, 10, 30, 100 (same as road wear). Step 0 = fog.
+- Roads, own paths and water routes keep their own wear (heat along a line) with the same steps and cooling.
+
+### 20.2 Weekly cooling (replaces §8.2 for heat and §8.4 for wear)
+Monday tick, `r` = last week's ratio: loss `L(r)` = 0.30 below 0.5; 0.30→0.15 from 0.5 to 0.8; 0.03→0 from 0.8 to 1.0;
+0 at 1.0. `heat -= heat × L(r) × dormancy`. Floor: `threshold(max(1, bestStep − 2))`. Recovery for `1 < r ≤ 1.5`:
+`heat += (best − heat) × 0.5 × (r − 1) / 0.5`. Homecoming ×2 until the previous step is regained. Rest mode freezes.
+
+### 20.3 Rules audit (what happens to each existing rule)
+
+| Rule today | Verdict | Notes |
+|---|---|---|
+| Fog / explored ground (buffers along walked roads, filled pockets) | **Merge into heat** | Explored = heat > 0 hexes; keeps road-buffer look at Block until res 12 presence exists |
+| Cell familiarity (res 9 distinct days) | **Merge into heat** | Becomes heat at res 12 with coarser levels derived |
+| Road / own-path / water-route wear (1/3/10/30/100) | **Keep** (it is line heat) | Decay moves to the weekly rule, floor two steps below best |
+| Peek: unwalked streets dashed on explored ground | **Keep** | Block and Neighbourhood |
+| Settlement development, area-days, tier thresholds | **Keep for now; candidate to merge** | Later: tier from the heat of a settlement's hex cluster |
+| Settlement decay (§8.2, daily, sturdiness) | **Open** | Proposal: same Monday tick and `L(r)` × sturdiness; tier floors unchanged |
+| Restoration (§8.3), ruins remember ×2 | **Generalize** | Same recovery and homecoming rule for heat, wear and settlements |
+| Rest mode, dormancy, adaptive goal | **Keep** | The safety valves |
+| Regions and waystones | **Keep** | Separate hot islands; Beyond view |
+| Discovery bonus ×2, thinning and regrowth of sources | **Keep** | They reward cold; later they could read heat directly |
+| Gold from goal and distance (ADR 0005) | **Keep** | Never reduced; heat doesn't touch gold |
+| Stone from road km; food from shores and field edges | **Keep** | |
+| 0.11 village plaza and garden plots | **Replace** | Paved hexes around the settlement, growing with tier |
+| Upgrades (future) | **New** | May raise heat floors or slow cooling in their area |
+
+### 20.4 Before building
+Prototype the four levels on MapLibre (hex fill layers by level and step, merged edges), check performance on the
+Fold with a year of data, and simulate cooling (1, 2, 4, 8 missed weeks; recovery weeks; rest mode; dormancy).
