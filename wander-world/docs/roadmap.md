@@ -46,3 +46,12 @@ The player found per-area banks harder to manage than they're worth. Proposal: o
 resources everywhere; remove area banks, networks, the split-stock tip and the per-network Atlas list. Gathering
 rules (nodes, shores, fields, thinning, bonuses) stay as they are. Market perks in 0.11 need rethinking (they were
 about trade between banks).
+
+## Gold sinks: market and cosmetics (proposed, 2026-11-21)
+Player: the market is a place to buy resources; gold needs things to be spent on, including cosmetics.
+- **Market buying.** Once a settlement has a market, buy wood, food, stone and metal with gold. Prices rise with each
+  unit bought in a week and reset weekly, so gathering stays the better path but gold is never stuck.
+  Open: a travelling trader's cart at the capital before any market, at higher prices?
+- **Cosmetics.** Spend gold on looks only: wanderer outfits, capital banner colours, map tints, medallion frames,
+  avenue lanterns. No gameplay effect.
+- Gold stays effort-earned (ADR 0005), so buying with it still rewards activity.
