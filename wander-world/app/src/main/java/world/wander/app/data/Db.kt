@@ -41,6 +41,14 @@ data class TrackPointEntity(
     val accuracyM: Float,
 )
 
+/** A finished walk's points, packed by [PointArchive] once the walk is a week old (kept forever, on the phone). */
+@Entity(tableName = "track_archive")
+class TrackArchiveEntity(
+    @PrimaryKey val segmentId: Long,
+    val data: ByteArray,
+    val count: Int,
+)
+
 // ---- Observations (source of truth for the world) ----
 
 @Entity(tableName = "edge_coverage", indices = [Index("edgeId"), Index("segmentId")])
@@ -262,8 +270,14 @@ interface WanderDao {
     @Query("SELECT * FROM segment ORDER BY startMs DESC LIMIT :limit") fun recentSegments(limit: Int): List<SegmentEntity>
     @Insert fun insertPoints(p: List<TrackPointEntity>)
     @Query("SELECT * FROM track_point WHERE segmentId = :segmentId ORDER BY timeMs") fun points(segmentId: Long): List<TrackPointEntity>
-    @Query("SELECT COUNT(*) FROM track_point WHERE segmentId = :segmentId") fun pointCount(segmentId: Long): Int
-    @Query("DELETE FROM track_point WHERE timeMs < :beforeMs") fun prunePoints(beforeMs: Long)
+    @Query("SELECT (SELECT COUNT(*) FROM track_point WHERE segmentId = :segmentId) + IFNULL((SELECT count FROM track_archive WHERE segmentId = :segmentId), 0)")
+    fun pointCount(segmentId: Long): Int
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun insertArchive(a: TrackArchiveEntity)
+    @Query("SELECT * FROM track_archive WHERE segmentId = :segmentId") fun archive(segmentId: Long): TrackArchiveEntity?
+    @Query("DELETE FROM track_point WHERE segmentId = :segmentId") fun deletePoints(segmentId: Long)
+    /** Finished, processed walks that ended before this time and still have loose point rows. */
+    @Query("SELECT id FROM segment WHERE processed = 1 AND endMs IS NOT NULL AND endMs < :beforeMs AND id IN (SELECT DISTINCT segmentId FROM track_point)")
+    fun segmentsToArchive(beforeMs: Long): List<Long>
 
     // Observations
     @Insert fun insertCoverage(c: List<EdgeCoverageEntity>)
@@ -356,6 +370,7 @@ interface WanderDao {
         TrailEntity::class, WildTrailEntity::class, TroddenEntity::class, LandmarkEntity::class,
         LandmarkTileEntity::class, LandmarkVisitEntity::class, ArrivalEntity::class, WaterTrailEntity::class, WakeEntity::class,
         WaterAreaEntity::class, WaterTileEntity::class, ProjectDecisionEntity::class, TerrainAreaEntity::class, ShoreEntity::class, PurchaseEntity::class,
+        TrackArchiveEntity::class,
     ],
     version = DbMigrations.LATEST,
     exportSchema = true,

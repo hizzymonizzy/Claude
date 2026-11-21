@@ -73,7 +73,11 @@ object DbMigrations {
         9 to listOf(
             "CREATE TABLE IF NOT EXISTS `purchase` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `day` INTEGER NOT NULL, `seller` TEXT NOT NULL, `item` TEXT NOT NULL, `qty` INTEGER NOT NULL, `madeMs` INTEGER NOT NULL)",
         ),
+        // v11 keeps every walk's points, packed per walk (review H1); nothing is deleted any more.
+        10 to listOf(
+            "CREATE TABLE IF NOT EXISTS `track_archive` (`segmentId` INTEGER NOT NULL, `data` BLOB NOT NULL, `count` INTEGER NOT NULL, PRIMARY KEY(`segmentId`))",
+        ),
     )
 
-    const val LATEST = 10
+    const val LATEST = 11
 }

@@ -62,6 +62,6 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 |---|---|---|
 | Heat per hex, four zoom levels, five steps (ADR 0007) | The world is a heat map; one rule for how ground looks | agreed (design) |
 | Weekly cooling with recovery, floor two steps below best (ADR 0008) | Decay was too slow to feel; weeks should matter | agreed (design) |
-| Settlement decay on the same weekly tick | One rule for everything | open |
+| Settlement decay on the same weekly tick | One rule for everything | agreed (0.12) |
 | Settlement tier from heat clusters | Fewer counters | proposed |
 | Upgrades that raise heat floors or slow cooling | Later option: fade to step 1, with upgrades to protect places | proposed |

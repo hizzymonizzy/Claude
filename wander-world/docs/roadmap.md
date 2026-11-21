@@ -34,6 +34,12 @@ agreement in `CLAUDE.md`). Items come from `docs/backlog.md`. Status: proposed �
 8. **Building perks** (small): well/fountain → thinned sources in its area regrow 50% faster; campfire → +1 food
    per day you walk in its area; market/market hall → shop prices (base / −10%).
 9. **Simulation** extended: buying and weekly price climb, shared stock, perks, the campfire bought into existence.
+## 0.11.1 Safety and speed (shipped 0.11.1)
+Review fixes shipped ahead of 0.12 so walk history is protected now: every walk's points kept, packed per walk after a
+week (H1, DB v11); one coalesced rebuild lane with timing in diagnostics, redundant rebuilds removed (H2); fog only
+recomputed when map data changes (H3); decoded tile geometry cached for the resource search (H4); duplicate presence
+query removed (M3, part); stray doc comment removed (L1).
+
 ## 0.12 Heat map, trails and a faster engine (proposed 2026-11-21, for review)
 Everything agreed since 0.11.0, plus the review's fixes (`docs/process/review-2026-11-21.md`).
 
@@ -46,7 +52,7 @@ Everything agreed since 0.11.0, plus the review's fixes (`docs/process/review-20
 **B. Weekly cooling** (ADR 0008)
 5. Monday tick: heat on roads, own paths, water routes and hexes cools by `L(r)`; recovery up to half of what was
    lost for 100–150% weeks; homecoming ×2; floor two steps below best; rest mode and dormancy as before.
-6. Settlements on the same Monday tick (× sturdiness, tier floors unchanged) — *needs your yes*.
+6. Settlements on the same Monday tick (× sturdiness, tier floors unchanged). Agreed.
 7. Monday dispatch: what faded and what recovered.
 
 **C. Heat map** (ADR 0007)
@@ -56,15 +62,14 @@ Everything agreed since 0.11.0, plus the review's fixes (`docs/process/review-20
 10. Settlements as paved hexes (replaces the 0.11 plaza and gardens).
 
 **D. Engineering** (review)
-11. Keep every walk's points, compacted (H1). 12. One coalesced rebuild lane, fewer rebuilds, timing in diagnostics
-(H2). 13. Fog only recomputed when layers change (H3). 14. Cached tile geometry for the resource search and rebuild
-(H4, M3). 15. Split `Repository.kt` (M2). 16. Overpass retry tests (M4). 17. Clean-ups L1–L4.
+11–14. Shipped early in 0.11.1 (H1–H4). Remaining: cache decoded geometry in rebuild (M3), split `Repository.kt`
+(M2), Overpass retry tests (M4), clean-ups L2–L4.
 
 **Simulation and checks:** cooling over 1/2/4/8 missed weeks and recovery weeks; trail wood inland without a park
 outline; rebuild time on a year of synthetic walks; map frame time on the Fold at each zoom level.
 
-**Order of work** (each step passes `tools/check.sh`): D11–D12 first (protect history, stable rebuilds), then B, A,
-C, then the remaining D items. One APK at the end.
+**Order of work** (each step passes `tools/check.sh`): B (cooling, engine and simulation), A, C, then the remaining D
+items. One APK at the end. Settlement cooling confirmed by the player (2026-11-21).
 
 ## 0.13 Safe and sturdy (proposed)
 Encrypted export/import of your world. (Map-server retry tests and the `Repository.kt` split moved into 0.12.)

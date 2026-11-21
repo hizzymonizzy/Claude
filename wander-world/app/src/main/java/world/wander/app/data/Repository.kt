@@ -108,6 +108,25 @@ class Repository(context: Context) {
 
     suspend fun logAsync(tag: String, message: String) = withContext(Dispatchers.IO) { log(tag, message) }
 
+    /** A walk's points, from the live rows or, once it's been packed, from its archive. */
+    private fun pointsOf(segmentId: Long): List<TrackPointEntity> =
+        dao.points(segmentId).ifEmpty { dao.archive(segmentId)?.let { PointArchive.decode(segmentId, it.data) }.orEmpty() }
+
+    /** Packs the points of processed walks older than a week into one row each (review H1: never delete history). */
+    private fun archiveOldWalks() {
+        val ids = dao.segmentsToArchive(System.currentTimeMillis() - 7L * 24 * 3600 * 1000)
+        var points = 0; var bytes = 0L
+        for (id in ids) {
+            val pts = dao.points(id)
+            if (pts.isEmpty()) continue
+            val data = PointArchive.encode(pts)
+            if (PointArchive.decode(id, data).size != pts.size) { log("process", "Archive check failed for walk $id; kept as is"); continue }
+            db.runInTransaction { dao.insertArchive(TrackArchiveEntity(id, data, pts.size)); dao.deletePoints(id) }
+            points += pts.size; bytes += data.size
+        }
+        if (ids.isNotEmpty()) log("process", "Packed ${ids.size} walk(s): $points points into ${bytes / 1024} KB")
+    }
+
     // ---- Map data ----
 
     /** Tiles whose download failed recently, and when to try again (backoff doubles each failure). */
@@ -247,7 +266,7 @@ class Repository(context: Context) {
         processLock.withLock {
             var done = 0
             for (seg in dao.pendingSegments()) {
-                val pts = dao.points(seg.id)
+                val pts = pointsOf(seg.id)
                 if (pts.size < 2) { dao.markProcessed(seg.id, true, "too few points"); continue }
                 val processor = TrackProcessor(zone)
                 val usable = processor.usablePoints(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) })
@@ -327,7 +346,7 @@ class Repository(context: Context) {
         val good = pts.filter { it.accuracyM <= 50f }
         val first = good.firstOrNull() ?: return null
         val prev = dao.previousSegment(seg.startMs, seg.id) ?: return null
-        val last = dao.points(prev.id).lastOrNull { it.accuracyM <= 50f } ?: return null
+        val last = pointsOf(prev.id).lastOrNull { it.accuracyM <= 50f } ?: return null
         if (Geo.distanceM(last.lat, last.lng, first.lat, first.lng) < 2_000) return null
         // Where you set off on foot: the middle of the first couple of minutes, so one stray fix can't move it.
         val start = good.takeWhile { it.timeMs - first.timeMs <= 120_000 }.take(8)
@@ -338,7 +357,28 @@ class Repository(context: Context) {
 
     // ---- Building the world ----
 
+    private val rebuildLock = Mutex()
+    private val rebuildsRequested = java.util.concurrent.atomic.AtomicLong(0)
+    @Volatile private var rebuildsCovered = 0L
+
+    /**
+     * Replays the world and publishes it. One lane (review H2): rebuilds never overlap, and requests that arrive while
+     * one is running share the next run instead of each replaying the world again.
+     */
     suspend fun rebuild(): WorldState = withContext(Dispatchers.IO) {
+        val ticket = rebuildsRequested.incrementAndGet()
+        rebuildLock.withLock {
+            _world.value?.let { if (rebuildsCovered >= ticket) return@withContext it }
+            val covers = rebuildsRequested.get()
+            val t0 = System.currentTimeMillis()
+            val state = rebuildNow()
+            rebuildsCovered = covers
+            log("world", "Rebuilt ${state.today - prefs.startDay + 1} days in ${System.currentTimeMillis() - t0} ms")
+            state
+        }
+    }
+
+    private fun rebuildNow(): WorldState {
         val today = today()
         repairFallbackAreas()
         resolveHome()
@@ -396,6 +436,7 @@ class Repository(context: Context) {
         // Unwalked streets: every mapped street in the tiles you've been in (the map keeps those inside explored
         // ground, so explored land shows every street's status), plus any touching a street you've walked.
         val presenceTiles = dao.allPresenceCells().map { Cells.parent(it.cell, Cells.TILE_RES) }.toSet()
+        val nearTiles = presenceTiles
         val peek = (dao.edgesInTiles(presenceTiles.toList()) + nodes.chunked(400).flatMap { dao.edgesTouching(it) })
             .filter { it.id !in discoveredIds }.distinctBy { it.id }
         val trails = dao.allTrails().map { Overpass.decode(it.geometry) }
@@ -412,20 +453,14 @@ class Repository(context: Context) {
             val wear = pts.map { state.wakeWear[Cells.cellAt(it.lat, it.lng, Cells.TRODDEN_RES)] ?: 1.0 }.average()
             pts to state.levelFor(wear)
         }
-        val nearTiles = dao.allPresenceCells().map { Cells.parent(it.cell, Cells.TILE_RES) }.toSet()
         val terrain = dao.terrainInTiles(nearTiles.toList()).distinctBy { it.id }
         val sand = terrain.filter { it.kind == "sand" }.mapNotNull { try { Overpass.decodeRings(it.geometry) } catch (_: Exception) { null } }
         val coast = terrain.filter { it.kind == "coast" }.flatMap { try { Overpass.decodeRings(it.geometry) } catch (_: Exception) { emptyList() } }
         _layers.value = MapLayers(discoveredEntities, peek, trails, wild, shownLandmarks, water, sand, coast)
         _world.value = state
-        state
+        return state
     }
 
-    /**
-     * The best nearby source of each resource (yield per distance), from map data already on the phone (nothing is fetched):
-     * wood from woods and parks, food from water and beaches, metal from places you haven't discovered yet
-     * (then ones you have), stone from the nearest street you haven't walked. Null where none is near.
-     */
     /**
      * One line per walk saying what it gathered from and why anything didn't pay, e.g.
      * "Segment 12: Oakdale Park (park) 45 s ✓ wood · Elm Woods 12 s, needs 30 s · shores/fields 14 cells (~0.6 km)".
@@ -469,14 +504,33 @@ class Repository(context: Context) {
         val here = Cells.tile(from.lat, from.lng)
         // Where you're standing matters now: retry its places within 5 minutes, not 30.
         if (ensureTiles(listOf(here))) ensureLandmarks(listOf(here), maxWaitMs = 5 * 60_000L)
-        val tiles = Cells.disk(here, 2)
-        val places = dao.landmarksInTiles(tiles).distinctBy { it.id }.mapNotNull {
-            try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
-        }
-        val water = dao.waterAreasInTiles(tiles).distinctBy { it.id }.mapNotNull {
-            try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
-        }.filter { w -> places.none { it.id == w.id } } // a named lake is already a place
-        ResourceFinder.find(from, places, water, _world.value, coast = coastLines(tiles), fields = fieldLines(tiles))
+        val geo = Cells.disk(here, 2).map { tileGeo(it) }
+        val places = geo.flatMap { it.places }.distinctBy { it.id }
+        val placeIds = places.mapTo(HashSet()) { it.id }
+        val water = geo.flatMap { it.water }.distinctBy { it.id }.filter { it.id !in placeIds } // a named lake is already a place
+        ResourceFinder.find(from, places, water, _world.value, coast = geo.flatMap { it.coast }, fields = geo.flatMap { it.fields })
+    }
+
+    /** A tile's decoded places, water, coast and field lines. */
+    private class TileGeo(val stamp: Long, val places: List<Landmark>, val water: List<Landmark>, val coast: List<List<LatLng>>, val fields: List<List<LatLng>>)
+    private val tileGeoCache = java.util.concurrent.ConcurrentHashMap<String, TileGeo>()
+
+    /**
+     * Decoded once per download (review H4): the resource search runs every 20 s while recording and used to re-read
+     * and decode all of this each time. Tiles whose places aren't downloaded yet aren't cached, so they're read again.
+     */
+    private fun tileGeo(tile: String): TileGeo {
+        val stamp = dao.landmarkTile(tile)?.fetchedMs
+        tileGeoCache[tile]?.let { if (stamp != null && it.stamp == stamp) return it }
+        val one = listOf(tile)
+        val geo = TileGeo(
+            stamp ?: -1,
+            dao.landmarksInTiles(one).mapNotNull { try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null } },
+            dao.waterAreasInTiles(one).mapNotNull { try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null } },
+            coastLines(one), fieldLines(one),
+        )
+        if (stamp != null) tileGeoCache[tile] = geo
+        return geo
     }
 
     fun dispatchFor(state: WorldState, day: Int): Dispatch = DispatchWriter.write(state, day)
@@ -507,10 +561,9 @@ class Repository(context: Context) {
         try { health.sync(prefs.startDay) } catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { log("health", "Sync failed: ${e.message}") }
         prefs.lastHealthSyncMs = System.currentTimeMillis()
-        rebuild()
         processPending()
         val state = rebuild()
-        dao.prunePoints(System.currentTimeMillis() - 90L * 24 * 3600 * 1000)
+        archiveOldWalks()
         dao.pruneDiagnostics(System.currentTimeMillis() - 30L * 24 * 3600 * 1000)
         val yesterday = today() - 1
         if (yesterday < prefs.startDay || dao.dispatch(yesterday) != null) return@withContext null
@@ -551,7 +604,7 @@ class Repository(context: Context) {
             val waiting = dao.pendingSegments()
             if (waiting.isNotEmpty()) {
                 val proc = TrackProcessor(zone)
-                val missing = waiting.flatMap { seg -> proc.usablePoints(dao.points(seg.id).map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }).map { Cells.tile(it.lat, it.lng) } }.toSet().filter { dao.tile(it) == null }
+                val missing = waiting.flatMap { seg -> proc.usablePoints(pointsOf(seg.id).map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }).map { Cells.tile(it.lat, it.lng) } }.toSet().filter { dao.tile(it) == null }
                 appendLine("Waiting walks: ${waiting.size} · missing map tiles: ${missing.joinToString().ifEmpty { "none" }}")
             }
             appendLine()

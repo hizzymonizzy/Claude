@@ -143,12 +143,30 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         onDispose { lifecycle.removeObserver(observer); mapView.onDestroy() }
     }
 
-    // World layers (fog is computed off the main thread). Each source updates independently, so one
-    // failure can't hide the rest; failures and counts go to the diagnostics log.
-    var lastSummary by remember { mutableStateOf("") }
+    // World layers. Each source updates independently, so one failure can't hide the rest; failures and counts go to
+    // the diagnostics log. The fog (a union of every walked road, the heavy part) depends only on map data and
+    // waystones, so it is recomputed only when those change, not on every purchase or decision (review H3).
     val wornBanner = looks.second?.takeIf { "banner_$it" in world?.owned.orEmpty() }
     val wornOutfit = looks.first?.takeIf { "outfit_$it" in world?.owned.orEmpty() }
-    LaunchedEffect(style, layers, world, wornBanner) {
+    var lastSummary by remember { mutableStateOf("") }
+    var exploredGeometry by remember { mutableStateOf<org.locationtech.jts.geom.Geometry?>(null) }
+    var fogSummary by remember { mutableStateOf("") }
+    val waystoneCenters = world?.waystones.orEmpty().map { it.center }
+    LaunchedEffect(style, layers, waystoneCenters) {
+        val s = style ?: return@LaunchedEffect
+        val errors = mutableListOf<String>()
+        val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogExploredGeometry(layers, waystoneCenters) } }
+            catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "fog: $e"; null }
+        if (fe != null) {
+            s.source("fog")?.setGeoJson(fe.first); s.source("explored")?.setGeoJson(fe.second)
+            exploredGeometry = fe.third
+        }
+        val peek = try { withContext(Dispatchers.Default) { MapLayersBuilder.peeks(layers, fe?.third) } }
+            catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "peek: $e"; null }
+        peek?.let { s.source("peek")?.setGeoJson(it) }
+        fogSummary = "peek=${peek?.features()?.size ?: -1}" + if (errors.isEmpty()) "" else " | errors: " + errors.joinToString("; ")
+    }
+    LaunchedEffect(style, layers, world, wornBanner, exploredGeometry, fogSummary) {
         val s = style ?: return@LaunchedEffect
         val errors = mutableListOf<String>()
         fun update(id: String, build: () -> FeatureCollection): Int = try {
@@ -157,11 +175,8 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             src.setGeoJson(fc)
             fc.features()?.size ?: 0
         } catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "$id: ${e.javaClass.simpleName} ${e.message}"; -1 }
-        val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogExploredGeometry(layers, world?.waystones.orEmpty().map { it.center }) } }
-            catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "fog: $e"; null }
-        if (fe != null) { update("fog") { fe.first }; update("explored") { fe.second } }
         try {
-            val (plaza, gardens, paths) = withContext(Dispatchers.Default) { MapLayersBuilder.village(world, fe?.third) }
+            val (plaza, gardens, paths) = withContext(Dispatchers.Default) { MapLayersBuilder.village(world, exploredGeometry) }
             update("village-plaza") { plaza }; update("village-gardens") { gardens }; update("village-paths") { paths }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "village: $e" }
         val kinds = world?.landmarks.orEmpty().associate { it.name to it.kind }
@@ -171,8 +186,6 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             "shore" to update("shore") { MapLayersBuilder.shore(layers) },
             "water" to update("water") { MapLayersBuilder.water(layers) },
             "roads" to update("roads") { MapLayersBuilder.roads(layers) },
-            "peek" to (withContext(Dispatchers.Default) { try { MapLayersBuilder.peeks(layers, fe?.third) } catch (e: Exception) { null } }
-                ?.let { fc -> update("peek") { fc } } ?: -1),
             "wild" to update("wild") { MapLayersBuilder.wild(layers) },
             "places" to update("landmarks") { MapLayersBuilder.landmarkLabels(layers, kinds) },
             "settlements" to update("settlements") { MapLayersBuilder.settlements(world, wornBanner) },
@@ -181,7 +194,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             "waypoints" to update("waypoints") { MapLayersBuilder.waypoints(world) },
             "waystones" to update("waystones") { MapLayersBuilder.waystones(world) },
         )
-        val summary = counts.entries.joinToString { "${it.key}=${it.value}" } + if (errors.isEmpty()) "" else " | errors: " + errors.joinToString("; ")
+        val summary = counts.entries.joinToString { "${it.key}=${it.value}" } + ", $fogSummary" + if (errors.isEmpty()) "" else " | errors: " + errors.joinToString("; ")
         if (summary != lastSummary) { lastSummary = summary; repo.log("map", summary) }
     }
     // Fly to whatever the Atlas or search picked.

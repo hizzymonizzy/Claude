@@ -101,4 +101,6 @@ Follow `docs/process/release.md`. Work on branch `claude/fitness-gps-world-build
 
 ## Known technical debt
 - Overpass network code (`postWithRetry`) is untested; only parsing is covered.
-- `Repository.kt` is large (processing, rebuild, diagnostics, resources); split it when it next grows.
+- `Repository.kt` is large (processing, rebuild, diagnostics, resources); split planned in 0.12 (review M2).
+- Full review and status: `docs/process/review-2026-11-21.md`.
+- Walk points are never deleted: they're packed per walk after a week (`PointArchive`); read them with `pointsOf()`.
