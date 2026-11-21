@@ -34,23 +34,40 @@ agreement in `CLAUDE.md`). Items come from `docs/backlog.md`. Status: proposed �
 8. **Building perks** (small): well/fountain → thinned sources in its area regrow 50% faster; campfire → +1 food
    per day you walk in its area; market/market hall → shop prices (base / −10%).
 9. **Simulation** extended: buying and weekly price climb, shared stock, perks, the campfire bought into existence.
-## 0.11.1 Trails and woods (agreed 2026-11-21, bundling; waiting on field diagnostics)
-1. **Unwalked streets** cut to explored ground (no dashes in the fog) and drawn visible on grass (light dashes,
-   dark edge). Test: no dashed segment outside explored ground.
-2. **Wood from woodland trails:** unpaved footpaths/tracks give about 1 wood per km, double on a new trail; thinning
-   as for other sources. Paved park paths don't count.
-3. **Big parks kept:** large park/wood/reserve relations fetched one at a time instead of skipped (seas and rivers
-   still skipped); if one still times out, its bounding box stands in as a rough zone.
-4. **One arrow per resource** (two metal labels overlapped).
-5. **Simulation:** an inland trail walk with no park outline yields wood.
+## 0.12 Heat map, trails and a faster engine (proposed 2026-11-21, for review)
+Everything agreed since 0.11.0, plus the review's fixes (`docs/process/review-2026-11-21.md`).
 
-## Heat map (designed 2026-11-21; release to be planned)
-ADR 0007 and 0008, design §20: one heat value with five steps; four zoom levels (block, neighbourhood, county,
-beyond) drawn as merging hexes under real roads; weekly cooling when the goal is missed (floor two steps below best),
-recovery when it's exceeded. Prototype and simulate first (§20.4).
+**A. Trails and woods** (was 0.11.1)
+1. Unwalked streets cut to explored ground and drawn visible on grass (light dashes, dark edge).
+2. Wood from unpaved woodland trails, about 1 per km, double on a new trail; paved paths don't count.
+3. Large parks, woods and reserves fetched one at a time instead of skipped; bounding box fallback.
+4. One arrow per resource.
 
-## 0.12 Safe and sturdy (proposed)
-Encrypted export/import of your world; tests for map-server retry; split `Repository.kt`.
+**B. Weekly cooling** (ADR 0008)
+5. Monday tick: heat on roads, own paths, water routes and hexes cools by `L(r)`; recovery up to half of what was
+   lost for 100–150% weeks; homecoming ×2; floor two steps below best; rest mode and dormancy as before.
+6. Settlements on the same Monday tick (× sturdiness, tier floors unchanged) — *needs your yes*.
+7. Monday dispatch: what faded and what recovered.
+
+**C. Heat map** (ADR 0007)
+8. Presence recorded at H3 res 12 (DB migration; every walk re-processed, all history kept).
+9. Map drawn in four zoom levels: Block (res 12, faint grid), Neighbourhood (res 10/11, merged), County (res 8,
+   towns spread by tier), Beyond (region nodes by tier). Five heat steps per ground type. Roads stay as they are.
+10. Settlements as paved hexes (replaces the 0.11 plaza and gardens).
+
+**D. Engineering** (review)
+11. Keep every walk's points, compacted (H1). 12. One coalesced rebuild lane, fewer rebuilds, timing in diagnostics
+(H2). 13. Fog only recomputed when layers change (H3). 14. Cached tile geometry for the resource search and rebuild
+(H4, M3). 15. Split `Repository.kt` (M2). 16. Overpass retry tests (M4). 17. Clean-ups L1–L4.
+
+**Simulation and checks:** cooling over 1/2/4/8 missed weeks and recovery weeks; trail wood inland without a park
+outline; rebuild time on a year of synthetic walks; map frame time on the Fold at each zoom level.
+
+**Order of work** (each step passes `tools/check.sh`): D11–D12 first (protect history, stable rebuilds), then B, A,
+C, then the remaining D items. One APK at the end.
+
+## 0.13 Safe and sturdy (proposed)
+Encrypted export/import of your world. (Map-server retry tests and the `Repository.kt` split moved into 0.12.)
 
 ## Later
 Trade between networks and regions (trade posts at waystones); regional specialty goods; townspeople.
