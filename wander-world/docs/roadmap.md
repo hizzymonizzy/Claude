@@ -34,6 +34,16 @@ agreement in `CLAUDE.md`). Items come from `docs/backlog.md`. Status: proposed �
 8. **Building perks** (small): well/fountain → thinned sources in its area regrow 50% faster; campfire → +1 food
    per day you walk in its area; market/market hall → shop prices (base / −10%).
 9. **Simulation** extended: buying and weekly price climb, shared stock, perks, the campfire bought into existence.
+## 0.11.1 Trails and woods (agreed 2026-11-21, bundling; waiting on field diagnostics)
+1. **Unwalked streets** cut to explored ground (no dashes in the fog) and drawn visible on grass (light dashes,
+   dark edge). Test: no dashed segment outside explored ground.
+2. **Wood from woodland trails:** unpaved footpaths/tracks give about 1 wood per km, double on a new trail; thinning
+   as for other sources. Paved park paths don't count.
+3. **Big parks kept:** large park/wood/reserve relations fetched one at a time instead of skipped (seas and rivers
+   still skipped); if one still times out, its bounding box stands in as a rough zone.
+4. **One arrow per resource** (two metal labels overlapped).
+5. **Simulation:** an inland trail walk with no park outline yields wood.
+
 ## 0.12 Safe and sturdy (proposed)
 Encrypted export/import of your world; tests for map-server retry; split `Repository.kt`.
 
