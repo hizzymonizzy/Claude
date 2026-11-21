@@ -47,6 +47,15 @@ Source: official mirror `github.com/0ad/0ad`, branch `master`. Every file passed
 | `oad_medal_gold.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/special_treasure.png` | cropped to a circle, framed |
 | `oad_medal_monument.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/special_obelisk.png` | cropped to a circle, framed |
 | `oad_medal_place_beach.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/gaia/flora_tree_date_palm.png` | cropped to a circle, framed |
+| `oad_medal_bldg_meeting_hall.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/stoa.png` | cropped to a circle, framed |
+| `oad_medal_bldg_town_hall.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/civic_centre.png` | cropped to a circle, framed |
+| `oad_medal_bldg_market.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/market.png` | cropped to a circle, framed |
+| `oad_medal_bldg_market_hall.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/storehouse.png` | cropped to a circle, framed |
+| `oad_medal_bldg_inn.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/house.png` | cropped to a circle, framed |
+| `oad_medal_bldg_pier.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/dock.png` | cropped to a circle, framed |
+| `oad_medal_bldg_lighthouse.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/lighthouse.png` | cropped to a circle, framed |
+| `oad_medal_bldg_walls.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/wall.png` | cropped to a circle, framed |
+| `oad_medal_bldg_great_hall.png` | `binaries/data/mods/public/art/textures/ui/session/portraits/structures/palace.png` | cropped to a circle, framed |
 | `oad_res_food.png` | `binaries/data/mods/public/art/textures/ui/session/icons/resources/food.png` | re-encoded |
 | `oad_res_wood.png` | `binaries/data/mods/public/art/textures/ui/session/icons/resources/wood.png` | re-encoded |
 | `oad_res_stone.png` | `binaries/data/mods/public/art/textures/ui/session/icons/resources/stone.png` | re-encoded |

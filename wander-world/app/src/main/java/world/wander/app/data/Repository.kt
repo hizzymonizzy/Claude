@@ -39,6 +39,8 @@ import world.wander.engine.WorldEngine
 import world.wander.engine.WorldInput
 import world.wander.engine.WorldState
 import world.wander.engine.Yields
+import world.wander.engine.Purchase
+import world.wander.engine.WorldEvent
 import world.wander.engine.ResourceFinder
 import world.wander.engine.ResourceTarget
 import java.time.LocalDate
@@ -82,9 +84,6 @@ class Repository(context: Context) {
     val lastLocation = MutableStateFlow<LatLng?>(null)
     /** The resource nodes around you, as the map shows them (the proposal card uses them to say where to go). */
     val resourceNodes = MutableStateFlow<List<ResourceTarget>>(emptyList())
-
-    /** The area (neighbourhood) a point is in, if you've been in its cell. */
-    suspend fun areaAt(p: LatLng): String? = withContext(Dispatchers.IO) { dao.cellArea(Cells.cell(p.lat, p.lng))?.areaId }
 
     /** Whether the map shows pointers to the nearest resources; Settings changes it, the map follows at once. */
     val resourcePointers = MutableStateFlow(prefs.resourcePointers)
@@ -379,6 +378,7 @@ class Repository(context: Context) {
                 )
             } + waterInfos,
             decisions = dao.allDecisions().map { ProjectDecision(it.day, it.areaId, it.projectId, it.approve) },
+            purchases = dao.allPurchases().map { Purchase(it.day, it.seller, it.item, it.qty) },
             landmarkVisits = visits.map { LandmarkVisit(it.landmarkId, it.day, it.seconds) },
             trodden = dao.allTrodden().map { TroddenCell(it.cell, it.day) },
             arrivals = dao.allArrivals().map { Arrival(it.day, it.lat, it.lng) },
@@ -486,6 +486,20 @@ class Repository(context: Context) {
         dao.insertDecision(ProjectDecisionEntity(day = today(), areaId = proposal.areaId, projectId = proposal.projectId, approve = approve, madeMs = System.currentTimeMillis()))
         log("economy", "${if (approve) "Approved" else "Declined"} ${proposal.projectId} for ${proposal.areaId}")
         rebuild()
+    }
+
+    /**
+     * Buys from the travelling trader (seller "trader") or a settlement's market (seller = its area id). Recorded as a
+     * player choice and replayed; the world decides the price and refuses it if you can't afford it.
+     */
+    suspend fun buy(seller: String, item: String, qty: Int = 1): Boolean = withContext(Dispatchers.IO) {
+        val before = _world.value?.events?.size ?: 0
+        dao.insertPurchase(PurchaseEntity(day = today(), seller = seller, item = item, qty = qty, madeMs = System.currentTimeMillis()))
+        val w = rebuild()
+        val result = w.events.drop(before).lastOrNull { it is WorldEvent.Purchased || it is WorldEvent.PurchaseRefused }
+        val ok = result is WorldEvent.Purchased
+        log("shop", if (ok) "Bought $qty $item from $seller for ${(result as WorldEvent.Purchased).price} gold" else "Couldn't buy $qty $item from $seller")
+        ok
     }
 
     /** The daily routine: sync health, process captures, rebuild, and write yesterday's dispatch. */

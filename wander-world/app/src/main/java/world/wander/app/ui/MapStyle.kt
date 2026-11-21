@@ -87,11 +87,13 @@ internal val OUR_LAYERS = listOf(
     "sand-places", "water-route", "water-light",
     "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
     "resource-rings", "resource-icons", "me",
+    "village-gardens", "village-plaza", "village-paths", "buildings", "trader",
 )
 
 internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     val empty = FeatureCollection.fromFeatures(emptyList())
-    for (id in listOf("explored", "green-places", "sand-places", "shore", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "resources", "me")) s.addSource(GeoJsonSource(id, empty))
+    for (id in listOf("explored", "green-places", "sand-places", "shore", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "resources", "me",
+        "village-plaza", "village-gardens", "village-paths", "buildings", "trader")) s.addSource(GeoJsonSource(id, empty))
 
     // Explored ground: real terrain texture (0 A.D. grass / forest floor) laid OVER the base map's streets and
     // buildings, so inside explored land every street is drawn by its status (walked: trail…avenue; unwalked:
@@ -110,6 +112,17 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
             base.filter?.let { over.setFilter(it) }
             s.addLayerAbove(over, "shore")
         }
+    }
+
+    // The village filling in (0.11): garden plots and a paved plaza around each settlement, on explored ground only,
+    // so the green still means "walked here" and the village grows over it with tier and buildings.
+    guard(problems, "village") {
+        s.addLayer(FillLayer("village-gardens", "village-gardens").withProperties(fillPattern("ground_farm"), fillOpacity(0.9f)))
+        s.addLayer(FillLayer("village-plaza", "village-plaza").withProperties(fillPattern("road_cobble"), fillOpacity(0.85f)))
+        s.addLayer(LineLayer("village-paths", "village-paths").withProperties(
+            lineColor("#B79A6B"), lineWidth(interpolate(linear(), zoom(), stop(13, 1.5f), stop(17, 4f))), lineOpacity(0.85f),
+            lineCap(Property.LINE_CAP_ROUND),
+        ))
     }
 
     // Fog: parchment you can see the land through, thicker when zoomed out so explored areas pop.
@@ -290,6 +303,23 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.4f)),
         ),
     ) }
+    // Buildings at each settlement (latest of each upgrade chain); a market opens the shop when tapped.
+    guard(problems, "buildings") { s.addLayer(
+        SymbolLayer("buildings", "buildings").withProperties(
+            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
+            iconSize(interpolate(linear(), zoom(), stop(12, 0.0f), stop(13, 0.22f), stop(15, 0.34f), stop(17, 0.5f))),
+        ),
+    ) }
+    // The travelling trader, by the village you visited last. Tap to trade.
+    guard(problems, "trader") { s.addLayer(
+        SymbolLayer("trader", "trader").withProperties(
+            iconImage("trader"), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            iconSize(interpolate(linear(), zoom(), stop(10, 0.3f), stop(16, 0.45f), stop(18, 0.6f))),
+            textField("Trader"), textFont(FONT), textSize(11f), textColor("#6B4A1F"), textHaloColor("#F4ECD8"), textHaloWidth(1.5f),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.3f)), textAllowOverlap(true),
+            textOptional(true),
+        ),
+    ) }
     // Resource nodes: fixed spots on places and streets, drawn in the map so they stay pinned to the ground.
     // Ring: gold = fresh, bright gold + thicker = the one the arrow points to, green = you're in its zone,
     // grey-green with a tick = gathered today, faded = thinned.
@@ -345,11 +375,17 @@ internal fun addSprites(s: Style, context: Context) {
         val medal = loaded["medal_tier_$tier"] ?: continue
         s.addImage("medal_tier_${tier}_cap", capitalMedal(medal, star, null))
         if (monument != null) s.addImage("medal_tier_${tier}_capmon", capitalMedal(medal, star, monument))
+        // The capital with a banner you've bought flying from it.
+        for (b in MapIcons.BANNERS) {
+            val flag = loaded["banner_$b"] ?: continue
+            s.addImage("medal_tier_${tier}_cap_b$b", capitalMedal(medal, star, null, flag))
+            if (monument != null) s.addImage("medal_tier_${tier}_capmon_b$b", capitalMedal(medal, star, monument, flag))
+        }
     }
 }
 
 /** A settlement medallion with the capital star at its upper right and, if given, a small monument at its upper left. */
-private fun capitalMedal(medal: Bitmap, star: Bitmap, monument: Bitmap?): Bitmap {
+private fun capitalMedal(medal: Bitmap, star: Bitmap, monument: Bitmap?, banner: Bitmap? = null): Bitmap {
     val pad = 26
     val out = Bitmap.createBitmap(medal.width + 2 * pad, medal.height + 2 * pad, Bitmap.Config.ARGB_8888)
     val c = Canvas(out)
@@ -358,6 +394,10 @@ private fun capitalMedal(medal: Bitmap, star: Bitmap, monument: Bitmap?): Bitmap
     val sz = (medal.width * 0.42f)
     if (monument != null) c.drawBitmap(monument, null, RectF(2f, 2f, 2f + sz, 2f + sz * monument.height / monument.width), paint)
     c.drawBitmap(star, null, RectF(out.width - sz - 2f, 2f, out.width - 2f, 2f + sz), paint)
+    if (banner != null) {
+        val bh = medal.height * 0.5f; val bw = bh * banner.width / banner.height
+        c.drawBitmap(banner, null, RectF(2f, out.height - bh - 2f, 2f + bw, out.height - 2f), paint)
+    }
     return out
 }
 

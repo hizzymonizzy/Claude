@@ -37,9 +37,28 @@ object MapIcons {
         "medal_gold" to R.drawable.oad_medal_gold, "medal_monument" to R.drawable.oad_medal_monument,
         "res_wood" to R.drawable.oad_res_wood, "res_food" to R.drawable.oad_res_food,
         "res_stone" to R.drawable.oad_res_stone, "res_metal" to R.drawable.oad_res_metal,
-        // You
+        // You (and your outfits)
         "wanderer" to R.drawable.sprite_wanderer, "wanderer_paddle" to R.drawable.sprite_wanderer_paddle,
+        "wanderer_crimson" to R.drawable.sprite_wanderer_crimson, "wanderer_paddle_crimson" to R.drawable.sprite_wanderer_paddle_crimson,
+        "wanderer_navy" to R.drawable.sprite_wanderer_navy, "wanderer_paddle_navy" to R.drawable.sprite_wanderer_paddle_navy,
+        "wanderer_ochre" to R.drawable.sprite_wanderer_ochre, "wanderer_paddle_ochre" to R.drawable.sprite_wanderer_paddle_ochre,
+        "wanderer_hat" to R.drawable.sprite_wanderer_hat, "wanderer_paddle_hat" to R.drawable.sprite_wanderer_paddle_hat,
+        // Villages (0.11): the trader, banners, and buildings drawn at settlements
+        "trader" to R.drawable.sprite_trader,
+        "banner_crimson" to R.drawable.banner_crimson, "banner_royal" to R.drawable.banner_royal, "banner_forest" to R.drawable.banner_forest,
+        "banner_gold" to R.drawable.banner_gold, "banner_violet" to R.drawable.banner_violet,
+        "bldg_campfire" to R.drawable.bldg_campfire, "bldg_well" to R.drawable.bldg_well,
+        "bldg_fountain" to R.drawable.bldg_fountain, "bldg_bridge" to R.drawable.bldg_bridge,
+        "bldg_meeting_hall" to R.drawable.oad_medal_bldg_meeting_hall, "bldg_town_hall" to R.drawable.oad_medal_bldg_town_hall,
+        "bldg_market" to R.drawable.oad_medal_bldg_market, "bldg_market_hall" to R.drawable.oad_medal_bldg_market_hall,
+        "bldg_inn" to R.drawable.oad_medal_bldg_inn, "bldg_pier" to R.drawable.oad_medal_bldg_pier,
+        "bldg_lighthouse" to R.drawable.oad_medal_bldg_lighthouse, "bldg_walls" to R.drawable.oad_medal_bldg_walls,
+        "bldg_great_hall" to R.drawable.oad_medal_bldg_great_hall,
+        "ground_farm" to R.drawable.oad_ground_farm,
     )
+
+    val BANNERS = listOf("crimson", "royal", "forest", "gold", "violet")
+    val OUTFITS = listOf("crimson", "navy", "ochre", "hat")
 
     val WOODED = setOf("wood", "forest", "nature_reserve", "wetland", "heath")
     val GREEN = setOf("park", "garden", "common", "recreation_ground", "village_green", "meadow", "grassland",

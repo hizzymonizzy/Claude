@@ -100,6 +100,17 @@ data class ProjectDecisionEntity(
     val madeMs: Long,
 )
 
+/** Something bought from the travelling trader or a market (a resource, or a cosmetic). Replayed like decisions. */
+@Entity(tableName = "purchase")
+data class PurchaseEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val day: Int,
+    val seller: String,
+    val item: String,
+    val qty: Int,
+    val madeMs: Long,
+)
+
 /** A route paddled on the water (paddleboard, canoe, kayak, rowing, open-water swim). */
 @Entity(tableName = "water_trail", indices = [Index("segmentId")])
 data class WaterTrailEntity(
@@ -291,6 +302,8 @@ interface WanderDao {
     @Query("SELECT * FROM water_tile WHERE tile IN (:tiles)") fun waterTiles(tiles: List<String>): List<WaterTileEntity>
     @Insert fun insertDecision(d: ProjectDecisionEntity)
     @Query("SELECT * FROM project_decision ORDER BY madeMs") fun allDecisions(): List<ProjectDecisionEntity>
+    @Insert fun insertPurchase(p: PurchaseEntity)
+    @Query("SELECT * FROM purchase ORDER BY madeMs") fun allPurchases(): List<PurchaseEntity>
     @Insert fun insertWaterTrails(t: List<WaterTrailEntity>)
     @Query("DELETE FROM water_trail WHERE segmentId = :segmentId") fun deleteWaterTrails(segmentId: Long)
     @Query("SELECT * FROM water_trail") fun allWaterTrails(): List<WaterTrailEntity>
@@ -342,7 +355,7 @@ interface WanderDao {
         PlaceEntity::class, CellAreaEntity::class, AreaEntity::class, DispatchEntity::class, DiagEntity::class,
         TrailEntity::class, WildTrailEntity::class, TroddenEntity::class, LandmarkEntity::class,
         LandmarkTileEntity::class, LandmarkVisitEntity::class, ArrivalEntity::class, WaterTrailEntity::class, WakeEntity::class,
-        WaterAreaEntity::class, WaterTileEntity::class, ProjectDecisionEntity::class, TerrainAreaEntity::class, ShoreEntity::class,
+        WaterAreaEntity::class, WaterTileEntity::class, ProjectDecisionEntity::class, TerrainAreaEntity::class, ShoreEntity::class, PurchaseEntity::class,
     ],
     version = DbMigrations.LATEST,
     exportSchema = true,

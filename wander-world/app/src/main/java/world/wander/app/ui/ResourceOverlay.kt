@@ -42,7 +42,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.roundToInt
 
-private val RESOURCE_ICONS = mapOf(
+internal val RESOURCE_ICONS = mapOf(
     "gold" to R.drawable.oad_medal_gold, "wood" to R.drawable.oad_res_wood, "food" to R.drawable.oad_res_food,
     "stone" to R.drawable.oad_res_stone, "metal" to R.drawable.oad_res_metal,
 )

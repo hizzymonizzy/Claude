@@ -132,4 +132,26 @@ class MapLayersBuilderTest {
         val p = fc.first().geometry() as org.maplibre.geojson.Point
         assertEquals(at(100.0, 0.0).lng, p.longitude(), 1e-9)
     }
+
+    @Test
+    fun villagesShowTheirBuildingsAMarketToTapAndAPlazaOnExploredGroundOnly() {
+        // Alpha 0.11: buildings drawn at the settlement; upgrades replace what they upgrade; plaza clipped to explored.
+        val town = settlement(capital = true, tier = Tier.VILLAGE).copy(projects = listOf("campfire", "well", "market", "meeting_hall"))
+        val w = world(listOf(town))
+        val bldgs = MapLayersBuilder.villageBuildings(w).features()!!
+        val icons = bldgs.map { it.getStringProperty("icon") }.toSet()
+        assertEquals(setOf("bldg_meeting_hall", "bldg_well", "bldg_market"), icons)
+        icons.forEach { assertTrue(it, MapIcons.images.containsKey(it)) }
+        assertEquals("market:a", bldgs.single { it.getStringProperty("icon") == "bldg_market" }.getStringProperty("id"))
+        assertEquals("medal_tier_3_cap_bcrimson", MapLayersBuilder.settlements(w, "crimson").features()!!.single().getStringProperty("icon"))
+        // Explored only on one side (x < 0): the plaza is cut at the edge of the green.
+        val half = org.locationtech.jts.geom.GeometryFactory().createPolygon(listOf(at(-500.0, -500.0), at(0.0, -500.0), at(0.0, 500.0), at(-500.0, 500.0), at(-500.0, -500.0))
+            .map { org.locationtech.jts.geom.Coordinate(it.lng, it.lat) }.toTypedArray())
+        val (plaza, gardens, _) = MapLayersBuilder.village(w, half)
+        assertTrue(plaza.features()!!.isNotEmpty())
+        val maxLng = plaza.features()!!.flatMap { (it.geometry() as org.maplibre.geojson.Polygon).coordinates().flatten() }.maxOf { it.longitude() }
+        assertTrue("plaza stays on explored ground", maxLng <= origin.lng + 1e-7)
+        assertTrue(gardens.features()!!.isNotEmpty())
+        assertTrue(MapLayersBuilder.village(w, null).first.features()!!.isEmpty())
+    }
 }

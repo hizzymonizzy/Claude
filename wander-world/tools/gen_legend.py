@@ -121,6 +121,16 @@ def roads():
     out["oad_legend_ground_sand"] = tile("oad_ground_sand", (W, H))
     out["oad_legend_ground_water"] = tile("oad_water_sea", (W, H))
     out["oad_legend_ground_shore"] = tile("oad_ground_sand_wet", (W, H))
+    # A village filling in: explored grass with garden plots and a paved plaza (0.11).
+    v = grass().convert("RGBA")
+    farm = tile("oad_ground_farm", (W, H)).convert("RGBA")
+    cob = tile("oad_road_cobble", (W, H)).convert("RGBA")
+    for x0 in (14, 186):
+        m = Image.new("L", (W, H), 0); ImageDraw.Draw(m).rectangle([x0, 14, x0 + 40, 50], fill=255)
+        v.paste(farm, (0, 0), m)
+    m = Image.new("L", (W, H), 0); ImageDraw.Draw(m).ellipse([W // 2 - 50, 4, W // 2 + 50, H - 4], fill=255)
+    v.paste(cob, (0, 0), m)
+    out["oad_legend_village"] = v.convert("RGB")
     return out
 
 
@@ -186,17 +196,26 @@ LEGEND = [
     ("oad_medal_place_store", "Store", "A big store you've walked through."),
     ("oad_medal_place_generic", "Place", "Other named places."),
     ("Economy", None, None),
-    ("oad_medal_gold", "Gold", "Your weekly-goal effort and distance. One purse, usable everywhere."),
+    ("oad_medal_gold", "Gold", "Your weekly-goal effort and distance. One purse, usable everywhere; spend it at markets and the trader."),
     ("oad_res_wood", "Wood", "30 s in or along (15 m) a wood or park. New ones pay double; favourites thin, rest restores."),
     ("oad_res_food", "Food", "Walk shores and field or garden edges (2 per km), forage in woods, paddle, visit markets and harbours."),
     ("oad_res_stone", "Stone", "Kilometres walked on roads; points to streets you haven't walked."),
     ("oad_res_metal", "Metal", "Discovering and revisiting places; points to undiscovered ones."),
     ("oad_medal_monument", "Monument", "A milestone, raised at your capital."),
     ("oad_legend_pointer", "Best source", "Wood, food or metal: the arrow points to the best node you haven't gathered today. Stone needs no pointer: walk any road."),
-    ("legend_gathering", "Gathering", "Nodes stay put; tap one for details. Green ring: you're in its zone. 30 s gathers; a tick = gathered today. Resources bank in the area you gather them; roads you've walked join banks."),
+    ("legend_gathering", "Gathering", "Nodes stay put; tap one for details. Green ring: you're in its zone. 30 s gathers; a tick = gathered today. Everything goes into one shared stock."),
+    ("Villages", None, None),
+    ("oad_legend_village", "Village ground", "A plaza, garden plots and paths fill in on explored ground as a settlement grows and builds."),
+    ("bldg_campfire", "Campfire", "Meeting hall, then town hall. +1 food each day you walk in the area."),
+    ("bldg_well", "Well", "Then a fountain. Thinned sources in the area regrow 50% faster."),
+    ("oad_medal_bldg_market", "Market", "Tap to buy resources at market prices; a market hall takes 10% off."),
+    ("oad_medal_bldg_inn", "Other buildings", "Inns, piers, walls and more: drawn around the settlement once built."),
+    ("sprite_trader", "Travelling trader", "Waits by the village you visited last. Tap to buy at twice market prices."),
+    ("banner_crimson", "Banner", "Bought from a shop; flies over your capital. Looks only."),
     ("You", None, None),
     ("sprite_wanderer", "Walking", ""),
     ("sprite_wanderer_paddle", "Paddling", ""),
+    ("sprite_wanderer_crimson", "Outfits", "Bought from a shop; wear one from the shop's Looks list."),
 ]
 
 

@@ -93,6 +93,8 @@ object DispatchWriter {
             }
         for (e in events) when (e) {
             is WorldEvent.ProjectBuilt -> Projects.byId(e.projectId)?.let { lines += "Built: ${it.name.lowercase().replaceFirstChar(Char::uppercase)} in ${name(e.areaId)}." }
+            is WorldEvent.Purchased -> lines += if (e.item in Shop.COSMETICS) "Bought a new look (${e.item.substringAfter('_')}) for ${e.price} gold."
+                else "Bought ${e.qty} ${e.item} from ${if (e.seller == Shop.TRADER) "the travelling trader" else "the market in ${name(e.seller)}"} for ${e.price} gold."
             is WorldEvent.MonumentRaised -> Monuments.byId(e.monumentId).let { lines += "A monument rises at your capital: ${it.name}. ${it.description}" }
             is WorldEvent.ProjectProposed -> Projects.byId(e.projectId)?.let {
                 lines += "Proposal: ${name(e.areaId)} asks for a ${it.name.lowercase()} (${it.cost}). Approve or decline in the Atlas."

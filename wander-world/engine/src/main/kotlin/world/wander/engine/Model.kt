@@ -73,6 +73,8 @@ data class WorldInput(
     val wake: List<TroddenCell> = emptyList(),
     /** Fine cells walked along shores, per day (food). */
     val shore: List<TroddenCell> = emptyList(),
+    /** Things you bought, replayed like decisions. */
+    val purchases: List<Purchase> = emptyList(),
     /** Your approvals and declines of project proposals. */
     val decisions: List<ProjectDecision> = emptyList(),
 )
@@ -196,6 +198,8 @@ sealed class WorldEvent {
     data class LandmarkDiscovered(override val day: Int, val landmarkId: String) : WorldEvent()
     /** A place you harvest often has thinned below half; it grows back if left to rest. */
     data class SourceThinning(override val day: Int, val landmarkId: String) : WorldEvent()
+    data class Purchased(override val day: Int, val item: String, val qty: Int, val price: Int, val seller: String) : WorldEvent()
+    data class PurchaseRefused(override val day: Int, val item: String) : WorldEvent()
     data class GoalChanged(override val day: Int, val from: Int, val to: Int) : WorldEvent()
 }
 
@@ -273,24 +277,13 @@ data class WorldState(
     val gatheredToday: Set<String> = emptySet(),
     /** Shore cells you've ever walked ("s:<cell>") and how full they are today. */
     val shoreWalked: Map<String, Double> = emptyMap(),
-    /** Wood, food, stone and metal banked per area (gold is in [treasury] only: one purse everywhere). */
-    val banks: Map<String, Treasury> = emptyMap(),
-    /** Area → network: areas joined by roads you've walked share a network and its stock. */
-    val networkOf: Map<String, String> = emptyMap(),
+    /** Cosmetics you own. */
+    val owned: Set<String> = emptySet(),
+    /** Units of each resource bought this week (prices climb with each). */
+    val boughtThisWeek: Map<String, Int> = emptyMap(),
+    /** Where the travelling trader is waiting: by the village you visited most recently. */
+    val traderAt: LatLng? = null,
 ) {
-    /** What a settlement in [areaId] can spend: all gold, plus the banks of its road-connected network. */
-    fun stock(areaId: String?): Treasury {
-        if (areaId == null) return Treasury(gold = treasury.gold)
-        val mine = networkOf[areaId] ?: "solo:$areaId"
-        return banks.filterKeys { (networkOf[it] ?: "solo:$it") == mine }.values.fold(Treasury(gold = treasury.gold)) { a, t -> a + t }
-    }
-
-    /** The areas that share [areaId]'s stock (itself included). */
-    fun network(areaId: String): Set<String> {
-        val mine = networkOf[areaId] ?: return setOf(areaId)
-        return networkOf.filterValues { it == mine }.keys
-    }
-
     fun regionName(id: Int) = regions.firstOrNull { it.id == id }?.name ?: "a distant land"
 
     /** Visual level (1–5) for a wear value, same scale as roads. */

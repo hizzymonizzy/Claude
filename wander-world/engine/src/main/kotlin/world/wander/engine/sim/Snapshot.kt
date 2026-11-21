@@ -13,7 +13,6 @@ import world.wander.engine.Projects
 import world.wander.engine.Protection
 import world.wander.engine.RegionState
 import world.wander.engine.SettlementState
-import world.wander.engine.Treasury
 import world.wander.engine.WaystoneState
 import world.wander.engine.WorldState
 import kotlin.math.pow
@@ -86,9 +85,11 @@ internal fun Simulation.snapshot(): WorldState {
         },
         waystones = waystones.map { WaystoneState(it.id, it.center, it.great, it.regionId, it.foundDay, it.trips) },
         portals = portals.map { (k, v) -> PortalLink(k.first, k.second, v) },
-        treasury = banks.values.fold(Treasury(gold = gold)) { acc, t -> acc + t },
-        banks = banks.toMap(),
-        networkOf = networks(),
+        treasury = treasury,
+        owned = owned.toSet(),
+        boughtThisWeek = bought.filterKeys { it.first == world.wander.engine.Shop.week(today) }.mapKeys { it.key.second },
+        // The trader waits by the village you visited most recently.
+        traderAt = settlements.values.maxByOrNull { it.lastVisit }?.position?.let { LatLng(it.lat + 0.0004, it.lng + 0.0006) },
         proposal = pending,
         abundance = harvest.snapshot(today).keys.filter { it.startsWith("l:") || it.startsWith("m:") }
             .map { it.substring(2) }.toSet()

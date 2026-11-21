@@ -69,7 +69,11 @@ object DbMigrations {
         8 to listOf(
             "DELETE FROM `landmark_tile`",
         ),
+        // v10: purchases from the travelling trader and markets (resources and cosmetics), replayed like decisions.
+        9 to listOf(
+            "CREATE TABLE IF NOT EXISTS `purchase` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `day` INTEGER NOT NULL, `seller` TEXT NOT NULL, `item` TEXT NOT NULL, `qty` INTEGER NOT NULL, `madeMs` INTEGER NOT NULL)",
+        ),
     )
 
-    const val LATEST = 9
+    const val LATEST = 10
 }

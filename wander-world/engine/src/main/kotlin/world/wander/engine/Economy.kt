@@ -40,6 +40,8 @@ data class ProjectDef(
     val description: String,
     /** Only offered to settlements with water nearby (a lake, beach, harbour or a route you've paddled). */
     val needsWater: Boolean = false,
+    /** An upgrade: only offered once this project is built here, and drawn in its place. */
+    val upgrades: String? = null,
 )
 
 object Projects {
@@ -53,8 +55,23 @@ object Projects {
         ProjectDef("lighthouse", "Lighthouse", Tier.TOWN, Cost(gold = 300, stone = 60, metal = 10), 3, "A light for the water.", needsWater = true),
         ProjectDef("walls", "Town walls", Tier.TOWN, Cost(gold = 300, stone = 80, metal = 20), 3, "Stone walls and a gate."),
         ProjectDef("great_hall", "Great hall", Tier.CITY, Cost(gold = 800, wood = 60, stone = 120, metal = 40), 5, "The pride of the city."),
+        // Upgrade chains (0.11): each replaces the one before it on the map.
+        ProjectDef("meeting_hall", "Meeting hall", Tier.HAMLET, Cost(gold = 80, wood = 15, stone = 10), 2, "The campfire gets a roof.", upgrades = "campfire"),
+        ProjectDef("town_hall", "Town hall", Tier.TOWN, Cost(gold = 250, wood = 30, stone = 60, metal = 10), 3, "Where the town decides things.", upgrades = "meeting_hall"),
+        ProjectDef("fountain", "Fountain", Tier.VILLAGE, Cost(gold = 120, stone = 30, metal = 5), 2, "The well becomes the square's centrepiece.", upgrades = "well"),
+        ProjectDef("market_hall", "Market hall", Tier.TOWN, Cost(gold = 300, wood = 20, stone = 40, metal = 10), 2, "A covered market: better prices.", upgrades = "market"),
     )
     fun byId(id: String) = ALL.firstOrNull { it.id == id }
+
+    /** The projects drawn at a settlement: each chain shows only its latest building. */
+    fun shown(built: List<String>): List<String> = built.filter { id -> ALL.none { it.upgrades == id && it.id in built } }
+
+    /** Whether a chain (named by its first project) has been built here at any stage. */
+    fun hasChain(built: List<String>, first: String): Boolean {
+        var id: String? = first
+        while (id != null) { if (id in built) return true; id = ALL.firstOrNull { it.upgrades == id }?.id }
+        return false
+    }
 }
 
 /** A choice you made about a proposal. Player decisions are inputs, replayed like walks. */
@@ -162,13 +179,17 @@ data class HarvestParams(
     val discoveryBonus: Double = 2.0,
 )
 
-class Harvest(private val p: HarvestParams = HarvestParams()) {
+class Harvest(
+    private val p: HarvestParams = HarvestParams(),
+    /** Regrowth multiplier for a source (e.g. 1.5 near a well). */
+    private val regrowth: (String) -> Double = { 1.0 },
+) {
     private class Source(var abundance: Double, var lastDay: Int)
     private val sources = HashMap<String, Source>()
 
     /** Abundance of a source on [day], counting regrowth since it was last harvested (1.0 if never). */
     fun abundance(id: String, day: Int): Double =
-        sources[id]?.let { minOf(1.0, it.abundance + p.regenPerDay * (day - it.lastDay)) } ?: 1.0
+        sources[id]?.let { minOf(1.0, it.abundance + p.regenPerDay * regrowth(id) * (day - it.lastDay)) } ?: 1.0
 
     fun isNew(id: String) = id !in sources
 
@@ -195,3 +216,32 @@ class Harvest(private val p: HarvestParams = HarvestParams()) {
     /** Sources harvested on [day] (ids as given to [take], e.g. "l:w123"). */
     fun harvestedOn(day: Int): Set<String> = sources.filterValues { it.lastDay == day }.keys
 }
+
+/**
+ * The shop: the travelling trader (near your most recent village, double price) and markets (base price, market hall
+ * 10% off). Each unit of a resource bought this week costs 10% more than the last; the count resets every Monday.
+ * Cosmetics have fixed prices and change looks only.
+ */
+object Shop {
+    val BASE = mapOf("stone" to 6.0, "food" to 8.0, "wood" to 10.0, "metal" to 25.0)
+    const val TRADER_MULTIPLIER = 2.0
+    const val MARKET_HALL_MULTIPLIER = 0.9
+    const val WEEKLY_CLIMB = 1.10
+    val COSMETICS = mapOf(
+        "banner_crimson" to 60, "banner_royal" to 60, "banner_forest" to 60, "banner_gold" to 60, "banner_violet" to 60,
+        "outfit_crimson" to 120, "outfit_navy" to 120, "outfit_ochre" to 120, "outfit_hat" to 120,
+    )
+    const val TRADER = "trader"
+
+    /** Price of the next [qty] units of [resource] from a seller with [multiplier], after [boughtThisWeek] this week. */
+    fun price(resource: String, multiplier: Double, boughtThisWeek: Int, qty: Int = 1): Int {
+        val base = BASE[resource] ?: return Int.MAX_VALUE
+        return (0 until qty).sumOf { i -> base * multiplier * Math.pow(WEEKLY_CLIMB, (boughtThisWeek + i).toDouble()) }.let { Math.ceil(it).toInt() }
+    }
+
+    /** Monday-based week number for a day, so purchase counts reset on Mondays. */
+    fun week(day: Int): Int = Math.floorDiv(day + 3, 7)   // epoch day 0 was a Thursday
+}
+
+/** Something you bought: a resource (item = "wood", qty units) or a cosmetic (item = its id, qty 1). */
+data class Purchase(val day: Int, val seller: String, val item: String, val qty: Int = 1)

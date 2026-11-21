@@ -355,6 +355,133 @@ SPRITES = {
 }
 
 
+# ---- 0.11: outfits, banners, the trader, building badges (all original) ----
+OUTFITS = {   # id -> (cloak, highlight, shadow); "hat" adds a wide-brimmed hat to the default cloak
+    "crimson": ((150, 44, 40, 255), (190, 80, 66, 255), (104, 30, 28, 255)),
+    "navy": ((44, 62, 112, 255), (78, 100, 156, 255), (30, 42, 78, 255)),
+    "ochre": ((176, 128, 42, 255), (214, 170, 80, 255), (128, 90, 28, 255)),
+    "hat": None,
+}
+
+
+def outfit_palette(oid):
+    pal = dict(AVATAR_PALETTE)
+    c = OUTFITS.get(oid)
+    if c:
+        pal["H"], pal["h"], pal["G"] = c
+    return pal
+
+
+def add_hat(fig, dx=0, dy=0):
+    d = ImageDraw.Draw(fig)
+    d.rectangle([7 + dx, 2 + dy, 16 + dx, 3 + dy], fill=(92, 62, 36, 255), outline=(43, 29, 20, 255))   # brim
+    d.rectangle([9 + dx, 0 + dy, 14 + dx, 2 + dy], fill=(110, 76, 44, 255), outline=(43, 29, 20, 255))  # crown
+    d.line([(9 + dx, 2 + dy), (14 + dx, 2 + dy)], fill=(200, 160, 80, 255))                              # band
+    return fig
+
+
+def avatar_walk_outfit(oid):
+    fig = render_grid(AVATAR, outfit_palette(oid))
+    if oid == "hat":
+        fig = add_hat(fig)
+    out = Image.new("RGBA", (28, 28), (0, 0, 0, 0))
+    d = ImageDraw.Draw(out)
+    d.ellipse([5, 22, 23, 27], fill=(30, 22, 14, 90))
+    d.ellipse([18, 0, 27, 8], fill=(255, 214, 107, 60))
+    out.alpha_composite(fig, (2, 2))
+    return out
+
+
+def avatar_paddle_outfit(oid):
+    global AVATAR_PALETTE
+    saved = AVATAR_PALETTE
+    AVATAR_PALETTE = outfit_palette(oid)
+    try:
+        img = avatar_paddle()
+    finally:
+        AVATAR_PALETTE = saved
+    if oid == "hat":
+        add_hat(img, 4, 3)
+    return img
+
+
+BANNERS = {
+    "crimson": (176, 44, 44, 255), "royal": (52, 84, 170, 255), "forest": (48, 112, 56, 255),
+    "gold": (214, 170, 52, 255), "violet": (112, 64, 150, 255),
+}
+
+
+def banner(color):
+    """A pennant on a pole, planted beside the capital."""
+    img = Image.new("RGBA", (16, 24), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.line([(3, 1), (3, 23)], fill=(43, 29, 20, 255), width=2)                       # pole
+    d.ellipse([2, 0, 4, 2], fill=(226, 188, 90, 255))                                # finial
+    d.polygon([(4, 2), (15, 4), (12, 8), (15, 12), (4, 13)], fill=color, outline=(43, 29, 20, 255))
+    d.line([(6, 5), (11, 6)], fill=(255, 255, 255, 90))
+    return img
+
+
+def trader():
+    """A travelling trader with a laden handcart."""
+    pal = dict(AVATAR_PALETTE)
+    pal["H"], pal["h"], pal["G"] = (120, 84, 50, 255), (156, 116, 74, 255), (86, 58, 34, 255)   # brown travelling cloak
+    pal["T"], pal["t"] = (96, 64, 130, 255), (70, 44, 98, 255)                                 # purple tunic
+    fig = render_grid([r[:20] for r in AVATAR], pal)                                            # no staff
+    out = Image.new("RGBA", (40, 28), (0, 0, 0, 0))
+    d = ImageDraw.Draw(out)
+    d.ellipse([2, 22, 38, 27], fill=(30, 22, 14, 90))
+    # Cart: bed, goods, wheel, handle.
+    d.rectangle([20, 12, 37, 19], fill=(138, 98, 58, 255), outline=(43, 29, 20, 255))
+    d.rectangle([22, 7, 27, 12], fill=(201, 164, 106, 255), outline=(43, 29, 20, 255))       # sack
+    d.rectangle([28, 8, 35, 12], fill=(176, 128, 42, 255), outline=(43, 29, 20, 255))        # crate
+    d.ellipse([28, 17, 35, 24], fill=(92, 62, 36, 255), outline=(43, 29, 20, 255))           # wheel
+    d.point((31, 20), fill=(226, 188, 90, 255))
+    d.line([(17, 15), (21, 15)], fill=(43, 29, 20, 255), width=2)                            # handle
+    out.alpha_composite(fig, (0, 2))
+    return out
+
+
+def campfire():
+    img, d = canvas()
+    for i, c in enumerate([(120, 120, 116, 255), (150, 148, 140, 255)] * 4):                 # ring of stones
+        import math
+        a = i * math.pi / 4
+        x, y = 8 + 5 * math.cos(a), 9 + 4 * math.sin(a)
+        d.ellipse([x - 1.5, y - 1.2, x + 1.5, y + 1.2], fill=c, outline=INK)
+    d.line([(5, 11), (11, 8)], fill=WOOD, width=2); d.line([(5, 8), (11, 11)], fill=WOOD, width=2)
+    d.polygon([(6, 9), (8, 3), (10, 9)], fill=(232, 120, 40, 255))
+    d.polygon([(7, 9), (8, 5), (9, 9)], fill=(255, 214, 107, 255))
+    return img
+
+
+def well():
+    img, d = canvas()
+    d.ellipse([3, 7, 13, 13], fill=STONE, outline=INK)
+    d.ellipse([5, 8, 11, 11], fill=(52, 84, 120, 255))
+    d.line([(4, 2), (4, 9)], fill=WOOD, width=2); d.line([(12, 2), (12, 9)], fill=WOOD, width=2)
+    d.polygon([(2, 3), (8, 0), (14, 3)], fill=ROOF, outline=INK)
+    d.line([(8, 3), (8, 7)], fill=INK)
+    return img
+
+
+def fountain():
+    img, d = canvas()
+    d.ellipse([1, 7, 15, 14], fill=STONE, outline=INK)
+    d.ellipse([3, 8, 13, 12], fill=(90, 150, 200, 255))
+    d.rectangle([7, 3, 9, 10], fill=STONE_L, outline=INK)
+    d.line([(8, 1), (5, 5)], fill=(170, 220, 250, 255)); d.line([(8, 1), (11, 5)], fill=(170, 220, 250, 255))
+    return img
+
+
+def bridge():
+    img, d = canvas()
+    d.rectangle([0, 9, 15, 14], fill=(90, 150, 200, 255))
+    d.arc([2, 5, 14, 15], 180, 360, fill=STONE, width=3)
+    d.line([(1, 9), (15, 9)], fill=INK)
+    return img
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for name, fn in SPRITES.items():
@@ -371,6 +498,14 @@ def main():
     avatar_paddle().resize((128, 112), Image.NEAREST).save(OUT / "sprite_wanderer_paddle.png", optimize=True)
     water_ripple().resize((128, 128), Image.NEAREST).save(OUT / "water_ripple.png", optimize=True)
     ring_medallion(hospital(), 96, (196, 160, 82, 255), (110, 80, 40, 255)).save(OUT / "medal_poi_hospital.png", optimize=True)
+    for oid in OUTFITS:
+        avatar_walk_outfit(oid).resize((112, 112), Image.NEAREST).save(OUT / f"sprite_wanderer_{oid}.png", optimize=True)
+        avatar_paddle_outfit(oid).resize((128, 112), Image.NEAREST).save(OUT / f"sprite_wanderer_paddle_{oid}.png", optimize=True)
+    for cid, col in BANNERS.items():
+        banner(col).resize((48, 72), Image.NEAREST).save(OUT / f"banner_{cid}.png", optimize=True)
+    trader().resize((160, 112), Image.NEAREST).save(OUT / "sprite_trader.png", optimize=True)
+    for bid, fn in {"campfire": campfire, "well": well, "fountain": fountain, "bridge": bridge}.items():
+        ring_medallion(fn(), 80, (222, 196, 140, 255), (130, 100, 60, 255)).save(OUT / f"bldg_{bid}.png", optimize=True)
     print(f"wrote {len(SPRITES) + 1} images to {OUT}", file=sys.stderr)
 
 

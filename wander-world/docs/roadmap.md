@@ -17,9 +17,9 @@ agreement in `CLAUDE.md`). Items come from `docs/backlog.md`. Status: proposed �
    back off less when you're standing somewhere new.
 8. **Simulation** covers all five resources, an inland walk, and banks.
 
-## 0.11 Villages you can see (proposed for final review, 2026-11-21)
+## 0.11 Villages you can see (shipped 0.11.0)
 1. **One shared stock** again: remove area banks, networks, the split tip and per-area Atlas lists.
-2. **Trader (NPC).** A travelling trader stands near the capital on the map (original sprite). Tap → shop: buy wood,
+2. **Trader (NPC).** A travelling trader stands near the most recently visited village on the map (original sprite). Tap → shop: buy wood,
    food, stone, metal with gold at 2× base price.
 3. **Market (shop).** A settlement's built market shows a market icon on the map. Tap → shop at base prices:
    stone 6, food 8, wood 10, metal 25 gold; each unit bought this week +10%, reset every Monday. Purchases are stored
@@ -40,7 +40,7 @@ Encrypted export/import of your world; tests for map-server retry; split `Reposi
 ## Later
 Trade between networks and regions (trade posts at waystones); regional specialty goods; townspeople.
 
-## Banks and connections (shipped in 0.10.0; reversal agreed 2026-11-21, see below)
+## Banks and connections (shipped in 0.10.0; removed in 0.11.0)
 - **Where things go.** Wood, food, stone and metal you gather go into the bank of the **area** where you gathered
   them (the waypoint or settlement for that neighbourhood).
 - **What connects.** Two areas share their banks only when a chain of roads and paths **you have walked** joins
@@ -50,13 +50,13 @@ Trade between networks and regions (trade posts at waystones); regional specialt
 - **Gold.** One purse for the whole world (agreed 2026-11-17).
 - **History.** Replayed like everything else: past gathering is assigned to the area where it happened.
 
-## Shared stock again (folded into 0.11)
+## Shared stock again (shipped 0.11.0)
 The player found per-area banks harder to manage than they're worth. Proposal: one shared stock of all five
 resources everywhere; remove area banks, networks, the split-stock tip and the per-network Atlas list. Gathering
 rules (nodes, shores, fields, thinning, bonuses) stay as they are. Market perks in 0.11 need rethinking (they were
 about trade between banks).
 
-## Gold sinks: market and cosmetics (folded into 0.11)
+## Gold sinks: market and cosmetics (shipped 0.11.0)
 Player: the market is a place to buy resources; gold needs things to be spent on, including cosmetics.
 - **Market buying.** Once a settlement has a market, buy wood, food, stone and metal with gold. Prices rise with each
   unit bought in a week and reset weekly, so gathering stays the better path but gold is never stuck.

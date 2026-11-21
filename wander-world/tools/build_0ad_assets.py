@@ -70,6 +70,12 @@ MEDALLIONS = {  # our name -> (clean file, source, options)
     "place_beach": ("gaia/flora_tree_date_palm.png", PORTRAIT + "gaia/flora_tree_date_palm.png", {"small": True, "ring": "sand"}),
 }
 
+# Buildings drawn at a settlement once its project is built (0.11). Campfire, well, fountain and bridge are original
+# sprites (tools/gen_sprites.py: bldg_*), since 0 A.D. has no portrait for them.
+for _bid, _src in {"meeting_hall": "stoa", "town_hall": "civic_centre", "market": "market", "market_hall": "storehouse",
+                   "inn": "house", "pier": "dock", "lighthouse": "lighthouse", "walls": "wall", "great_hall": "palace"}.items():
+    MEDALLIONS[f"bldg_{_bid}"] = (f"structures/{_src}.png", PORTRAIT + f"structures/{_src}.png", {"small": True, "ring": "sand"})
+
 RESOURCES = {n: (f"resources/{n}.png", f"ui/session/icons/resources/{n}.png") for n in ("food", "wood", "stone", "metal")}
 
 GOLD = (196, 160, 82)

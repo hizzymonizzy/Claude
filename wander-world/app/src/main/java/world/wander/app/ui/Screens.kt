@@ -150,8 +150,7 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
             }
             if (w != null) {
                 Spacer(Modifier.height(8.dp))
-                Text("Gold (shared everywhere): ${w.treasury.gold.toInt()}", style = MaterialTheme.typography.bodyMedium)
-                BanksList(w)
+                TreasuryRow(w.treasury)
                 Spacer(Modifier.height(8.dp))
                 ProposalCard(repo, w, onShowOnMap)
             }
@@ -298,8 +297,7 @@ fun ProposalCard(repo: Repository, w: WorldState, onShowOnMap: () -> Unit = {}) 
     val p = w.proposal ?: return
     val def = Projects.byId(p.projectId) ?: return
     val scope = rememberCoroutineScope()
-    // A settlement spends from its own area's bank and any area joined to it by roads you've walked, plus all gold.
-    val stock = w.stock(p.areaId)
+    val stock = w.treasury
     val canAfford = def.cost.affordable(stock)
     val nodes by repo.resourceNodes.collectAsState()
     Card(Modifier.fillMaxWidth()) {
@@ -309,7 +307,6 @@ fun ProposalCard(repo: Repository, w: WorldState, onShowOnMap: () -> Unit = {}) 
             Text(def.description + " · +${def.prosperity} prosperity", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(6.dp))
             Text("Costs ${def.cost}", style = MaterialTheme.typography.bodyMedium)
-            Text("Stock here: ${stock.toString().ifEmpty { "nothing yet" }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
             if (!canAfford) {
                 val c = def.cost
                 val missing = listOf(
@@ -334,7 +331,7 @@ fun ProposalCard(repo: Repository, w: WorldState, onShowOnMap: () -> Unit = {}) 
                         }
                     }
                 }
-                Text("Gather in this settlement's area, or walk the roads that join it to where your stock is.",
+                Text("Or buy what's missing from the travelling trader on the map.",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
             }
             Spacer(Modifier.height(8.dp))
@@ -346,19 +343,6 @@ fun ProposalCard(repo: Repository, w: WorldState, onShowOnMap: () -> Unit = {}) 
     }
 }
 
-/** Banks by network: areas joined by roads you've walked share one stock. */
-@Composable
-fun BanksList(w: WorldState) {
-    val groups = w.banks.filterValues { !it.isEmpty }.keys.groupBy { w.networkOf[it] ?: "solo:$it" }
-    if (groups.isEmpty()) return
-    for ((_, areas) in groups) {
-        val total = areas.fold(Treasury()) { acc, a -> acc + (w.banks[a] ?: Treasury()) }
-        val names = areas.map { w.areaNames[it] ?: "Unmapped" }.sorted()
-        Text(names.joinToString(" + ") + if (areas.size > 1) " (joined by roads)" else "",
-            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(top = 6.dp))
-        TreasuryRow(total.copy(gold = 0.0))
-    }
-}
 
 @Composable
 private fun HitRow(title: String, subtitle: String, sprite: Int? = null, onClick: () -> Unit) {

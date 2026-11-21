@@ -80,6 +80,10 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     // The resource node whose details card is open (by source id), chosen by tapping it on the map.
     val selectedNode = remember { mutableStateOf<String?>(null) }
+    // The shop that's open: "trader" or a settlement's area id (its market).
+    val shopSeller = remember { mutableStateOf<String?>(null) }
+    // Equipped looks (outfit, banner); only ones you own are worn.
+    var looks by remember { mutableStateOf(repo.prefs.outfit to repo.prefs.banner) }
     var centered by remember { mutableStateOf(false) }
     var cameraTick by remember { mutableIntStateOf(0) }
     var topInsetPx by remember { mutableFloatStateOf(0f) }
@@ -97,6 +101,10 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
                 map = m
                 m.addOnCameraMoveListener { cameraTick++ }
                 m.addOnMapClickListener { ll ->
+                    val shopHit = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "trader", "buildings")
+                        .firstNotNullOfOrNull { f -> if (f.hasProperty("id")) f.getStringProperty("id") else null }
+                        ?.let { if (it == "trader") it else it.removePrefix("market:").takeIf { _ -> it.startsWith("market:") } }
+                    if (shopHit != null) { shopSeller.value = shopHit; selectedNode.value = null; return@addOnMapClickListener true }
                     val hit = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "resource-icons", "resource-rings")
                         .firstNotNullOfOrNull { f -> if (f.hasProperty("id")) f.getStringProperty("id") else null }
                     selectedNode.value = hit
@@ -138,7 +146,9 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     // World layers (fog is computed off the main thread). Each source updates independently, so one
     // failure can't hide the rest; failures and counts go to the diagnostics log.
     var lastSummary by remember { mutableStateOf("") }
-    LaunchedEffect(style, layers, world) {
+    val wornBanner = looks.second?.takeIf { "banner_$it" in world?.owned.orEmpty() }
+    val wornOutfit = looks.first?.takeIf { "outfit_$it" in world?.owned.orEmpty() }
+    LaunchedEffect(style, layers, world, wornBanner) {
         val s = style ?: return@LaunchedEffect
         val errors = mutableListOf<String>()
         fun update(id: String, build: () -> FeatureCollection): Int = try {
@@ -150,6 +160,10 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogExploredGeometry(layers, world?.waystones.orEmpty().map { it.center }) } }
             catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "fog: $e"; null }
         if (fe != null) { update("fog") { fe.first }; update("explored") { fe.second } }
+        try {
+            val (plaza, gardens, paths) = withContext(Dispatchers.Default) { MapLayersBuilder.village(world, fe?.third) }
+            update("village-plaza") { plaza }; update("village-gardens") { gardens }; update("village-paths") { paths }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "village: $e" }
         val kinds = world?.landmarks.orEmpty().associate { it.name to it.kind }
         val counts = linkedMapOf(
             "green" to update("green-places") { MapLayersBuilder.greenPlaces(layers, kinds) },
@@ -161,7 +175,9 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
                 ?.let { fc -> update("peek") { fc } } ?: -1),
             "wild" to update("wild") { MapLayersBuilder.wild(layers) },
             "places" to update("landmarks") { MapLayersBuilder.landmarkLabels(layers, kinds) },
-            "settlements" to update("settlements") { MapLayersBuilder.settlements(world) },
+            "settlements" to update("settlements") { MapLayersBuilder.settlements(world, wornBanner) },
+            "buildings" to update("buildings") { MapLayersBuilder.villageBuildings(world) },
+            "trader" to update("trader") { MapLayersBuilder.trader(world) },
             "waypoints" to update("waypoints") { MapLayersBuilder.waypoints(world) },
             "waystones" to update("waystones") { MapLayersBuilder.waystones(world) },
         )
@@ -179,8 +195,9 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     }
     // The wanderer paddles while you're on the water.
     val captureMode by repo.captureMode.collectAsState()
-    LaunchedEffect(style, captureMode) {
-        style?.getLayerAs<SymbolLayer>("me")?.setProperties(iconImage(if (captureMode == "WATER") "wanderer_paddle" else "wanderer"))
+    LaunchedEffect(style, captureMode, wornOutfit) {
+        val base = if (captureMode == "WATER") "wanderer_paddle" else "wanderer"
+        style?.getLayerAs<SymbolLayer>("me")?.setProperties(iconImage(if (wornOutfit != null) "${base}_$wornOutfit" else base))
     }
     LaunchedEffect(style, track) { style?.source("track")?.setGeoJson(MapLayersBuilder.track(track)) }
     LaunchedEffect(style, me) {
@@ -243,9 +260,6 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             ns.map { n -> if (next[n.resource] == n.sourceId) n.copy(best = true) else n }
         }
     LaunchedEffect(shownNodes) { repo.resourceNodes.value = shownNodes }
-    // Your stock where you stand: the banks of this area's road-connected network, plus the one purse of gold.
-    var localArea by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(me, world) { localArea = me?.let { repo.areaAt(it) } ?: repo.prefs.homeAreaId }
     LaunchedEffect(style, shownNodes, showPointers) {
         style?.source("resources")?.setGeoJson(MapLayersBuilder.resources(if (showPointers) shownNodes else emptyList()))
     }
@@ -283,23 +297,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             }
             world?.let { w ->
                 Spacer(Modifier.height(6.dp))
-                InventoryBar(w.stock(localArea), shownNodes.filter { it.best }, today = w.days[w.today]?.earned) { repo.focus.value = it.point }
-                // Explained once, the first time your stock is split between unconnected areas.
-                var bankTipSeen by remember { mutableStateOf(repo.prefs.bankTipSeen) }
-                val split = w.banks.filterValues { !it.isEmpty }.keys.map { w.networkOf[it] ?: "solo:$it" }.toSet().size > 1
-                if (split && !bankTipSeen) {
-                    Card(Modifier.padding(top = 6.dp).fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text("Your stock is split between areas", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                "Wood, food, stone and metal stay in the area where you gathered them. Walk the roads between two " +
-                                    "areas to join their stock. Gold is shared everywhere. The bar shows the stock where you are.",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            androidx.compose.material3.TextButton(onClick = { repo.prefs.bankTipSeen = true; bankTipSeen = true }) { Text("Got it") }
-                        }
-                    }
-                }
+                InventoryBar(w.treasury, shownNodes.filter { it.best }, today = w.days[w.today]?.earned) { repo.focus.value = it.point }
                 if (showPointers && targets.isEmpty()) {
                     Text(
                         if (searching) "Looking for resources nearby…" else "No wood, food, stone or metal mapped near here yet",
@@ -313,6 +311,14 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         shownNodes.firstOrNull { it.sourceId == selectedNode.value }?.let { n ->
             Box(Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 84.dp)) {
                 NodeDetailsCard(n, onGo = { repo.focus.value = n.point; selectedNode.value = null }, onClose = { selectedNode.value = null })
+            }
+        }
+        val w = world
+        val seller = shopSeller.value
+        if (w != null && seller != null) {
+            Box(Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 84.dp)) {
+                ShopSheet(repo, w, seller, looks, onLooks = { l -> looks = l; repo.prefs.outfit = l.first; repo.prefs.banner = l.second },
+                    onClose = { shopSeller.value = null })
             }
         }
         var showLegend by remember { mutableStateOf(false) }

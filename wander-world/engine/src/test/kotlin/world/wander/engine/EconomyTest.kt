@@ -109,4 +109,31 @@ class EconomyTest {
         val alongShore = WorldEngine().build(input(2, 30.0, 3.0).copy(shore = cells), start + 1)
         assertEquals(10 * Yields.SHORE_FOOD_PER_CELL * 2, alongShore.treasury.food, 1e-9)   // new shore pays double
     }
+
+    @Test
+    fun shopPricesClimbWeeklyAndResetOnMonday() {
+        assertEquals(10, Shop.price("wood", 1.0, 0))
+        assertEquals(20, Shop.price("wood", Shop.TRADER_MULTIPLIER, 0))
+        assertEquals(Math.ceil(10 + 11.0 + 12.1).toInt(), Shop.price("wood", 1.0, 0, 3))
+        assertEquals(11, Shop.price("wood", 1.0, 1))                   // second unit this week
+        // 2026-11-23 is a Monday: a new week starts there.
+        val sunday = java.time.LocalDate.of(2026, 11, 22).toEpochDay().toInt()
+        assertEquals(Shop.week(sunday) + 1, Shop.week(sunday + 1))
+        assertEquals(Shop.week(sunday + 1), Shop.week(sunday + 7))
+    }
+
+    @Test
+    fun upgradesNeedTheirBaseAndTheMapShowsTheLatest() {
+        assertEquals(listOf("meeting_hall", "well"), Projects.shown(listOf("campfire", "meeting_hall", "well")))
+        assertTrue(Projects.hasChain(listOf("campfire", "meeting_hall"), "campfire"))
+        assertTrue(!Projects.hasChain(listOf("well"), "campfire"))
+        assertEquals("campfire", Projects.byId("meeting_hall")?.upgrades)
+    }
+
+    @Test
+    fun aWellMakesThinnedSourcesRegrowFaster() {
+        val plain = Harvest(); val boosted = Harvest(regrowth = { 1.5 })
+        for (h in listOf(plain, boosted)) { h.take("l:p", 0, 1.0); for (d in 1..10) h.take("l:p", d, 1.0) }
+        assertTrue(boosted.abundance("l:p", 15) > plain.abundance("l:p", 15))
+    }
 }

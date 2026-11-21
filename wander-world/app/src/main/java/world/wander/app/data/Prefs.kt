@@ -37,10 +37,13 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("resourcePointers", true)
         set(v) = sp.edit { putBoolean("resourcePointers", v) }
 
-    /** The one-time explanation of area banks has been seen. */
-    var bankTipSeen: Boolean
-        get() = sp.getBoolean("bankTipSeen", false)
-        set(v) = sp.edit { putBoolean("bankTipSeen", v) }
+    /** Cosmetics you've chosen to wear / fly (must be owned; ownership comes from purchases in the world). */
+    var outfit: String?
+        get() = sp.getString("outfit", null)
+        set(v) = sp.edit { putString("outfit", v) }
+    var banner: String?
+        get() = sp.getString("banner", null)
+        set(v) = sp.edit { putString("banner", v) }
 
     var goalLocked: Boolean
         get() = sp.getBoolean("goalLocked", false)

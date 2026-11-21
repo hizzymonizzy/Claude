@@ -28,18 +28,18 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 ## Villages that show on the map (player idea, 2026-11-17)
 | Item | Why | Status |
 |---|---|---|
-| Built projects appear on the map at their settlement (campfire, well, market…), as 0 A.D.-style sprites | Villager requests should visibly change the world; buildings are now hidden in explored land | proposed |
-| Upgrade chains: campfire → meeting hall → town hall, etc. | Progression you can see | proposed |
-| Infrastructure grows the green: each built project widens the cleared, developed ground around the settlement | "The green fills in as the infrastructure develops around it" | proposed |
+| Built projects appear on the map at their settlement (campfire, well, market…), as 0 A.D.-style sprites | Villager requests should visibly change the world; buildings are now hidden in explored land | shipped 0.11.0 |
+| Upgrade chains: campfire → meeting hall → town hall, etc. | Progression you can see | shipped 0.11.0 |
+| Infrastructure grows the green: each built project widens the cleared, developed ground around the settlement | "The green fills in as the infrastructure develops around it" | shipped 0.11.0 as option A (plaza, gardens, paths drawn on explored ground; the green stays walking-only) |
 
 ## Gameplay
 | Item | Why | Status |
 |---|---|---|
-| Back to one shared stock (remove area banks) | Player: easier to manage than counts per territory | proposed |
-| Market: buy resources with gold (weekly rising prices) | Player: gold needs uses; market becomes a shop | proposed |
-| Cosmetics bought with gold (outfits, banners, map tints, frames) | Player: a gold sink with no gameplay effect | proposed |
+| Back to one shared stock (remove area banks) | Player: easier to manage than counts per territory | shipped 0.11.0 |
+| Market: buy resources with gold (weekly rising prices) | Player: gold needs uses; market becomes a shop | shipped 0.11.0 |
+| Cosmetics bought with gold (outfits, banners, map tints, frames) | Player: a gold sink with no gameplay effect | banners and outfits shipped 0.11.0; tints and frames proposed |
 | Wood along wooded paths (a "trail through woods" line source), like food along shores | Woods often have paths through them; matches how stone and food work now | proposed |
-| Projects you can actually afford: show what's missing and where to get it (links to nodes) | Campfire has been waiting since day one | proposed |
+| Projects you can actually afford: show what's missing and where to get it (links to nodes) | Campfire has been waiting since day one | shipped 0.11.0 |
 | Trade between settlements once two have markets | From the economy design, deferred in 0.7.0 | proposed |
 | Regional specialty goods (coast → fish, woods → timber) | Makes regions feel different | proposed |
 | Live gathering credit (count during the walk, not only at the end) | The ✓ is live, but the bar updates only when a walk ends | proposed |

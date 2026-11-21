@@ -165,44 +165,40 @@ class GatheringSimulationTest {
     }
 
     @Test
-    fun banksOnlyShareAcrossRoadsYouHaveWalked() {
-        // Home (x < 1000) and a far area (x >= 1000), joined by a connector road you haven't walked yet.
+    fun oneSharedStockTheTraderAndUpgrades() {
+        // 0.11: one shared stock again. Wood from a far park pays for home's campfire right away; gold buys the rest.
         val homeRoad = GraphEdge("h", "Elm Ave", 1, 2, listOf(at(0.0, 0.0), at(500.0, 0.0)))
-        val connector = GraphEdge("c", "Long Rd", 2, 3, listOf(at(500.0, 0.0), at(1500.0, 0.0)))
         val farRoad = GraphEdge("f", "Oak St", 3, 4, listOf(at(1500.0, 0.0), at(2000.0, 0.0)))
-        val graph = listOf(homeRoad, connector, farRoad)
+        val graph = listOf(homeRoad, farRoad)
         val farPark = rect("w9", "Far Park", "park", 1700.0, 20.0, 1900.0, 220.0)
         val p = TrackProcessor(zone)
-        val day1 = start; val day2 = start + 1
-        val t1 = LocalDate.ofEpochDay(day1.toLong()).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
-        val t2 = LocalDate.ofEpochDay(day2.toLong()).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
-        // Day 1: a walk at home, then (after a drive) a walk on Oak St with 10 minutes in Far Park.
+        val t1 = LocalDate.ofEpochDay(start.toLong()).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
         val home1 = p.process(walk(t1, 0.0 to 0.0, 500.0 to 0.0), null, graph)
-        val farWalk = walk(t1 + 3_600_000, 1500.0 to 0.0, 1800.0 to 0.0, 1800.0 to 100.0) +
-            (1..120).map { k -> at(1800.0 + (k % 2) * 3.0, 100.0).let { TrackPoint(t1 + 3_600_000 + 250_000 + k * 5_000L, it.lat, it.lng, 6f) } } +
-            walk(t1 + 3_600_000 + 900_000, 1800.0 to 100.0, 1800.0 to 0.0, 2000.0 to 0.0)
-        val far1 = p.process(farWalk, null, graph, landmarks = listOf(farPark))
-        // Day 2: walk all the way from home to the far area along the connector.
-        val joined = p.process(walk(t2, 0.0 to 0.0, 1500.0 to 0.0), null, graph)
-        fun build(results: List<TrackResult>, today: Int, decisions: List<ProjectDecision>) = WorldEngine().build(WorldInput(
+        // A short visit: 40 s in the park (one visit, doubled as new = 2 wood, not the 5 the campfire needs).
+        val far1 = p.process(walk(t1 + 3_600_000, 1500.0 to 0.0, 1800.0 to 0.0, 1800.0 to 80.0, 1800.0 to 0.0, 2000.0 to 0.0), null, graph, landmarks = listOf(farPark))
+        fun build(today: Int, purchases: List<Purchase>, decisions: List<ProjectDecision>, extraDays: Int = 0) = WorldEngine().build(WorldInput(
             startDay = start, homeAreaId = "home", edges = graph.associate { it.id to it.toInfo() },
-            coverage = results.flatMap { it.coverage }, presence = results.flatMap { it.presence },
-            intensity = listOf(DayIntensity(day1, 30.0, 0.0), DayIntensity(day2, 30.0, 0.0)), movement = results.flatMap { it.movement },
-            cellArea = results.flatMap { it.presence }.associate { c -> c.cell to (if (proj.x(Cells.center(c.cell)) < 1000) "home" else "far") },
+            coverage = listOf(home1, far1).flatMap { it.coverage }, presence = listOf(home1, far1).flatMap { it.presence },
+            intensity = (0..extraDays).map { DayIntensity(start + it, 90.0, 0.0) }, movement = listOf(home1, far1).flatMap { it.movement },
+            cellArea = listOf(home1, far1).flatMap { it.presence }.associate { c -> c.cell to (if (proj.x(Cells.center(c.cell)) < 1000) "home" else "far") },
             areas = mapOf("home" to AreaInfo("home", "Oakdale", null), "far" to AreaInfo("far", "Farside", null)),
             landmarks = mapOf("w9" to LandmarkInfo("w9", "Far Park", "park", farPark.areaM2, center = farPark.anchor)),
-            landmarkVisits = results.flatMap { it.landmarkVisits }, decisions = decisions,
+            landmarkVisits = listOf(home1, far1).flatMap { it.landmarkVisits }, decisions = decisions, purchases = purchases,
         ), today)
-        val approveBoth = listOf(ProjectDecision(day1, "home", "campfire", true), ProjectDecision(day2, "home", "campfire", true))
-        val w1 = build(listOf(home1, far1), day1, approveBoth.take(1))
-        println("day 1: far bank ${w1.banks["far"]}, home stock ${w1.stock("home")}, networks ${w1.networkOf}")
-        org.junit.Assert.assertTrue("wood is banked where it was gathered", (w1.banks["far"]?.wood ?: 0.0) >= 5.0)
-        org.junit.Assert.assertTrue("home can't use far wood yet", w1.stock("home").wood < 5.0)
-        org.junit.Assert.assertTrue("so the campfire waits", w1.settlements.first { it.areaId == "home" }.projects.isEmpty())
-        val w2 = build(listOf(home1, far1, joined), day2, approveBoth)
-        println("day 2: networks ${w2.networkOf}, home stock ${w2.stock("home")}, built ${w2.settlements.first { it.areaId == "home" }.projects}")
-        org.junit.Assert.assertEquals("walking the connector joins the banks", w2.networkOf["home"], w2.networkOf["far"])
-        org.junit.Assert.assertEquals(listOf("campfire"), w2.settlements.first { it.areaId == "home" }.projects)
-        org.junit.Assert.assertTrue("gold is one purse", w2.treasury.gold >= 0.0)
+        val before = build(start, emptyList(), listOf(ProjectDecision(start, "home", "campfire", true)))
+        println("shared: wood %.1f gold %.0f, trader at ${before.traderAt}".format(before.treasury.wood, before.treasury.gold))
+        org.junit.Assert.assertTrue("far wood counts at home", before.treasury.wood >= 2.0)
+        org.junit.Assert.assertTrue("not enough for the campfire yet", before.settlements.first { it.areaId == "home" }.projects.isEmpty())
+        org.junit.Assert.assertNotNull(before.traderAt)
+        // Buy the missing wood from the trader (double price, +10% each), then approve the same day.
+        val missing = 5 - before.treasury.wood.toInt()
+        val price = Shop.price("wood", Shop.TRADER_MULTIPLIER, 0, missing)
+        val after = build(start, listOf(Purchase(start, Shop.TRADER, "wood", missing)), listOf(ProjectDecision(start, "home", "campfire", true)))
+        println("bought $missing wood for $price gold → built ${after.settlements.first { it.areaId == "home" }.projects}, gold %.0f".format(after.treasury.gold))
+        org.junit.Assert.assertEquals(listOf("campfire"), after.settlements.first { it.areaId == "home" }.projects)
+        org.junit.Assert.assertTrue(after.events.any { it is WorldEvent.Purchased && it.price == price })
+        // A market purchase where there's no market is refused; so is a cosmetic you can't afford.
+        val refused = build(start, listOf(Purchase(start, "home", "wood", 1), Purchase(start, Shop.TRADER, "outfit_navy")), emptyList())
+        org.junit.Assert.assertEquals(2, refused.events.count { it is WorldEvent.PurchaseRefused })
     }
 }

@@ -121,6 +121,66 @@ object MapLayersBuilder {
         )
     }
 
+    /** How far a settlement's plaza reaches, by tier (ruins … metropolis), before buildings widen it. */
+    private val PLAZA_M = doubleArrayOf(0.0, 18.0, 28.0, 40.0, 56.0, 76.0, 100.0)
+
+    private fun around(c: LatLng, angleDeg: Double, m: Double): LatLng {
+        val a = Math.toRadians(angleDeg)
+        return LocalProjection(c).toLatLng(m * Math.cos(a), m * Math.sin(a))
+    }
+
+    /** Buildings at each settlement (the latest of each upgrade chain), around its medallion; markets are tappable. */
+    fun villageBuildings(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
+        state?.settlements.orEmpty().flatMap { s ->
+            val shown = world.wander.engine.Projects.shown(s.projects)
+            val r = PLAZA_M[s.tier.ordinal] + 26.0
+            shown.mapIndexed { i, id ->
+                Feature.fromGeometry(around(s.position, 210.0 + i * 360.0 / maxOf(shown.size, 5), r).let { Point.fromLngLat(it.lng, it.lat) }).apply {
+                    addStringProperty("icon", "bldg_$id")
+                    addStringProperty("id", if (id == "market" || id == "market_hall") "market:${s.areaId}" else "bldg:$id")
+                }
+            }
+        },
+    )
+
+    /** The travelling trader, by the village you visited most recently. */
+    fun trader(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
+        listOfNotNull(state?.traderAt?.let { t ->
+            Feature.fromGeometry(Point.fromLngLat(t.lng, t.lat)).apply { addStringProperty("id", "trader") }
+        }),
+    )
+
+    /**
+     * The village filling in (drawn on explored ground only, so the green still means "walked here"): a paved plaza
+     * that grows with tier and buildings, garden plots around it, and worn paths out to each building.
+     */
+    fun village(state: WorldState?, explored: Geometry?): Triple<FeatureCollection, FeatureCollection, FeatureCollection> {
+        val plazas = mutableListOf<Geometry>(); val gardens = mutableListOf<Geometry>(); val paths = mutableListOf<Feature>()
+        for (s in state?.settlements.orEmpty()) {
+            if (s.tier.ordinal == 0) continue
+            val shown = world.wander.engine.Projects.shown(s.projects)
+            val r = PLAZA_M[s.tier.ordinal] + 6.0 * shown.size
+            circle(s.position, r)?.let { plazas += it }
+            val plots = minOf(s.tier.ordinal, 4) + if (shown.any { it == "well" || it == "fountain" }) 2 else 0
+            for (k in 0 until plots) {
+                val c = around(s.position, 20.0 + k * 360.0 / plots, r + 22.0)
+                val proj = LocalProjection(c)
+                val sq = listOf(-9.0 to -6.0, 9.0 to -6.0, 9.0 to 6.0, -9.0 to 6.0, -9.0 to -6.0).map { (x, y) -> proj.toLatLng(x, y) }
+                try { gardens += gf.createPolygon(sq.map { Coordinate(it.lng, it.lat) }.toTypedArray()) } catch (_: Exception) {}
+            }
+            shown.forEachIndexed { i, _ ->
+                val b = around(s.position, 210.0 + i * 360.0 / maxOf(shown.size, 5), PLAZA_M[s.tier.ordinal] + 26.0)
+                paths += Feature.fromGeometry(line(listOf(around(s.position, 210.0 + i * 360.0 / maxOf(shown.size, 5), r * 0.8), b)))
+            }
+        }
+        fun clip(gs: List<Geometry>): FeatureCollection {
+            if (gs.isEmpty() || explored == null) return FeatureCollection.fromFeatures(emptyList())
+            val u = try { UnaryUnionOp.union(gs).intersection(explored) } catch (_: Exception) { null }
+            return FeatureCollection.fromFeatures(polygons(u).map { Feature.fromGeometry(toGeo(it)) })
+        }
+        return Triple(clip(plazas), clip(gardens), FeatureCollection.fromFeatures(paths))
+    }
+
     /** Resource pointers as map points, so they stay pinned to the ground while you pan and zoom. */
     fun resources(targets: List<world.wander.engine.ResourceTarget>): FeatureCollection = FeatureCollection.fromFeatures(
         targets.map { t ->
@@ -143,7 +203,7 @@ object MapLayersBuilder {
         if (p == null) FeatureCollection.fromFeatures(emptyList())
         else FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(Point.fromLngLat(p.lng, p.lat))))
 
-    fun settlements(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
+    fun settlements(state: WorldState?, banner: String? = null): FeatureCollection = FeatureCollection.fromFeatures(
         state?.settlements.orEmpty().map { s ->
             Feature.fromGeometry(Point.fromLngLat(s.position.lng, s.position.lat)).apply {
                 addStringProperty("label", s.name + "\n" + (if (s.isCapital) "Capital · " else "") + s.tier.label)
@@ -153,7 +213,8 @@ object MapLayersBuilder {
                     state?.monuments?.isNotEmpty() == true -> "_capmon"
                     else -> "_cap"
                 }
-                addStringProperty("icon", "medal_tier_${s.tier.ordinal}$badge")
+                val flag = if (s.isCapital && banner != null) "_b$banner" else ""
+                addStringProperty("icon", "medal_tier_${s.tier.ordinal}$badge$flag")
                 addNumberProperty("liveliness", s.liveliness)
             }
         },

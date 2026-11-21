@@ -3,6 +3,7 @@ package world.wander.engine.sim
 import world.wander.engine.Cells
 import world.wander.engine.DaySummary
 import world.wander.engine.Harvest
+import world.wander.engine.Projects
 import world.wander.engine.LatLng
 import world.wander.engine.Proposal
 import world.wander.engine.Protection
@@ -19,6 +20,9 @@ import kotlin.math.min
  * (Regions, RoadsAndPlaces, Settlements, Goal, Economy) as an extension on this class; [snapshot] turns the
  * result into an immutable [WorldState]. The order of steps in [run] is part of the rules.
  */
+/** Regrowth speed of thinned sources in an area with a well or fountain. */
+internal const val WELL_REGROWTH = 1.5
+
 internal class Simulation(val input: WorldInput, val p: WorldParams, val today: Int) {
     val startDay = min(input.startDay, today)
 
@@ -63,11 +67,15 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     val weeks = mutableListOf<WeekRecord>()
 
     // Economy.
-    /** Gold: one purse for the whole world (effort is effort, wherever you are). */
-    var gold = 0.0
-    /** Wood, food, stone and metal, banked in the area where they were gathered. */
-    val banks = HashMap<String, Treasury>()
-    val harvest = Harvest(p.harvest)
+    /** One shared stock of everything (0.11: per-area banks were simpler to drop than to manage). */
+    var treasury = Treasury()
+    /** Cosmetics you own. */
+    val owned = LinkedHashSet<String>()
+    /** Units of each resource bought per (week, resource), for the weekly price climb. */
+    val bought = HashMap<Pair<Int, String>, Int>()
+    val purchasesByDay = input.purchases.groupBy { it.day }
+    // A well or fountain in an area makes thinned sources there regrow faster.
+    val harvest = Harvest(p.harvest) { key -> if (areaOfSource(key)?.let { a -> Projects.hasChain(built[a].orEmpty(), "well") } == true) WELL_REGROWTH else 1.0 }
     val built = HashMap<String, MutableList<String>>()          // areaId -> project ids
     val declinedOn = HashMap<Pair<String, String>, Int>()       // (areaId, projectId) -> day
     var pending: Proposal? = null
@@ -81,7 +89,7 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
 
     /** What one day produced so far, handed from step to step. */
     class Day(val day: Int, val resting: Boolean) {
-        /** The area you spent most of today in; gains with no clear place go to its bank. */
+        /** The area you spent most of today in; gains with no clear place count toward its perks. */
         var mainArea: String? = null
         /** Today's gains, by the area they were gathered in (null = today's main area). */
         val gains = HashMap<String?, Treasury>()
@@ -106,10 +114,23 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
             protection(day)        // 5. decay or restoration
             weeklyGoal(day)        // 6. goal adjustment on Sundays
             economy(day)           // 7. earnings, monuments, next proposal
+            purchases(day)         // 7b. what you bought from the trader or a market
             decisions(day)         // 8. your answers to proposals (after today's proposal)
             summarize(day)
         }
         return snapshot()
+    }
+
+    private val sourceArea = HashMap<String, String?>()
+    /** The area a harvest source ("l:id", "s:cell", "e:edge"…) lies in. */
+    fun areaOfSource(key: String): String? = sourceArea.getOrPut(key) {
+        val id = key.substringAfter(':')
+        when (key.substringBefore(':')) {
+            "l", "m", "f" -> areaAt(input.landmarks[id]?.center)
+            "s", "w" -> areaOfFine(id)
+            "e" -> areaAt(input.edges[id]?.midpoint)
+            else -> null
+        }
     }
 
     /** The area a point lies in, if you've been in its cell. */
