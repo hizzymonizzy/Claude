@@ -17,14 +17,23 @@ agreement in `CLAUDE.md`). Items come from `docs/backlog.md`. Status: proposed �
    back off less when you're standing somewhere new.
 8. **Simulation** covers all five resources, an inland walk, and banks.
 
-## 0.11 Villages you can see (proposed)
-1. Built projects drawn at their settlement as 0 A.D.-style buildings (art through intake).
-2. Upgrade chains: campfire → meeting hall → town hall; well → fountain; market → market hall.
-3. Buildings augment their area (perks), e.g. a well speeds regrowth of nearby sources; a market lets its bank trade
-   along connected roads at full rate.
-4. Settlement "development" drawn inside the settlement: plaza, gardens, worn ground. The green (explored ground)
-   stays walking-only (option A, agreed 2026-11-17).
-
+## 0.11 Villages you can see (proposed for final review, 2026-11-21)
+1. **One shared stock** again: remove area banks, networks, the split tip and per-area Atlas lists.
+2. **Trader (NPC).** A travelling trader stands near the capital on the map (original sprite). Tap → shop: buy wood,
+   food, stone, metal with gold at 2× base price.
+3. **Market (shop).** A settlement's built market shows a market icon on the map. Tap → shop at base prices:
+   stone 6, food 8, wood 10, metal 25 gold; each unit bought this week +10%, reset every Monday. Purchases are stored
+   as events and replayed (DB v10).
+4. **Cosmetics** in the same shop: capital banners (colours) and wanderer outfits (cloaks, hat). Original art.
+   Looks only.
+5. **Buildings on the map.** Each built project is drawn at its settlement as a 0 A.D. building badge (art through
+   intake), arranged around the medallion.
+6. **Upgrade chains:** campfire → meeting hall → town hall; well → fountain; market → market hall (better prices).
+7. **The village fills in** (option A: the green stays walking-only). Development is drawn on top inside explored
+   ground: a plaza that grows with tier and buildings, garden plots, worn paths.
+8. **Building perks** (small): well/fountain → thinned sources in its area regrow 50% faster; campfire → +1 food
+   per day you walk in its area; market/market hall → shop prices (base / −10%).
+9. **Simulation** extended: buying and weekly price climb, shared stock, perks, the campfire bought into existence.
 ## 0.12 Safe and sturdy (proposed)
 Encrypted export/import of your world; tests for map-server retry; split `Repository.kt`.
 
@@ -41,13 +50,13 @@ Trade between networks and regions (trade posts at waystones); regional specialt
 - **Gold.** One purse for the whole world (agreed 2026-11-17).
 - **History.** Replayed like everything else: past gathering is assigned to the area where it happened.
 
-## Shared stock again (proposed, 2026-11-21)
+## Shared stock again (folded into 0.11)
 The player found per-area banks harder to manage than they're worth. Proposal: one shared stock of all five
 resources everywhere; remove area banks, networks, the split-stock tip and the per-network Atlas list. Gathering
 rules (nodes, shores, fields, thinning, bonuses) stay as they are. Market perks in 0.11 need rethinking (they were
 about trade between banks).
 
-## Gold sinks: market and cosmetics (proposed, 2026-11-21)
+## Gold sinks: market and cosmetics (folded into 0.11)
 Player: the market is a place to buy resources; gold needs things to be spent on, including cosmetics.
 - **Market buying.** Once a settlement has a market, buy wood, food, stone and metal with gold. Prices rise with each
   unit bought in a week and reset weekly, so gathering stays the better path but gold is never stuck.
