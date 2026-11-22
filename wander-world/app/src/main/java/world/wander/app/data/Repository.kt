@@ -65,7 +65,7 @@ data class MapLayers(
 
 /** Everything the UI, the tracking service and the daily worker share. */
 class Repository(context: Context) {
-    private val app = context.applicationContext
+    internal val app = context.applicationContext
     val db = WanderDb.create(app)
     val dao = db.dao()
     val prefs = Prefs(app)
@@ -109,7 +109,7 @@ class Repository(context: Context) {
     suspend fun logAsync(tag: String, message: String) = withContext(Dispatchers.IO) { log(tag, message) }
 
     /** A walk's points, from the live rows or, once it's been packed, from its archive. */
-    private fun pointsOf(segmentId: Long): List<TrackPointEntity> =
+    internal fun pointsOf(segmentId: Long): List<TrackPointEntity> =
         dao.points(segmentId).ifEmpty { dao.archive(segmentId)?.let { PointArchive.decode(segmentId, it.data) }.orEmpty() }
 
     /** Packs the points of processed walks older than a week into one row each (review H1: never delete history). */
@@ -138,7 +138,7 @@ class Repository(context: Context) {
      */
     private val geoLock = Mutex()
 
-    private suspend fun ensureTiles(tiles: Collection<String>): Boolean = geoLock.withLock {
+    internal suspend fun ensureTiles(tiles: Collection<String>): Boolean = geoLock.withLock {
         for (tile in tiles) {
             if (dao.tile(tile) != null) continue
             val retry = tileRetry[tile]
@@ -167,7 +167,7 @@ class Repository(context: Context) {
      * Named places are a bonus layer: they never hold up a walk. When a tile's places arrive later,
      * walks in that tile are re-processed so their visits count.
      */
-    private suspend fun ensureLandmarks(tiles: Collection<String>, maxWaitMs: Long = 30 * 60_000L) = geoLock.withLock {
+    internal suspend fun ensureLandmarks(tiles: Collection<String>, maxWaitMs: Long = 30 * 60_000L) = geoLock.withLock {
         for (tile in tiles) {
             if (dao.tile(tile) == null || dao.landmarkTile(tile) != null) continue
             val key = "lm:$tile"
@@ -385,6 +385,14 @@ class Repository(context: Context) {
         }
     }
 
+    /** Decoded place outlines by id, kept between rebuilds (review M3); re-decoded only if the outline changes. */
+    private val ringCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, List<List<LatLng>>>>()
+    private fun ringsOf(id: String, geometry: String): List<List<LatLng>> {
+        val key = geometry.length * 31 + geometry.hashCode()
+        ringCache[id]?.let { if (it.first == key) return it.second }
+        return Overpass.decodeRings(geometry).also { ringCache[id] = key to it }
+    }
+
     private fun rebuildNow(): WorldState {
         val today = today()
         repairFallbackAreas()
@@ -418,7 +426,7 @@ class Repository(context: Context) {
             restPeriods = rest,
             goalLocked = prefs.goalLocked,
             landmarks = landmarkEntities.mapValues { (_, l) ->
-                val ring = Overpass.decodeRings(l.geometry).maxByOrNull { it.size }
+                val ring = ringsOf(l.id, l.geometry).maxByOrNull { it.size }
                 LandmarkInfo(
                     l.id, l.name, l.kind, l.areaM2, pointLike = l.id.startsWith("n"),
                     center = ring?.let { r -> LatLng(r.sumOf { it.lat } / r.size, r.sumOf { it.lng } / r.size) },
@@ -454,7 +462,7 @@ class Repository(context: Context) {
             pts to state.levelFor(wear)
         }
         val shownLandmarks = state.landmarks.mapNotNull { l ->
-            landmarkEntities[l.id]?.let { Triple(l.name, Overpass.decodeRings(it.geometry), l.areaM2) }
+            landmarkEntities[l.id]?.let { Triple(l.name, ringsOf(it.id, it.geometry), l.areaM2) }
         }
         val water = dao.allWaterTrails().map { w ->
             val pts = Overpass.decode(w.geometry)
@@ -495,56 +503,18 @@ class Repository(context: Context) {
     }
 
     /** Outlines of fields, orchards, allotments and community gardens in these tiles (food lines inland). */
-    private fun fieldLines(tiles: Collection<String>): List<List<LatLng>> =
+    internal fun fieldLines(tiles: Collection<String>): List<List<LatLng>> =
         dao.terrainInTiles(tiles.toList()).filter { it.kind == "farm" }.distinctBy { it.id }
             .flatMap { try { Overpass.decodeRings(it.geometry) } catch (_: Exception) { emptyList() } }
 
     /** Coastlines (lines) mapped in these tiles. */
-    private fun coastLines(tiles: Collection<String>): List<List<LatLng>> =
+    internal fun coastLines(tiles: Collection<String>): List<List<LatLng>> =
         dao.terrainInTiles(tiles.toList()).filter { it.kind == "coast" }.distinctBy { it.id }
             .flatMap { try { Overpass.decodeRings(it.geometry) } catch (_: Exception) { emptyList() } }
 
     /** Whether places (wood, food, metal sources) have been downloaded for the tile at this point. */
     suspend fun placesLoadedAt(p: LatLng): Boolean = withContext(Dispatchers.IO) { dao.landmarkTile(Cells.tile(p.lat, p.lng)) != null }
 
-    suspend fun nearestSources(from: LatLng): List<ResourceTarget> = withContext(Dispatchers.IO) {
-        // Map data for where you are now, even if you haven't walked here yet (one tile, same request a walk makes).
-        val here = Cells.tile(from.lat, from.lng)
-        // Where you're standing matters now: retry its places within 5 minutes, not 30.
-        if (ensureTiles(listOf(here))) ensureLandmarks(listOf(here), maxWaitMs = 5 * 60_000L)
-        val geo = Cells.disk(here, 2).map { tileGeo(it) }
-        val places = geo.flatMap { it.places }.distinctBy { it.id }
-        val placeIds = places.mapTo(HashSet()) { it.id }
-        val water = geo.flatMap { it.water }.distinctBy { it.id }.filter { it.id !in placeIds } // a named lake is already a place
-        ResourceFinder.find(from, places, water, _world.value, coast = geo.flatMap { it.coast }, fields = geo.flatMap { it.fields },
-            trails = geo.flatMap { it.trails })
-    }
-
-    /** A tile's decoded places, water, coast and field lines. */
-    private class TileGeo(
-        val stamp: Long, val places: List<Landmark>, val water: List<Landmark>, val coast: List<List<LatLng>>, val fields: List<List<LatLng>>,
-        val trails: List<Triple<String, String?, List<LatLng>>>,
-    )
-    private val tileGeoCache = java.util.concurrent.ConcurrentHashMap<String, TileGeo>()
-
-    /**
-     * Decoded once per download (review H4): the resource search runs every 20 s while recording and used to re-read
-     * and decode all of this each time. Tiles whose places aren't downloaded yet aren't cached, so they're read again.
-     */
-    private fun tileGeo(tile: String): TileGeo {
-        val stamp = dao.landmarkTile(tile)?.fetchedMs
-        tileGeoCache[tile]?.let { if (stamp != null && it.stamp == stamp) return it }
-        val one = listOf(tile)
-        val geo = TileGeo(
-            stamp ?: -1,
-            dao.landmarksInTiles(one).mapNotNull { try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null } },
-            dao.waterAreasInTiles(one).mapNotNull { try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null } },
-            coastLines(one), fieldLines(one),
-            dao.edgesInTiles(one).filter { Yields.isTrail(it.highway) }.map { Triple(it.id, it.name, Overpass.decode(it.geometry)) },
-        )
-        if (stamp != null) tileGeoCache[tile] = geo
-        return geo
-    }
 
     fun dispatchFor(state: WorldState, day: Int): Dispatch = DispatchWriter.write(state, day)
 
@@ -585,55 +555,6 @@ class Repository(context: Context) {
         dao.upsertDispatch(entity)
         prefs.lastDispatchDay = yesterday
         entity
-    }
-
-    /** A plain-text report of everything useful for debugging, for sharing. */
-    suspend fun diagnosticsReport(extra: List<String>): String = withContext(Dispatchers.IO) {
-        val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(zone)
-        val pkg = app.packageManager.getPackageInfo(app.packageName, 0)
-        val w = world.value ?: try { rebuild() } catch (e: Exception) { log("world", "Rebuild failed: $e"); null }
-        buildString {
-            appendLine("Wander World diagnostics · ${fmt.format(java.time.Instant.now())}")
-            appendLine("App ${pkg.versionName} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
-            appendLine("World start: ${java.time.LocalDate.ofEpochDay(prefs.startDay.toLong())} · home area: ${prefs.homeAreaId} · tracking: ${if (prefs.autoTrackingEnabled) prefs.trackingMode else "off"} · resting: ${prefs.resting} · goal locked: ${prefs.goalLocked} · resource pointers: ${if (prefs.resourcePointers) "on" else "off"}")
-            extra.forEach { appendLine(it) }
-            appendLine()
-            appendLine("== World ==")
-            if (w != null) {
-                appendLine("Roads charted: ${w.discoveredCount} · cells known: ${w.cellFamiliarity.size} · own-path cells: ${w.troddenWear.size}")
-                appendLine("Regions: " + w.regions.joinToString { "${it.name}${if (it.isHome) " (home)" else ""}${if (it.dormant) " (dormant)" else ""}" })
-                appendLine("Treasury: ${w.treasury.toString().ifEmpty { "empty" }} · proposal: ${w.proposal?.let { "${it.projectId} for ${it.areaId}" } ?: "none"} · monuments: ${w.monuments.joinToString { it.id }.ifEmpty { "none" }}")
-                appendLine("Waystones: ${w.waystones.size} (${w.waystones.count { it.great }} great) · portals: ${w.portals.size}")
-                appendLine("Places discovered: " + w.landmarks.joinToString { "${it.name} (${it.kind}, ${it.visitDays}d)" }.ifEmpty { "none" })
-                appendLine("Goal: %.0f / %d active min, last 7 days (ratio %.2f, %s) · this week %.0f · cooling applies: ${w.goal.coolingApplies}".format(w.goal.trailing7Minutes, w.goal.goal, w.goal.ratio, w.goal.protection, w.goal.weekMinutes))
-                for (st in w.settlements) appendLine("  ${st.name} [${st.areaId}] ${st.tier} (peak ${st.peakTier}) D=%.1f days=${st.areaDays} cells=${st.exploredCells} at %.4f,%.4f".format(st.development, st.position.lat, st.position.lng))
-                appendLine("Waypoints: ${w.exploredAreas.count { !it.settled }} · map layers: see [map] lines in the log")
-                appendLine("Last 14 days (active min · intensity min · walked km):")
-                for (d in w.today - 13..w.today) {
-                    val s = w.days[d] ?: continue
-                    appendLine("  ${java.time.LocalDate.ofEpochDay(d.toLong())}  %5.1f · %5.1f min · %.2f km · %s".format(s.activeMinutes, s.intensityMinutes, s.footMeters / 1000, s.protection))
-                }
-            } else appendLine("(could not be built; see log)")
-            val waiting = dao.pendingSegments()
-            if (waiting.isNotEmpty()) {
-                val proc = TrackProcessor(zone)
-                val missing = waiting.flatMap { seg -> proc.usablePoints(pointsOf(seg.id).map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }).map { Cells.tile(it.lat, it.lng) } }.toSet().filter { dao.tile(it) == null }
-                appendLine("Waiting walks: ${waiting.size} · missing map tiles: ${missing.joinToString().ifEmpty { "none" }}")
-            }
-            appendLine()
-            appendLine("== Intensity from Health Connect ==")
-            dao.allIntensity().sortedByDescending { it.day }.take(28).forEach {
-                appendLine("  ${java.time.LocalDate.ofEpochDay(it.day.toLong())} moderate %.0f vigorous %.0f (${it.source})".format(it.moderateMin, it.vigorousMin))
-            }
-            appendLine()
-            appendLine("== Captures ==")
-            dao.recentSegments(40).forEach {
-                appendLine("  ${fmt.format(java.time.Instant.ofEpochMilli(it.startMs))} → ${it.endMs?.let { e -> fmt.format(java.time.Instant.ofEpochMilli(e)) } ?: "recording"} · ${it.source} · ${it.modeHint ?: "?"} · ${dao.pointCount(it.id)} pts · ${it.note ?: if (it.processed) "processed" else "waiting"}")
-            }
-            appendLine()
-            appendLine("== Log (newest first) ==")
-            dao.recentLogs(1000).forEach { appendLine("${fmt.format(java.time.Instant.ofEpochMilli(it.timeMs))} [${it.tag}] ${it.message}") }
-        }
     }
 
     companion object {

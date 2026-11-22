@@ -1,6 +1,6 @@
 # 0007 The world is a heat map of where you've been
 
-**Status.** Accepted (design, 2026-11-21). Not built yet.
+**Status.** Accepted (design, 2026-11-21). Built in alpha 0.12.0.
 
 **Decision.** One quantity underlies the world: **heat**, the number of distinct days you've walked a place
 (cycling counts at its usual weight). Every system reads heat, changes it, or rewards the gap between hot and cold:

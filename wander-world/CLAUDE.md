@@ -10,7 +10,10 @@ A personal, non-competitive Android fitness app for one player. GPS walks, runs,
 - **Places and settlements:** discovered places; settlements from camp to metropolis; a capital pinned at home.
 - **Travel:** regions linked by waystones.
 - **Economy:** gold, wood, food, stone and metal, plus projects and monuments.
-- **Decay:** gentle, tied to a weekly Health Connect intensity goal. Ruins are the floor.
+- **The heat map (ADR 0007):** every hex you walk richens in five steps (1/3/10/30/100 days), at block,
+  neighbourhood and county size; regions become nodes beyond that.
+- **Weekly cooling (ADR 0008):** each Tuesday last week's active minutes (walks count; intensity adds 0.5×) are scored
+  against the goal; below it heat, roads and settlements cool, above it they recover. Floor: two steps below best.
 
 Concept: `docs/concept.md`. Rules and their history, the source of truth: `docs/design.md`. Settled
 choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/process/release.md`.
@@ -46,7 +49,7 @@ choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/p
 - **Intake.** A new library, asset or host goes through `docs/security.md` §3 before use. Assets are fetched into
   quarantine and passed through `tools/asset_intake.py`. Ask the player before widening the environment's network
   (they declined kenney.nl).
-- **Health app (ADR 0005, 0006).** Never punish rest; gold is never reduced for routine.
+- **Health app (ADR 0005, 0008).** Never punish rest (rest mode pauses cooling); gold is never reduced for routine.
 - **Player data survives updates.** Room migrations only, with schemas exported to `app/schemas/` and covered by
   `MigrationTest`. No destructive fallback.
 
@@ -54,7 +57,7 @@ choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/p
 - `engine/`: pure Kotlin/JVM, no Android; all game rules, fully unit-tested.
   - `WorldEngine.build(input, today)` replays stored observations day by day (ADR 0003).
   - `sim/Simulation.kt` holds the state and the **order of a day's steps**; that order is part of the rules.
-  - Each step has its own file in `sim/`: `Regions`, `RoadsAndPlaces`, `Settlements`, `Goal`, `Economy`.
+  - Each step has its own file in `sim/`: `Regions`, `RoadsAndPlaces`, `Settlements`, `Cooling`, `Goal`, `Economy`.
     `Snapshot.kt` builds the immutable `WorldState`.
   - `TrackProcessor` (GPS filtering, pottering, water detection), `MapMatcher` (HMM map matching),
     `Economy.kt` (yields, projects, monuments, harvest thinning), `Resources.kt` (resource nodes and pointers),
@@ -62,13 +65,14 @@ choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/p
     or pointers change.
   - Tunable numbers live in `WorldParams` / `HarvestParams`.
 - `app/` (`world.wander.app`): Android (Compose, MapLibre, Room, WorkManager, Health Connect, H3).
-  - `data/Repository.kt` is the hub (processing, rebuild, diagnostics, nearest resources).
+  - `data/Repository.kt` is the hub (map data, processing, rebuild); `Diagnostics.kt` and `ResourceSearch.kt` hold
+    the report and the resource search as extensions; `PointArchive.kt` packs walk points.
   - `data/Db.kt` holds entities and DAO; `data/DbMigrations.kt` holds the migration SQL.
   - `geo/Overpass.kt` fetches and parses map data.
   - Map UI:
     - `ui/MapScreen.kt` is the map screen and its controls.
     - `ui/MapStyle.kt` defines every source, layer and sprite.
-    - `ui/MapLayersBuilder.kt` turns the world into GeoJSON.
+    - `ui/MapLayersBuilder.kt` turns the world into GeoJSON; `ui/HeatLayers.kt` builds the heat hexes and region nodes.
     - `ui/MapIcons.kt` is the single registry of images.
   - `ui/Legend.kt` is generated.
 - `tools/`:
@@ -83,7 +87,7 @@ export ANDROID_HOME=/opt/android-sdk
 tools/check.sh                       # tests + build + lint + privacy policy; must pass before every commit
 ./gradlew :engine:test               # fast loop for game rules
 ./gradlew :app:testDebugUnitTest     # migrations, Overpass parsing, map layers
-python3 -I tools/gen_legend.py       # after any new map symbol; then regenerate the LEGEND list in Legend.kt
+python3 -I tools/gen_legend.py       # after any new map symbol; rewrites the swatches and the LEGEND list in Legend.kt
 ```
 - The APK is at `app/build/outputs/apk/debug/app-debug.apk`. Send it as `wander-world-alpha-X.Y.Z.apk` from the scratchpad.
 - A fresh cloud container may lack the SDK: install cmdline-tools from dl.google.com, then
@@ -100,7 +104,7 @@ Follow `docs/process/release.md`. Work on branch `claude/fitness-gps-world-build
 - When you report back, say what was not verified on the phone.
 
 ## Known technical debt
-- Overpass network code (`postWithRetry`) is untested; only parsing is covered.
-- `Repository.kt` is large (processing, rebuild, diagnostics, resources); split planned in 0.12 (review M2).
+- `Repository.kt` still holds map downloads, processing and rebuild together; split further when it next grows.
+- The `world` property shadows the `world.wander` package in app code (review L2); use imports, not full names.
 - Full review and status: `docs/process/review-2026-11-21.md`.
 - Walk points are never deleted: they're packed per walk after a week (`PointArchive`); read them with `pointsOf()`.

@@ -40,7 +40,7 @@ week (H1, DB v11); one coalesced rebuild lane with timing in diagnostics, redund
 recomputed when map data changes (H3); decoded tile geometry cached for the resource search (H4); duplicate presence
 query removed (M3, part); stray doc comment removed (L1).
 
-## 0.12 Heat map, trails and a faster engine (proposed 2026-11-21, for review)
+## 0.12 Heat map, trails and a faster engine (shipped 0.12.0)
 Everything agreed since 0.11.0, plus the review's fixes (`docs/process/review-2026-11-21.md`).
 
 **A. Trails and woods** (was 0.11.1)

@@ -61,6 +61,7 @@ import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.geojson.FeatureCollection
 import world.wander.app.data.Repository
+import world.wander.app.data.nearestSources
 import world.wander.app.tracking.TrackingService
 import world.wander.engine.LatLng as WLatLng
 

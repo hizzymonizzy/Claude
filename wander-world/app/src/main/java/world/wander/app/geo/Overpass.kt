@@ -52,12 +52,17 @@ object Overpass {
         return parse(json, tile)
     }
 
+    /** How a query reaches the server: a real HTTP POST, replaced by a fake in tests (review M4). */
+    internal var transport: (endpoint: String, query: String) -> String = { e, q -> post(e, q) }
+    /** Pause between back-to-back requests (the public server answers 429 otherwise); zero in tests. */
+    internal var politeMs: Long = 1_500
+
     /** Tries each server once. Throws the last error if all fail; the caller backs off between attempts. */
     private fun postWithRetry(query: String): String {
         val errors = mutableListOf<String>()
         for (endpoint in ENDPOINTS) {
             try {
-                return post(endpoint, query)
+                return transport(endpoint, query)
             } catch (e: Exception) {
                 errors += "${URL(endpoint).host}: ${e.message?.lineSequence()?.firstOrNull() ?: e.javaClass.simpleName}"
             }
@@ -118,7 +123,7 @@ object Overpass {
         val elements = org.json.JSONArray()
         for (i in 0 until first.length()) first.getJSONObject(i).let { if (it.getString("type") != "relation") elements.put(it) }
         if (small.isNotEmpty()) {
-            Thread.sleep(1_500) // the public server answers 429 to back-to-back requests
+            Thread.sleep(politeMs) // the public server answers 429 to back-to-back requests
             val rel = JSONObject(postWithRetry(relationQuery(small))).getJSONArray("elements")
             for (i in 0 until rel.length()) elements.put(rel.getJSONObject(i))
         }
@@ -126,14 +131,14 @@ object Overpass {
         // trail through a large park still finds its wood. If one still times out, its bounding box stands in.
         var bigKept = 0
         for (big in bigGreenRelations(first).take(MAX_BIG_GREEN)) {
-            Thread.sleep(1_500)
+            Thread.sleep(politeMs)
             val got = try { JSONObject(postWithRetry(relationQuery(listOf(big.getLong("id"))))).getJSONArray("elements") } catch (_: Exception) { null }
             if (got != null && got.length() > 0) { for (i in 0 until got.length()) elements.put(got.getJSONObject(i)) }
             else boundsAsRelation(big)?.let { elements.put(it) }
             bigKept++
         }
         val json = JSONObject().put("elements", elements).toString()
-        Thread.sleep(1_500)
+        Thread.sleep(politeMs)
         var coast = emptyList<TerrainAreaEntity>()
         val coastal = try {
             val c = postWithRetry(coastQuery(bbox))

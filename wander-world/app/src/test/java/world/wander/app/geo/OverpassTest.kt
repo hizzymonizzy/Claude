@@ -163,4 +163,48 @@ class OverpassTest {
         assertEquals("Oakdale Reservation", parsed.single().name)
         assertTrue(parsed.single().areaM2 > 10_000_000)
     }
+
+    @Test
+    fun landmarkFetchRunsItsRequestsInOrderAndSurvivesAFailedBigPark() {
+        // Review M4: the network path, with a fake server. Phase 1 (outlines + relation boxes), phase 2 (small
+        // relations), one request per big park (this one times out → bounding box), then the coast check.
+        val asked = mutableListOf<String>()
+        val saved = Overpass.transport to Overpass.politeMs
+        Overpass.politeMs = 0
+        Overpass.transport = { _, q ->
+            asked += when {
+                "out tags bb" in q -> "phase1"
+                "relation(id:7)" in q -> "big"
+                "relation(id:" in q -> "small"
+                else -> "coast"
+            }
+            when (asked.last()) {
+                "phase1" -> """{"elements":[
+                    {"type":"relation","id":5,"tags":{"leisure":"park","name":"Elm Park"},"bounds":{"minlat":40.30,"minlon":-74.30,"maxlat":40.301,"maxlon":-74.299}},
+                    {"type":"relation","id":7,"tags":{"leisure":"nature_reserve","name":"Oakdale Reservation"},"bounds":{"minlat":40.30,"minlon":-74.40,"maxlat":40.36,"maxlon":-74.33}}]}"""
+                "small" -> """{"elements":[{"type":"relation","id":5,"tags":{"leisure":"park","name":"Elm Park"},"members":[{"type":"way","geometry":[
+                    {"lat":40.300,"lon":-74.300},{"lat":40.300,"lon":-74.299},{"lat":40.301,"lon":-74.299},{"lat":40.301,"lon":-74.300},{"lat":40.300,"lon":-74.300}]}]}]}"""
+                "big" -> throw IllegalStateException("overpass-api.de HTTP 504 Gateway Timeout")
+                else -> """{"elements":[]}"""
+            }
+        }
+        try {
+            val tile = world.wander.engine.Cells.tile(40.3005, -74.2995)
+            val extras = Overpass.fetchLandmarks(tile)
+            assertEquals(listOf("phase1", "small", "big", "coast"), asked)
+            assertEquals(setOf("r5", "r7"), extras.landmarks.map { it.id }.toSet())
+            assertEquals(0, extras.skippedLarge)
+            assertFalse(extras.coastal)
+        } finally { Overpass.transport = saved.first; Overpass.politeMs = saved.second }
+    }
+
+    @Test
+    fun aFailedRequestNamesTheServerAndTheError() {
+        val saved = Overpass.transport
+        Overpass.transport = { _, _ -> throw IllegalStateException("overpass-api.de HTTP 429 Too Many Requests") }
+        try {
+            val e = runCatching { Overpass.fetchLandmarks(world.wander.engine.Cells.tile(40.30, -74.30)) }.exceptionOrNull()
+            assertTrue(e?.message.orEmpty(), e?.message.orEmpty().contains("overpass-api.de: overpass-api.de HTTP 429"))
+        } finally { Overpass.transport = saved }
+    }
 }

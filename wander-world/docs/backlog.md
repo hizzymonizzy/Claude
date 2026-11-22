@@ -38,7 +38,7 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Back to one shared stock (remove area banks) | Player: easier to manage than counts per territory | shipped 0.11.0 |
 | Market: buy resources with gold (weekly rising prices) | Player: gold needs uses; market becomes a shop | shipped 0.11.0 |
 | Cosmetics bought with gold (outfits, banners, map tints, frames) | Player: a gold sink with no gameplay effect | banners and outfits shipped 0.11.0; tints and frames proposed |
-| Wood along wooded paths (a "trail through woods" line source), like food along shores | Woods often have paths through them; matches how stone and food work now | proposed |
+| Wood along wooded paths (a "trail through woods" line source), like food along shores | Woods often have paths through them; matches how stone and food work now | shipped 0.12.0 |
 | Projects you can actually afford: show what's missing and where to get it (links to nodes) | Campfire has been waiting since day one | shipped 0.11.0 |
 | Trade between settlements once two have markets | From the economy design, deferred in 0.7.0 | proposed |
 | Regional specialty goods (coast → fish, woods → timber) | Makes regions feel different | proposed |
@@ -60,8 +60,8 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 ## Heat map (2026-11-21)
 | Item | Why | Status |
 |---|---|---|
-| Heat per hex, four zoom levels, five steps (ADR 0007) | The world is a heat map; one rule for how ground looks | agreed (design) |
-| Weekly cooling with recovery, floor two steps below best (ADR 0008) | Decay was too slow to feel; weeks should matter | agreed (design) |
-| Settlement decay on the same weekly tick | One rule for everything | agreed (0.12) |
+| Heat per hex, four zoom levels, five steps (ADR 0007) | The world is a heat map; one rule for how ground looks | shipped 0.12.0 |
+| Weekly cooling with recovery, floor two steps below best (ADR 0008) | Decay was too slow to feel; weeks should matter | shipped 0.12.0 |
+| Settlement decay on the same weekly tick | One rule for everything | shipped 0.12.0 |
 | Settlement tier from heat clusters | Fewer counters | proposed |
 | Upgrades that raise heat floors or slow cooling | Later option: fade to step 1, with upgrades to protect places | proposed |

@@ -53,6 +53,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import world.wander.app.data.Repository
+import world.wander.app.data.diagnosticsReport
 import world.wander.app.data.SegmentEntity
 import world.wander.app.tracking.ActivityReceiver
 import world.wander.app.tracking.TrackingService

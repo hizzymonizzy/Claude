@@ -1,6 +1,7 @@
 # 0008 Decay is felt weekly: heat cools when you miss your goal
 
-**Status.** Accepted (design, 2026-11-21). Supersedes [0006](0006-gentle-decay.md). Not built yet.
+**Status.** Accepted (design, 2026-11-21). Supersedes [0006](0006-gentle-decay.md). Built in alpha 0.12.0, scored on
+Tuesdays (a day late, so watch syncs land) with the goal measured in active minutes (§20.2.1 of the design).
 
 **Decision.** Every Monday, last week's health-goal ratio `r` cools all heat (hexes, roads, own paths, water routes)
 by a share of its current value. Settlements keep their tier floors (the capital never below Village).

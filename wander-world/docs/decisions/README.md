@@ -11,5 +11,5 @@ of editing an old one; mark the old one "Superseded by NNNN".
 | [0004](0004-art-0ad-cc-by-sa.md) | Top-down art adapted from 0 A.D. (CC BY-SA), plus original sprites | Accepted |
 | [0005](0005-economy-earned-by-moving.md) | Resources are earned by moving; gold is never penalized | Accepted |
 | [0006](0006-gentle-decay.md) | Decay is gentle and tied to the weekly health goal; ruins are the floor | Superseded by 0008 |
-| [0007](0007-world-is-a-heat-map.md) | The world is a heat map: one heat value, five steps, four zoom levels | Accepted (not built) |
-| [0008](0008-weekly-cooling.md) | Decay is felt weekly: heat cools when you miss your goal, floor two steps below best | Accepted (not built) |
+| [0007](0007-world-is-a-heat-map.md) | The world is a heat map: one heat value, five steps, four zoom levels | Accepted (built 0.12.0) |
+| [0008](0008-weekly-cooling.md) | Decay is felt weekly: heat cools when you miss your goal, floor two steps below best | Accepted (built 0.12.0) |

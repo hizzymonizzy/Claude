@@ -88,8 +88,9 @@ def roads():
     # Unwalked street inside explored ground: a clearly dashed, muted path on the grass.
     peek = tile("oad_ground_grass", (W, H))
     pd = ImageDraw.Draw(peek)
-    for x in range(14, W - 14, 16):
-        pd.line([(x, y), (x + 8, y)], fill=(140, 122, 98), width=4)
+    for x in range(14, W - 14, 18):   # 0.12: light dashes with a dark edge, as the map draws them
+        pd.line([(x, y), (x + 9, y)], fill=(74, 58, 40), width=9)
+        pd.line([(x + 1, y), (x + 8, y)], fill=(242, 230, 200), width=5)
     out["legend_road_peek"] = peek
     # The capital medallion as the map draws it: star upper right, monument upper left (see MapScreen.capitalMedal).
     medal = Image.open(RES / "oad_medal_tier_2.png").convert("RGBA")
@@ -121,16 +122,34 @@ def roads():
     out["oad_legend_ground_sand"] = tile("oad_ground_sand", (W, H))
     out["oad_legend_ground_water"] = tile("oad_water_sea", (W, H))
     out["oad_legend_ground_shore"] = tile("oad_ground_sand_wet", (W, H))
-    # A village filling in: explored grass with garden plots and a paved plaza (0.11).
-    v = grass().convert("RGBA")
-    farm = tile("oad_ground_farm", (W, H)).convert("RGBA")
-    cob = tile("oad_road_cobble", (W, H)).convert("RGBA")
-    for x0 in (14, 186):
-        m = Image.new("L", (W, H), 0); ImageDraw.Draw(m).rectangle([x0, 14, x0 + 40, 50], fill=255)
-        v.paste(farm, (0, 0), m)
-    m = Image.new("L", (W, H), 0); ImageDraw.Draw(m).ellipse([W // 2 - 50, 4, W // 2 + 50, H - 4], fill=255)
-    v.paste(cob, (0, 0), m)
-    out["oad_legend_village"] = v.convert("RGB")
+    # The heat map (0.12): ground at five heat steps, as MapStyle.heatTint draws them, side by side.
+    def tint(img, step):
+        from PIL import ImageEnhance
+        b, c, k = [(1.30, 0.28, 1.0), (1.14, 0.6, 1.0), (1.0, 1.0, 1.0), (0.9, 1.25, 1.06), (0.8, 1.45, 1.14)][step - 1]
+        return ImageEnhance.Contrast(ImageEnhance.Brightness(ImageEnhance.Color(img).enhance(c)).enhance(b)).enhance(k)
+    def hexmask(size, r, cx, cy):
+        import math
+        m = Image.new("L", size, 0)
+        ImageDraw.Draw(m).polygon([(cx + r * math.cos(math.radians(60 * i - 30)), cy + r * math.sin(math.radians(60 * i - 30))) for i in range(6)], fill=255)
+        return m
+    steps = Image.new("RGB", (W, H), (244, 236, 216))
+    g = tile("oad_ground_grass", (W, H))
+    for i in range(5):
+        steps.paste(tint(g, i + 1), (0, 0), hexmask((W, H), 27, 26 + i * 47, H // 2))
+    out["legend_heat_steps"] = steps
+    town = Image.new("RGB", (W, H), (244, 236, 216))
+    cob = tile("oad_road_cobble", (W, H))
+    for i, (cx, cy) in enumerate([(W // 2, H // 2), (W // 2 - 46, H // 2), (W // 2 + 46, H // 2), (W // 2 - 23, H // 2 - 40), (W // 2 + 23, H // 2 + 40)]):
+        town.paste(tint(cob, 4), (0, 0), hexmask((W, H), 26, cx, cy))
+    out["legend_heat_town"] = town
+    board = Image.new("RGB", (W, H), (239, 230, 207))
+    bd = ImageDraw.Draw(board)
+    for i, (gname, st) in enumerate([("oad_ground_grass", 4), ("oad_ground_forest", 3), ("oad_ground_grass", 2), ("oad_ground_sand", 3)]):
+        cx = 34 + i * 58
+        board.paste(tint(tile(gname, (W, H)), st), (0, 0), hexmask((W, H), 30, cx, H // 2))
+        import math
+        bd.polygon([(cx + 30 * math.cos(math.radians(60 * k - 30)), H // 2 + 30 * math.sin(math.radians(60 * k - 30))) for k in range(6)], outline=(92, 74, 50))
+    out["legend_heat_county"] = board
     return out
 
 
@@ -197,15 +216,18 @@ LEGEND = [
     ("oad_medal_place_generic", "Place", "Other named places."),
     ("Economy", None, None),
     ("oad_medal_gold", "Gold", "Your weekly-goal effort and distance. One purse, usable everywhere; spend it at markets and the trader."),
-    ("oad_res_wood", "Wood", "30 s in or along (15 m) a wood or park. New ones pay double; favourites thin, rest restores."),
+    ("oad_res_wood", "Wood", "30 s in or along (15 m) a wood or park, or walk an unpaved trail (1 per km). New ones pay double; favourites thin, rest restores."),
     ("oad_res_food", "Food", "Walk shores and field or garden edges (2 per km), forage in woods, paddle, visit markets and harbours."),
     ("oad_res_stone", "Stone", "Kilometres walked on roads; points to streets you haven't walked."),
     ("oad_res_metal", "Metal", "Discovering and revisiting places; points to undiscovered ones."),
     ("oad_medal_monument", "Monument", "A milestone, raised at your capital."),
     ("oad_legend_pointer", "Best source", "Wood, food or metal: the arrow points to the best node you haven't gathered today. Stone needs no pointer: walk any road."),
     ("legend_gathering", "Gathering", "Nodes stay put; tap one for details. Green ring: you're in its zone. 30 s gathers; a tick = gathered today. Everything goes into one shared stock."),
+    ("Heat map", None, None),
+    ("legend_heat_steps", "Heat", "Ground you walk richens in five steps, like roads: 1, 3, 10, 30, 100 days. Missed weekly goals cool it a step at a time, never more than two below its best."),
+    ("legend_heat_county", "County board", "Zoomed out: big hexes by ground and heat. Further out, each region is one medallion."),
     ("Villages", None, None),
-    ("oad_legend_village", "Village ground", "A plaza, garden plots and paths fill in on explored ground as a settlement grows and builds."),
+    ("legend_heat_town", "Paved hexes", "A settlement's ground: it spreads a ring of hexes as it grows a tier."),
     ("bldg_campfire", "Campfire", "Meeting hall, then town hall. +1 food each day you walk in the area."),
     ("bldg_well", "Well", "Then a fountain. Thinned sources in the area regrow 50% faster."),
     ("oad_medal_bldg_market", "Market", "Tap to buy resources at market prices; a market hall takes 10% off."),
@@ -244,10 +266,30 @@ def sheet(swatches):
     return S
 
 
+def write_kotlin():
+    """Regenerates the LEGEND list in Legend.kt from LEGEND above (wide rows are road and ground swatches)."""
+    kt = ROOT / "app/src/main/java/world/wander/app/ui/Legend.kt"
+    src = kt.read_text()
+    start = src.index("private val LEGEND = listOf(\n")
+    end = src.index("\n)\n", start) + 3
+    def esc(t):
+        return t.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
+    lines = ["private val LEGEND = listOf("]
+    for key, title, desc in LEGEND:
+        if title is None:
+            lines.append(f'    LegendItem(null, "{esc(key)}"),')
+            continue
+        wide = Image.open(RES / f"{key}.png").size == (W, H)
+        lines.append(f'    LegendItem(R.drawable.{key}, "{esc(title)}", "{esc(desc)}"' + (", wide = true" if wide else "") + "),")
+    lines.append(")\n")
+    kt.write_text(src[:start] + "\n".join(lines) + src[end:])
+
+
 def main():
     sw = roads()
     for name, img in sw.items():
         img.save(RES / f"{name}.png", optimize=True)
+    write_kotlin()
     out = ROOT / "docs/art/legend.png"
     sheet(sw).save(out)
     print(f"wrote {len(sw)} swatches and {out}")
