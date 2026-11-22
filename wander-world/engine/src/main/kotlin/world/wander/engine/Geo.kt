@@ -98,4 +98,10 @@ object Cells {
     fun boundary(cell: String): List<LatLng> = h3.cellToBoundary(cell).map { LatLng(it.lat, it.lng) }
 
     fun disk(cell: String, k: Int): List<String> = h3.gridDisk(cell, k)
+    /** Rings around a cell: index d holds the cells exactly d steps away. */
+    fun rings(cell: String, k: Int): List<List<String>> = h3.gridDiskDistances(cell, k)
+    /** The outline of a set of cells as polygons (outer ring first, then holes), lat/lng. */
+    fun outline(cells: Collection<String>): List<List<List<LatLng>>> =
+        h3.cellAddressesToMultiPolygon(cells, false).map { poly -> poly.map { ring -> ring.map { LatLng(it.lat, it.lng) } } }
+    fun children(cell: String, res: Int): List<String> = h3.cellToChildren(cell, res)
 }

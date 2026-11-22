@@ -10,8 +10,9 @@ A personal, non-competitive Android fitness app for one player. GPS walks, runs,
 - **Places and settlements:** discovered places; settlements from camp to metropolis; a capital pinned at home.
 - **Travel:** regions linked by waystones.
 - **Economy:** gold, wood, food, stone and metal, plus projects and monuments.
-- **The heat map (ADR 0007):** every hex you walk richens in five steps (1/3/10/30/100 days), at block,
-  neighbourhood and county size; regions become nodes beyond that.
+- **The heat map (ADR 0007, 0010):** every hex you walk richens in five steps (1/3/10/30/100 days) and enriches that
+  many rings around it, fading outward; fog clears to those hex edges. Block, neighbourhood and county views; regions
+  become nodes beyond that.
 - **Weekly cooling (ADR 0008):** each Tuesday last week's active minutes (walks count; intensity adds 0.5×) are scored
   against the goal; below it heat, roads and settlements cool ¼ step a bad week (ADR 0009: a step shows lost only
   after 4 such weeks), a week over the goal brings back ¼ step. Floor: two steps below best.

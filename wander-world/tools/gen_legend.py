@@ -125,7 +125,7 @@ def roads():
     # The heat map (0.12): ground at five heat steps, as MapStyle.heatTint draws them, side by side.
     def tint(img, step):
         from PIL import ImageEnhance
-        b, c, k = [(1.30, 0.28, 1.0), (1.14, 0.6, 1.0), (1.0, 1.0, 1.0), (0.9, 1.25, 1.06), (0.8, 1.45, 1.14)][step - 1]
+        b, c, k = [(1.30, 0.28, 1.0), (1.0, 1.0, 1.0), (0.95, 1.15, 1.03), (0.9, 1.3, 1.06), (0.85, 1.42, 1.1), (0.8, 1.55, 1.14)][step]
         return ImageEnhance.Contrast(ImageEnhance.Brightness(ImageEnhance.Color(img).enhance(c)).enhance(b)).enhance(k)
     def hexmask(size, r, cx, cy):
         import math
@@ -134,8 +134,8 @@ def roads():
         return m
     steps = Image.new("RGB", (W, H), (244, 236, 216))
     g = tile("oad_ground_grass", (W, H))
-    for i in range(5):
-        steps.paste(tint(g, i + 1), (0, 0), hexmask((W, H), 27, 26 + i * 47, H // 2))
+    for i in range(6):
+        steps.paste(tint(g, i), (0, 0), hexmask((W, H), 22, 22 + i * 39, H // 2))
     out["legend_heat_steps"] = steps
     town = Image.new("RGB", (W, H), (244, 236, 216))
     cob = tile("oad_road_cobble", (W, H))
@@ -157,7 +157,7 @@ def roads():
 LEGEND = [
     ("Ground", None, None),
     ("legend_ground_fog", "Fog", "Unexplored. Walk to clear it."),
-    ("oad_legend_ground_explored", "Explored ground", "Cleared by your walks; worn roads clear wider."),
+    ("oad_legend_ground_explored", "Explored ground", "Cleared hex by hex around your walks; busier paths clear wider."),
     ("oad_legend_ground_woods", "Woods & parks", "Named green places you've discovered."),
     ("oad_legend_ground_sand", "Sand & beaches", "Beaches and dunes you've discovered."),
     ("oad_legend_ground_water", "Water", "Clear and blue where you've been; faded under the fog."),
@@ -224,7 +224,7 @@ LEGEND = [
     ("oad_legend_pointer", "Best source", "Wood, food or metal: the arrow points to the best node you haven't gathered today. Stone needs no pointer: walk any road."),
     ("legend_gathering", "Gathering", "Nodes stay put; tap one for details. Green ring: you're in its zone. 30 s gathers; a tick = gathered today. Everything goes into one shared stock."),
     ("Heat map", None, None),
-    ("legend_heat_steps", "Heat", "Ground you walk richens in five steps, like roads: 1, 3, 10, 30, 100 days. A badly missed week cools it a quarter step (a step after four); a week over the goal brings a quarter back."),
+    ("legend_heat_steps", "Heat", "Pale at the edge, richer where you walk. A hex walked 1, 3, 10, 30 or 100 days (like roads) enriches 1 to 5 rings around it, fading outward, so busy paths fill in the map. A badly missed week cools a quarter step (a step after four); a week over the goal brings a quarter back."),
     ("legend_heat_county", "County board", "Zoomed out: big hexes by ground and heat. Further out, each region is one medallion."),
     ("Villages", None, None),
     ("legend_heat_town", "Paved hexes", "A settlement's ground: it spreads a ring of hexes as it grows a tier."),

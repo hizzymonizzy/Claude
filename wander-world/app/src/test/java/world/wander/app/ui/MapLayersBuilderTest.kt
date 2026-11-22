@@ -150,7 +150,7 @@ class MapLayersBuilderTest {
             .map { org.locationtech.jts.geom.Coordinate(it.lng, it.lat) }.toTypedArray())
         val walked = Cells.cellAt(at(-200.0, 0.0).lat, at(-200.0, 0.0).lng, Cells.HEAT_RES)
         val grounds = HeatLayers.Grounds(null, null)
-        val hexes = HeatLayers.hexes(mapOf(walked to 12.0), Cells.HEAT_RES, grounds, w, half).features()!!
+        val hexes = HeatLayers.hexes(world.wander.engine.HeatSpread.coverage(mapOf(walked to 12.0)), Cells.HEAT_RES, grounds, w, half).features()!!
         val patterns = hexes.map { it.getStringProperty("pattern") }
         assertTrue(patterns.contains("heat_grass_3"))   // 12 days: lane step
         assertTrue(patterns.count { it.startsWith("heat_town_") } in 2..36)  // village ring 2, cut to the explored half
@@ -177,7 +177,7 @@ class MapLayersBuilderTest {
     @Test
     fun aYearOfHexesBuildsInReasonableTime() {
         val cells = Cells.disk(Cells.cellAt(origin.lat, origin.lng, Cells.HEAT_RES), 43).take(5_600)
-        val heat = cells.associateWith { (it.hashCode() and 127).toDouble() }
+        val heat = cells.associateWith { (it.hashCode() and 5) }
         val forest = org.locationtech.jts.geom.prep.PreparedGeometryFactory.prepare(
             org.locationtech.jts.geom.GeometryFactory().createPolygon(listOf(at(0.0, 0.0), at(300.0, 0.0), at(300.0, 300.0), at(0.0, 300.0), at(0.0, 0.0))
                 .map { org.locationtech.jts.geom.Coordinate(it.lng, it.lat) }.toTypedArray()))
@@ -186,5 +186,36 @@ class MapLayersBuilderTest {
         val fc = HeatLayers.hexes(heat, Cells.HEAT_RES, HeatLayers.Grounds(forest, null), null, null)
         println("5600 block hexes built in ${(System.nanoTime() - t0) / 1_000_000} ms (JVM); patterns: " + fc.features()!!.map { it.getStringProperty("pattern") }.toSet().sorted())
         assertEquals(5_600, fc.features()!!.size)
+    }
+
+    @Test
+    fun fogClearsToTheHexesAWalksHeatReaches() {
+        // 0.12.2: a hex walked 30+ days (step 4) clears 4 rings of ~20 m hexes around it, with hex edges.
+        val walked = Cells.cellAt(origin.lat, origin.lng, Cells.HEAT_RES)
+        val cov = world.wander.engine.HeatSpread.coverage(mapOf(walked to 40.0))
+        val (fog, _, explored) = MapLayersBuilder.fogExploredGeometry(MapLayers(emptyList(), emptyList()), coverage = cov)
+        assertFalse("the walked hex is clear", fogged(fog, origin))
+        val ring4 = Cells.center(Cells.rings(walked, 4)[4].first())
+        assertFalse("its fourth ring is clear", fogged(fog, ring4))
+        assertTrue("well beyond is fog", fogged(fog, at(200.0, 0.0)))
+        assertEquals(61, cov.size)
+        assertTrue(explored != null && explored.area > 0)
+    }
+
+    @Test
+    fun aYearOfSpreadAndHexFogIsQuickEnough() {
+        // 12 routes of ~500 walked hexes at mixed steps (as YearPerformanceTest), spread and outlined.
+        val rnd = kotlin.random.Random(3)
+        val heat = HashMap<String, Double>()
+        for (r in 0 until 12) Cells.disk(Cells.cellAt(origin.lat + r * 0.004, origin.lng + (r % 4) * 0.005, Cells.HEAT_RES), 12)
+            .shuffled(rnd).take(500).forEach { heat[it] = listOf(1.0, 2.0, 4.0, 12.0, 40.0, 120.0)[rnd.nextInt(6)] }
+        val t0 = System.nanoTime()
+        val cov = world.wander.engine.HeatSpread.coverage(heat)
+        val t1 = System.nanoTime()
+        val (_, _, explored) = MapLayersBuilder.fogExploredGeometry(MapLayers(emptyList(), emptyList()), coverage = cov)
+        val t2 = System.nanoTime()
+        val hood = world.wander.engine.HeatSpread.aggregate(cov, Cells.HOOD_RES, 49)
+        println("year spread: ${heat.size} walked → ${cov.size} covered hexes in ${(t1 - t0) / 1_000_000} ms; hex fog in ${(t2 - t1) / 1_000_000} ms; ${hood.size} hood hexes")
+        assertTrue(explored != null)
     }
 }

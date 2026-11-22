@@ -46,16 +46,14 @@ object HeatLayers {
         return Grounds(union(wooded), union(sandy))
     }
 
-    fun step(v: Double): Int = listOf(1.0, 3.0, 10.0, 30.0, 100.0).count { v >= it }.coerceIn(1, 5)
-
-    /** Hexes of one size as textured polygons: property "pattern" = heat_<ground>_<step>. */
+    /** Hexes of one size as textured polygons: property "pattern" = heat_<ground>_<level 0–5> (see HeatSpread). */
     fun hexes(
-        heat: Map<String, Double>, res: Int, grounds: Grounds, state: WorldState?, explored: Geometry?,
+        levels: Map<String, Int>, res: Int, grounds: Grounds, state: WorldState?, explored: Geometry?,
     ): FeatureCollection {
         val towns = townHexes(state, res, explored)
         val prepExplored = explored?.let { PreparedGeometryFactory.prepare(it) }
-        val out = ArrayList<Feature>(heat.size + towns.size)
-        for ((cell, v) in heat) {
+        val out = ArrayList<Feature>(levels.size + towns.size)
+        for ((cell, level) in levels) {
             if (cell in towns) continue
             val c = Cells.center(cell)
             val pt = gf.createPoint(Coordinate(c.lng, c.lat))
@@ -64,7 +62,7 @@ object HeatLayers {
                 grounds.forest?.contains(pt) == true -> "forest"
                 else -> "grass"
             }
-            out += hex(cell, "heat_${ground}_${step(v)}")
+            out += hex(cell, "heat_${ground}_${level.coerceIn(0, 5)}")
         }
         for ((cell, tierStep) in towns) {
             // Block-size town hexes only on explored ground; coarser ones always (they're the overview).

@@ -13,6 +13,7 @@ import org.maplibre.geojson.Point
 import world.wander.app.data.MapLayers
 import world.wander.app.geo.Overpass
 import world.wander.engine.GATHER_M
+import world.wander.engine.Cells
 import world.wander.engine.LatLng
 import world.wander.engine.LocalProjection
 import world.wander.engine.WorldState
@@ -211,21 +212,43 @@ object MapLayersBuilder {
         fogExploredGeometry(layers, clearings).let { it.first to it.second }
 
     /** Fog, explored ground, and the explored geometry itself (for clipping street status to it). */
-    fun fogExploredGeometry(layers: MapLayers, clearings: List<LatLng> = emptyList()): Triple<FeatureCollection, FeatureCollection, Geometry?> {
+    fun fogExploredGeometry(
+        layers: MapLayers, clearings: List<LatLng> = emptyList(),
+        /** Block hexes reached by walking (HeatSpread.coverage); when present, fog clears to their hex edges (0.12.2). */
+        coverage: Map<String, Int> = emptyMap(),
+    ): Triple<FeatureCollection, FeatureCollection, Geometry?> {
         val world = gf.createPolygon(
             arrayOf(Coordinate(-180.0, -85.0), Coordinate(180.0, -85.0), Coordinate(180.0, 85.0), Coordinate(-180.0, 85.0), Coordinate(-180.0, -85.0)),
         )
-        val revealed = layers.discovered.mapNotNull { (e, st) -> bufferedLatLng(Overpass.decode(e.geometry), REVEAL_BY_LEVEL_M[st.level.coerceIn(1, 5)]) } +
-            layers.trails.mapNotNull { bufferedLatLng(it, TRAIL_RADIUS_M) } +
-            layers.wild.mapNotNull { (pts, level) -> bufferedLatLng(pts, maxOf(TRAIL_RADIUS_M, REVEAL_BY_LEVEL_M[level.coerceIn(1, 5)] - 5)) } +
+        val walked: List<Geometry> = if (coverage.isNotEmpty()) {
+            // Hex edges: the outline of every hex a path's heat reaches, plus a small hex clearing at each waystone.
+            val cells = coverage.keys + clearings.flatMap { Cells.disk(Cells.cellAt(it.lat, it.lng, Cells.HEAT_RES), 2) }
+            listOfNotNull(hexOutline(cells))
+        } else {
+            // Before any walk has heat (e.g. while walks are re-processed): the old bands along walked roads.
+            layers.discovered.mapNotNull { (e, st) -> bufferedLatLng(Overpass.decode(e.geometry), REVEAL_BY_LEVEL_M[st.level.coerceIn(1, 5)]) } +
+                layers.trails.mapNotNull { bufferedLatLng(it, TRAIL_RADIUS_M) } +
+                layers.wild.mapNotNull { (pts, level) -> bufferedLatLng(pts, maxOf(TRAIL_RADIUS_M, REVEAL_BY_LEVEL_M[level.coerceIn(1, 5)] - 5)) } +
+                clearings.mapNotNull { circle(it, WAYSTONE_CLEARING_M) }
+        }
+        val revealed = walked +
             layers.water.mapNotNull { (pts, level) -> bufferedLatLng(pts, REVEAL_BY_LEVEL_M[level.coerceIn(1, 5)] + 20) } +
-            layers.landmarks.filter { it.third <= CLEAR_PLACES_UNDER_M2 }.mapNotNull { (_, rings, _) -> placePolygon(rings) } +
-            clearings.mapNotNull { circle(it, WAYSTONE_CLEARING_M) }
+            layers.landmarks.filter { it.third <= CLEAR_PLACES_UNDER_M2 }.mapNotNull { (_, rings, _) -> placePolygon(rings) }
         val explored: Geometry? = if (revealed.isEmpty()) null else try { fillSmallHoles(UnaryUnionOp.union(revealed)) } catch (_: Exception) { null }
         val fog: Geometry = explored?.let { try { world.difference(it) } catch (_: Exception) { world } } ?: world
         fun fc(g: Geometry?) = FeatureCollection.fromFeatures(polygons(g).map { Feature.fromGeometry(toGeo(it)) })
         return Triple(fc(fog), fc(explored), explored)
     }
+
+    /** A set of hexes as one geometry, built by H3 (fast for tens of thousands of hexes, no polygon union). */
+    private fun hexOutline(cells: Collection<String>): Geometry? = try {
+        val polys = Cells.outline(cells.toSet()).mapNotNull { rings ->
+            val shells = rings.map { r -> (if (r.first() == r.last()) r else r + r.first()).map { Coordinate(it.lng, it.lat) }.toTypedArray() }
+            if (shells.isEmpty() || shells[0].size < 4) null
+            else gf.createPolygon(gf.createLinearRing(shells[0]), shells.drop(1).filter { it.size >= 4 }.map { gf.createLinearRing(it) }.toTypedArray())
+        }
+        if (polys.isEmpty()) null else gf.createMultiPolygon(polys.toTypedArray()).buffer(0.0)
+    } catch (_: Exception) { null }
 
     internal fun polygons(g: Geometry?): List<Polygon> = when (g) {
         is Polygon -> listOf(g)

@@ -32,7 +32,7 @@ private data class LegendItem(val image: Int?, val title: String, val descriptio
 private val LEGEND = listOf(
     LegendItem(null, "Ground"),
     LegendItem(R.drawable.legend_ground_fog, "Fog", "Unexplored. Walk to clear it.", wide = true),
-    LegendItem(R.drawable.oad_legend_ground_explored, "Explored ground", "Cleared by your walks; worn roads clear wider.", wide = true),
+    LegendItem(R.drawable.oad_legend_ground_explored, "Explored ground", "Cleared hex by hex around your walks; busier paths clear wider.", wide = true),
     LegendItem(R.drawable.oad_legend_ground_woods, "Woods & parks", "Named green places you've discovered.", wide = true),
     LegendItem(R.drawable.oad_legend_ground_sand, "Sand & beaches", "Beaches and dunes you've discovered.", wide = true),
     LegendItem(R.drawable.oad_legend_ground_water, "Water", "Clear and blue where you've been; faded under the fog.", wide = true),
@@ -99,7 +99,7 @@ private val LEGEND = listOf(
     LegendItem(R.drawable.oad_legend_pointer, "Best source", "Wood, food or metal: the arrow points to the best node you haven't gathered today. Stone needs no pointer: walk any road."),
     LegendItem(R.drawable.legend_gathering, "Gathering", "Nodes stay put; tap one for details. Green ring: you're in its zone. 30 s gathers; a tick = gathered today. Everything goes into one shared stock."),
     LegendItem(null, "Heat map"),
-    LegendItem(R.drawable.legend_heat_steps, "Heat", "Ground you walk richens in five steps, like roads: 1, 3, 10, 30, 100 days. A badly missed week cools it a quarter step (a step after four); a week over the goal brings a quarter back.", wide = true),
+    LegendItem(R.drawable.legend_heat_steps, "Heat", "Pale at the edge, richer where you walk. A hex walked 1, 3, 10, 30 or 100 days (like roads) enriches 1 to 5 rings around it, fading outward, so busy paths fill in the map. A badly missed week cools a quarter step (a step after four); a week over the goal brings a quarter back.", wide = true),
     LegendItem(R.drawable.legend_heat_county, "County board", "Zoomed out: big hexes by ground and heat. Further out, each region is one medallion.", wide = true),
     LegendItem(null, "Villages"),
     LegendItem(R.drawable.legend_heat_town, "Paved hexes", "A settlement's ground: it spreads a ring of hexes as it grows a tier.", wide = true),

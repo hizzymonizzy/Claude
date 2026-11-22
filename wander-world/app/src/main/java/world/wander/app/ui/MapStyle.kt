@@ -99,7 +99,8 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     // Explored ground: real terrain texture (0 A.D. grass / forest floor) laid OVER the base map's streets and
     // buildings, so inside explored land every street is drawn by its status (walked: trail…avenue; unwalked:
     // dashed), not by the base map. Under the fog the base map's faint streets still show the lay of the land.
-    val ground = FillLayer("explored", "explored").withProperties(fillPattern("ground_grass"), fillOpacity(1f))
+    // Explored ground not reached by any path's heat (pockets, small places, waystones) is pale, like a heat ring's edge.
+    val ground = FillLayer("explored", "explored").withProperties(fillPattern("heat_grass_0"), fillOpacity(1f))
     val woods = FillLayer("green-places", "green-places").withProperties(fillPattern("ground_forest"), fillOpacity(0.85f))
     val sand = FillLayer("sand-places", "sand-places").withProperties(fillPattern("ground_sand"), fillOpacity(0.9f))
     // Wet sand along coastlines, above beaches, under the water copy below (so only the land side shows).
@@ -396,7 +397,7 @@ internal fun addSprites(s: Style, context: Context) {
     // Heat steps (ADR 0007): each ground texture in five tints, faded → rich, like the roads' five stages.
     for ((ground, tex) in HeatLayers.TEXTURES) {
         val base = loaded[tex] ?: continue
-        for (step in 1..5) s.addImage("heat_${ground}_$step", heatTint(base, step))
+        for (step in 0..5) s.addImage("heat_${ground}_$step", heatTint(base, step))
     }
     // Capital medallions with the star (and monument, once raised) baked in, one image per tier.
     val star = loaded["badge_capital"] ?: return
@@ -458,10 +459,15 @@ internal fun restyleBasemap(s: Style) {
     }
 }
 
-/** A ground texture at heat step 1–5: brightness, saturation and contrast from faded (1) to rich (5). */
+/**
+ * A ground texture at heat level 0–5 (0.12.2): 0 is pale explored ground at the edge of a path's reach, 1 the normal
+ * texture (a hex walked once), 2–5 progressively richer, so the more you walk somewhere the greener it gets.
+ */
+internal val HEAT_TINTS = listOf(Triple(1.30f, 0.28f, 1.0f), Triple(1.0f, 1.0f, 1.0f), Triple(0.95f, 1.15f, 1.03f),
+    Triple(0.9f, 1.3f, 1.06f), Triple(0.85f, 1.42f, 1.1f), Triple(0.8f, 1.55f, 1.14f))
+
 private fun heatTint(src: Bitmap, step: Int): Bitmap {
-    val (bright, sat, contrast) = listOf(Triple(1.30f, 0.28f, 1.0f), Triple(1.14f, 0.6f, 1.0f), Triple(1.0f, 1.0f, 1.0f),
-        Triple(0.9f, 1.25f, 1.06f), Triple(0.8f, 1.45f, 1.14f))[step - 1]
+    val (bright, sat, contrast) = HEAT_TINTS[step]
     val cm = android.graphics.ColorMatrix().apply { setSaturation(sat) }
     val t = (1 - contrast) * 128f
     val scale = bright * contrast

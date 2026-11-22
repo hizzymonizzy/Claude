@@ -27,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import world.wander.engine.Cells
+import world.wander.engine.HeatSpread
 import world.wander.engine.Geo
 import world.wander.engine.ResourceTarget
 import world.wander.engine.Yields
@@ -154,10 +155,15 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     var exploredGeometry by remember { mutableStateOf<org.locationtech.jts.geom.Geometry?>(null) }
     var fogSummary by remember { mutableStateOf("") }
     val waystoneCenters = world?.waystones.orEmpty().map { it.center }
-    LaunchedEffect(style, layers, waystoneCenters) {
+    // How far each walked hex's heat reaches (0.12.2): fog clears to these hexes, and they're what's drawn.
+    var coverage by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    val heat = world?.heat
+    LaunchedEffect(style, layers, waystoneCenters, heat) {
         val s = style ?: return@LaunchedEffect
         val errors = mutableListOf<String>()
-        val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogExploredGeometry(layers, waystoneCenters) } }
+        val cov = withContext(Dispatchers.Default) { HeatSpread.coverage(heat.orEmpty()) }
+        coverage = cov
+        val fe = try { withContext(Dispatchers.Default) { MapLayersBuilder.fogExploredGeometry(layers, waystoneCenters, cov) } }
             catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "fog: $e"; null }
         if (fe != null) {
             s.source("fog")?.setGeoJson(fe.first); s.source("explored")?.setGeoJson(fe.second)
@@ -169,7 +175,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         fogSummary = "peek=${peek?.features()?.size ?: -1}" + if (errors.isEmpty()) "" else " | errors: " + errors.joinToString("; ")
         repo.log("map", "Fog and unwalked streets: $fogSummary")
     }
-    LaunchedEffect(style, layers, world, wornBanner, exploredGeometry) {
+    LaunchedEffect(style, layers, world, wornBanner, exploredGeometry, coverage) {
         val s = style ?: return@LaunchedEffect
         val errors = mutableListOf<String>()
         fun update(id: String, build: () -> FeatureCollection): Int = try {
@@ -184,10 +190,13 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             val (block, hood, county) = withContext(Dispatchers.Default) {
                 val grounds = HeatLayers.grounds(layers, kinds)
                 val w = world
+                // Neighbourhood and county hexes from the block coverage: only where enough of the hex is really covered.
+                val hood = HeatSpread.aggregate(coverage, Cells.HOOD_RES, 49)
+                val county = HeatSpread.aggregate(hood, Cells.COUNTY_RES, 49)
                 Triple(
-                    HeatLayers.hexes(w?.heat.orEmpty(), Cells.HEAT_RES, grounds, w, exploredGeometry),
-                    HeatLayers.hexes(w?.heatHood.orEmpty(), Cells.HOOD_RES, grounds, w, exploredGeometry),
-                    HeatLayers.hexes(w?.heatCounty.orEmpty(), Cells.COUNTY_RES, grounds, w, exploredGeometry),
+                    HeatLayers.hexes(coverage, Cells.HEAT_RES, grounds, w, exploredGeometry),
+                    HeatLayers.hexes(hood, Cells.HOOD_RES, grounds, w, exploredGeometry),
+                    HeatLayers.hexes(county, Cells.COUNTY_RES, grounds, w, exploredGeometry),
                 )
             }
             "heat=${update("heat-block") { block }}/${update("heat-hood") { hood }}/${update("heat-county") { county }}"
