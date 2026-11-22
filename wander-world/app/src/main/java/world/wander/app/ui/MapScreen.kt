@@ -285,7 +285,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
         if (showPointers && targets.isNotEmpty()) {
             ResourcePointers(
-                targets = shownNodes.filter { it.best },
+                targets = shownNodes.filter { it.best }.distinctBy { it.resource },
                 project = { p -> map?.projection?.toScreenLocation(MlLatLng(p.lat, p.lng))?.let { it.x to it.y } },
                 topInsetPx = topInsetPx,
                 onPick = { repo.focus.value = it.point },
@@ -312,7 +312,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             }
             world?.let { w ->
                 Spacer(Modifier.height(6.dp))
-                InventoryBar(w.treasury, shownNodes.filter { it.best }, today = w.days[w.today]?.earned) { repo.focus.value = it.point }
+                InventoryBar(w.treasury, shownNodes.filter { it.best }.distinctBy { it.resource }, today = w.days[w.today]?.earned) { repo.focus.value = it.point }
                 if (showPointers && targets.isEmpty()) {
                     Text(
                         if (searching) "Looking for resources nearby…" else "No wood, food, stone or metal mapped near here yet",

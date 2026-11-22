@@ -94,12 +94,12 @@ internal fun Simulation.snapshot(): WorldState {
         // The trader waits by the village you visited most recently.
         traderAt = settlements.values.maxByOrNull { it.lastVisit }?.position?.let { LatLng(it.lat + 0.0004, it.lng + 0.0006) },
         proposal = pending,
-        abundance = harvest.snapshot(today).keys.filter { it.startsWith("l:") || it.startsWith("m:") }
+        abundance = harvest.snapshot(today).keys.filter { it.startsWith("l:") || it.startsWith("m:") || it.startsWith("t:") }
             .map { it.substring(2) }.toSet()
-            .associateWith { id -> minOf(harvest.abundance("l:$id", today), harvest.abundance("m:$id", today)) },
+            .associateWith { id -> minOf(harvest.abundance("l:$id", today), harvest.abundance("m:$id", today), harvest.abundance("t:$id", today)) },
         // Places by id; shore cells keep their "s:" prefix.
         gatheredToday = harvest.harvestedOn(today).mapNotNull { k -> when {
-            k.startsWith("l:") || k.startsWith("m:") -> k.substring(2)
+            k.startsWith("l:") || k.startsWith("m:") || k.startsWith("t:") -> k.substring(2)
             k.startsWith("s:") -> k
             else -> null
         } }.toSet(),

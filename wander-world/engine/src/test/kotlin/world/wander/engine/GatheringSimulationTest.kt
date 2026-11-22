@@ -165,6 +165,32 @@ class GatheringSimulationTest {
     }
 
     @Test
+    fun woodlandTrailGivesWoodWithoutAnyParkOutline() {
+        // 0.12: a 1.2 km unpaved trail with no park or wood mapped around it (the park outline was too big to fetch).
+        val trail = GraphEdge("tr", "Ridge Trail", 11, 12, listOf(at(0.0, 300.0), at(400.0, 380.0), at(800.0, 300.0), at(1200.0, 360.0)))
+        val street = GraphEdge("st", "Elm Ave", 12, 13, listOf(at(1200.0, 360.0), at(1600.0, 360.0)))
+        val graph = listOf(trail, street)
+        val t = walk(t0, 0.0 to 300.0, 400.0 to 380.0, 800.0 to 300.0, 1200.0 to 360.0, 1600.0 to 360.0)
+        val r = TrackProcessor(zone).process(t, null, graph)
+        fun world(days: Int) = WorldEngine().build(WorldInput(
+            startDay = start, homeAreaId = "home",
+            edges = mapOf("tr" to trail.toInfo().copy(trail = true), "st" to street.toInfo()),
+            coverage = (0 until days).flatMap { d -> r.coverage.map { it.copy(day = start + d) } },
+            presence = r.presence, intensity = emptyList(), movement = r.movement, cellArea = r.presence.associate { it.cell to "home" },
+            areas = mapOf("home" to AreaInfo("home", "Oakdale", null)),
+        ), start + days - 1)
+        val first = world(1); val week = world(7)
+        println("trail: day 1 wood %.2f stone %.2f; 7 days in a row wood %.2f".format(first.treasury.wood, first.treasury.stone, week.treasury.wood))
+        org.junit.Assert.assertTrue("new trail pays double: ~2.4 wood", first.treasury.wood in 2.0..2.6)
+        org.junit.Assert.assertTrue("the street gives stone, not wood", first.treasury.stone > 0)
+        org.junit.Assert.assertTrue("daily walking thins it", week.treasury.wood < 7 * 1.2 + 1.2)
+        // The trail is a wood node with an arrow when nothing else is near.
+        val nodes = ResourceFinder.find(at(0.0, 0.0), emptyList(), emptyList(), null,
+            trails = listOf(Triple("tr", "Ridge Trail", trail.points)))
+        org.junit.Assert.assertEquals("Ridge Trail", nodes.single { it.resource == "wood" && it.best }.name)
+    }
+
+    @Test
     fun oneSharedStockTheTraderAndUpgrades() {
         // 0.11: one shared stock again. Wood from a far park pays for home's campfire right away; gold buys the rest.
         val homeRoad = GraphEdge("h", "Elm Ave", 1, 2, listOf(at(0.0, 0.0), at(500.0, 0.0)))

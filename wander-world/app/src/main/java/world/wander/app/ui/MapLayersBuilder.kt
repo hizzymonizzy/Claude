@@ -112,11 +112,24 @@ object MapLayersBuilder {
     fun peeks(layers: MapLayers, explored: Geometry? = null): FeatureCollection {
         val prepared = explored?.let { org.locationtech.jts.geom.prep.PreparedGeometryFactory.prepare(it) }
         return FeatureCollection.fromFeatures(
-            layers.peek.mapNotNull { e ->
+            // Cut to explored ground (0.12): dashes only ever show on the green, never out in the fog.
+            layers.peek.flatMap { e ->
                 val pts = Overpass.decode(e.geometry)
-                if (pts.size < 2) return@mapNotNull null
-                if (prepared != null && !prepared.intersects(gf.createLineString(pts.map { Coordinate(it.lng, it.lat) }.toTypedArray()))) return@mapNotNull null
-                Feature.fromGeometry(line(pts))
+                if (pts.size < 2) return@flatMap emptyList()
+                val ls = gf.createLineString(pts.map { Coordinate(it.lng, it.lat) }.toTypedArray())
+                when {
+                    prepared == null -> listOf(Feature.fromGeometry(line(pts)))
+                    !prepared.intersects(ls) -> emptyList()
+                    prepared.containsProperly(ls) -> listOf(Feature.fromGeometry(line(pts)))
+                    else -> {
+                        val cut = try { explored.intersection(ls) } catch (_: Exception) { null }
+                        (0 until (cut?.numGeometries ?: 0)).mapNotNull { i ->
+                            val g = cut!!.getGeometryN(i)
+                            if (g is org.locationtech.jts.geom.LineString && g.numPoints >= 2)
+                                Feature.fromGeometry(line(g.coordinates.map { LatLng(it.y, it.x) })) else null
+                        }
+                    }
+                }
             },
         )
     }

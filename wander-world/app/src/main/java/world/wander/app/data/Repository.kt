@@ -392,7 +392,7 @@ class Repository(context: Context) {
         val edgeIds = coverage.map { it.edgeId }.distinct()
         val edges = edgeIds.chunked(500).flatMap { dao.edgesById(it) }.associateBy { it.id }
         val edgeInfos = edges.mapValues { (_, e) ->
-            GraphEdge(e.id, e.name, e.startNode, e.endNode, Overpass.decode(e.geometry)).toInfo()
+            GraphEdge(e.id, e.name, e.startNode, e.endNode, Overpass.decode(e.geometry)).toInfo().copy(trail = Yields.isTrail(e.highway))
         }
         val visits = dao.allVisits()
         val landmarkEntities = visits.map { it.landmarkId }.distinct().chunked(500).flatMap { dao.landmarksById(it) }.associateBy { it.id }
@@ -514,11 +514,15 @@ class Repository(context: Context) {
         val places = geo.flatMap { it.places }.distinctBy { it.id }
         val placeIds = places.mapTo(HashSet()) { it.id }
         val water = geo.flatMap { it.water }.distinctBy { it.id }.filter { it.id !in placeIds } // a named lake is already a place
-        ResourceFinder.find(from, places, water, _world.value, coast = geo.flatMap { it.coast }, fields = geo.flatMap { it.fields })
+        ResourceFinder.find(from, places, water, _world.value, coast = geo.flatMap { it.coast }, fields = geo.flatMap { it.fields },
+            trails = geo.flatMap { it.trails })
     }
 
     /** A tile's decoded places, water, coast and field lines. */
-    private class TileGeo(val stamp: Long, val places: List<Landmark>, val water: List<Landmark>, val coast: List<List<LatLng>>, val fields: List<List<LatLng>>)
+    private class TileGeo(
+        val stamp: Long, val places: List<Landmark>, val water: List<Landmark>, val coast: List<List<LatLng>>, val fields: List<List<LatLng>>,
+        val trails: List<Triple<String, String?, List<LatLng>>>,
+    )
     private val tileGeoCache = java.util.concurrent.ConcurrentHashMap<String, TileGeo>()
 
     /**
@@ -534,6 +538,7 @@ class Repository(context: Context) {
             dao.landmarksInTiles(one).mapNotNull { try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null } },
             dao.waterAreasInTiles(one).mapNotNull { try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null } },
             coastLines(one), fieldLines(one),
+            dao.edgesInTiles(one).filter { Yields.isTrail(it.highway) }.map { Triple(it.id, it.name, Overpass.decode(it.geometry)) },
         )
         if (stamp != null) tileGeoCache[tile] = geo
         return geo

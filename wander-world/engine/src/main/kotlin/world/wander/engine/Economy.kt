@@ -129,6 +129,11 @@ object Yields {
 
     /** Food per fine cell of shore walked: about 2 per km, like stone from roads (doubled on shore never walked). */
     const val SHORE_FOOD_PER_CELL = 0.08
+    /** Wood per km walked on an unpaved trail (double the first time, thinning like any source). */
+    const val TRAIL_WOOD_PER_KM = 1.0
+    private val TRAIL_HIGHWAYS = setOf("path", "track", "bridleway")
+    /** Whether an OSM highway value (with "|unpaved" appended for unpaved footways) is a woodland-style trail. */
+    fun isTrail(highway: String?): Boolean = highway != null && (highway in TRAIL_HIGHWAYS || highway.endsWith("|unpaved"))
 
     /** Places that are food *nodes* (you go to them). Shores are food *lines* (you walk along them). */
     val FOOD_NODE_KINDS = setOf("harbour", "market", "community_garden")
@@ -150,6 +155,7 @@ object Yields {
     fun howToGather(resource: String, kind: String): String = when {
         kind == "shore" -> "Walk along this shore, within 40 m of the water. About 2 food per km."
         kind == "field" -> "Walk along the edge of these fields or gardens. About 2 food per km."
+        kind == "trail" -> "Walk this unpaved trail: about 1 wood per km, double the first time."
         resource == "wood" -> "Spend 30 s inside or along the edge (15 m). 1 wood, plus 1 per 5 min you stay." +
             (if (kind in FORAGE_KINDS) " You'll forage a little food too." else "")
         resource == "food" -> "Spend 30 s here. 1 food, plus 1 per 10 min you stay."

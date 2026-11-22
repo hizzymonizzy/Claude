@@ -154,4 +154,17 @@ class MapLayersBuilderTest {
         assertTrue(gardens.features()!!.isNotEmpty())
         assertTrue(MapLayersBuilder.village(w, null).first.features()!!.isEmpty())
     }
+
+    @Test
+    fun unwalkedStreetsAreCutToExploredGround() {
+        // 0.12: a street that only brushes the explored area shows dashes on the green part only.
+        val walked = edge("w", at(0.0, 0.0), at(300.0, 0.0)) to edgeState("w", 1)
+        val crossing = edge("p", at(150.0, -400.0), at(150.0, 400.0))
+        val layers = MapLayers(discovered = listOf(walked), peek = listOf(crossing))
+        val (_, _, explored) = MapLayersBuilder.fogExploredGeometry(layers)
+        val dashes = MapLayersBuilder.peeks(layers, explored).features()!!
+        assertTrue(dashes.isNotEmpty())
+        val ys = dashes.flatMap { (it.geometry() as org.maplibre.geojson.LineString).coordinates() }.map { (it.latitude() - origin.lat) * 111_320.0 }
+        assertTrue("dashes stay within the cleared band, not the full 800 m street: ${ys.min()}..${ys.max()}", ys.max() - ys.min() < 200)
+    }
 }

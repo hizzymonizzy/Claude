@@ -87,6 +87,8 @@ object ResourceFinder {
         coast: List<List<LatLng>> = emptyList(),
         /** Edges of farmland, orchards and allotments: food lines inland. */
         fields: List<List<LatLng>> = emptyList(),
+        /** Unpaved trails (edge id, name, line): wood lines, walked like roads for stone (0.12). */
+        trails: List<Triple<String, String?, List<LatLng>>> = emptyList(),
     ): List<ResourceTarget> {
         val discovered = world?.landmarks.orEmpty().map { it.id }.toSet()
         val abundance = world?.abundance.orEmpty()
@@ -136,8 +138,27 @@ object ResourceFinder {
         val foodBest = listOfNotNull(shoreBest, harbourBest).minByOrNull { it.distanceM }
         val food = (shore.filter { it.distanceM <= NEARBY_M }.take(PER_RESOURCE) + listOfNotNull(shoreBest)).distinctBy { it.sourceId }
             .plus(harbours).map { it.copy(best = it.sourceId == foodBest?.sourceId) }
+        // Wood: parks and woods (zones), plus unpaved trails (lines). One arrow for the best of both.
+        val woodPlaces = nodes("wood", places.filter { it.kind in Yields.WOOD_KINDS })
+        val trailNodes = trails.mapNotNull { (id, name, line) ->
+            if (line.size < 2) return@mapNotNull null
+            val d = (1 until line.size).minOf { i -> Geo.distanceToSegmentM(from, line[i - 1], line[i]) }
+            if (d > MAX_POINT_M) return@mapNotNull null
+            val note = when {
+                id in gathered -> "gathered"
+                id !in abundance -> "new"
+                (abundance[id] ?: 1.0) < 0.5 -> "thinned"
+                else -> ""
+            }
+            ResourceTarget("wood", name?.takeIf { it.isNotBlank() } ?: "Woodland trail", line[line.size / 2], (d - GATHER_M).coerceAtLeast(0.0),
+                note, id, kind = "trail", abundance = abundance[id] ?: 1.0)
+        }.sortedBy { it.distanceM }.take(20)
+        fun value(t: ResourceTarget) = (t.distanceM + 300) / (if (t.note == "new") 2.0 else (t.abundance.coerceAtLeast(0.3)))
+        val woodBest = (woodPlaces + trailNodes).filter { it.note != "gathered" }.minByOrNull { value(it) }
+        val wood = (woodPlaces + trailNodes.filter { it.distanceM <= NEARBY_M }.take(PER_RESOURCE) + listOfNotNull(woodBest))
+            .distinctBy { it.sourceId }.map { it.copy(best = it.sourceId == woodBest?.sourceId) }
         // Stone has no nodes: it comes from walking any road, so there's nothing to point at.
-        return nodes("wood", places.filter { it.kind in Yields.WOOD_KINDS }) + food + nodes("metal", metal)
+        return wood + food + nodes("metal", metal)
     }
 }
 

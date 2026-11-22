@@ -141,7 +141,7 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
         when (key.substringBefore(':')) {
             "l", "m", "f" -> areaAt(input.landmarks[id]?.center)
             "s", "w" -> areaOfFine(id)
-            "e" -> areaAt(input.edges[id]?.midpoint)
+            "e", "t" -> areaAt(input.edges[id]?.midpoint)
             else -> null
         }
     }

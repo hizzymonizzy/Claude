@@ -28,6 +28,8 @@ data class EdgeInfo(
     val startNode: Long,
     val endNode: Long,
     val midpoint: LatLng,
+    /** An unpaved trail (path, track, bridleway, or an unpaved footway): walking it gathers wood (0.12). */
+    val trail: Boolean = false,
 )
 
 // ---- Observations: the source of truth. World state is always derived from these. ----

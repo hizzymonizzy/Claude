@@ -30,6 +30,7 @@ object Overpass {
         "^(footway|path|pedestrian|steps|track|residential|living_street|service|unclassified|" +
             "tertiary|tertiary_link|secondary|secondary_link|primary|primary_link|cycleway|bridleway|road)$"
     private const val PLACES = "^(neighbourhood|quarter|suburb|hamlet|village|town|city)$"
+    private val UNPAVED = setOf("unpaved", "dirt", "earth", "ground", "grass", "gravel", "fine_gravel", "mud", "sand", "woodchips", "compacted", "pebblestone")
 
     data class TileData(val edges: List<EdgeEntity>, val places: List<PlaceEntity>)
 
@@ -121,6 +122,16 @@ object Overpass {
             val rel = JSONObject(postWithRetry(relationQuery(small))).getJSONArray("elements")
             for (i in 0 until rel.length()) elements.put(rel.getJSONObject(i))
         }
+        // Big parks, woods and reserves (0.12): fetched one at a time instead of skipped with the seas and rivers, so a
+        // trail through a large park still finds its wood. If one still times out, its bounding box stands in.
+        var bigKept = 0
+        for (big in bigGreenRelations(first).take(MAX_BIG_GREEN)) {
+            Thread.sleep(1_500)
+            val got = try { JSONObject(postWithRetry(relationQuery(listOf(big.getLong("id"))))).getJSONArray("elements") } catch (_: Exception) { null }
+            if (got != null && got.length() > 0) { for (i in 0 until got.length()) elements.put(got.getJSONObject(i)) }
+            else boundsAsRelation(big)?.let { elements.put(it) }
+            bigKept++
+        }
         val json = JSONObject().put("elements", elements).toString()
         Thread.sleep(1_500)
         var coast = emptyList<TerrainAreaEntity>()
@@ -129,7 +140,27 @@ object Overpass {
             coast = parseCoast(c, tile)
             JSONObject(c).getJSONArray("elements").length() > 0
         } catch (_: Exception) { false }
-        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal, skippedLarge = skipped, terrain = parseSand(json, tile) + parseFields(json, tile) + coast)
+        return TileExtras(parseLandmarks(json, tile), parseWater(json, tile), coastal, skippedLarge = skipped - bigKept, terrain = parseSand(json, tile) + parseFields(json, tile) + coast)
+    }
+
+    private const val MAX_BIG_GREEN = 4
+
+    /** Relations too large for the batch request that are parks, woods or reserves (by their tags). */
+    internal fun bigGreenRelations(elements: org.json.JSONArray): List<JSONObject> = (0 until elements.length()).map { elements.getJSONObject(it) }
+        .filter { el ->
+            val b = el.optJSONObject("bounds")
+            el.getString("type") == "relation" && b != null && el.optJSONObject("tags")?.let { categorize(it) in world.wander.engine.Yields.WOOD_KINDS } == true &&
+                Geo.distanceM(LatLng(b.getDouble("minlat"), b.getDouble("minlon")), LatLng(b.getDouble("maxlat"), b.getDouble("maxlon"))) > MAX_RELATION_SPAN_M
+        }
+
+    /** A relation's bounding box as a one-ring relation, so it parses like any other place (rough, but walkable). */
+    internal fun boundsAsRelation(el: JSONObject): JSONObject? {
+        val b = el.optJSONObject("bounds") ?: return null
+        val s = b.getDouble("minlat"); val w = b.getDouble("minlon"); val n = b.getDouble("maxlat"); val e = b.getDouble("maxlon")
+        val ring = org.json.JSONArray()
+        for ((la, lo) in listOf(s to w, s to e, n to e, n to w, s to w)) ring.put(JSONObject().put("lat", la).put("lon", lo))
+        return JSONObject().put("type", "relation").put("id", el.getLong("id")).put("tags", el.optJSONObject("tags"))
+            .put("members", org.json.JSONArray().put(JSONObject().put("type", "way").put("geometry", ring)))
     }
 
     /** Ids of relations small enough to fetch whole, and how many were too large. */
@@ -369,7 +400,11 @@ object Overpass {
                     val geom = (0 until geomArr.length()).map {
                         val g = geomArr.getJSONObject(it); LatLng(g.getDouble("lat"), g.getDouble("lon"))
                     }
-                    ways += Way(el.getLong("id"), nodes, geom, tags?.optString("name")?.takeIf { it.isNotBlank() }, tags?.optString("highway"))
+                    // Unpaved footways count as trails for wood (0.12); the surface rides along in the highway value.
+                    val hw = tags?.optString("highway")?.takeIf { it.isNotBlank() }
+                    val unpaved = tags?.optString("surface") in UNPAVED
+                    ways += Way(el.getLong("id"), nodes, geom, tags?.optString("name")?.takeIf { it.isNotBlank() },
+                        if (hw != null && unpaved && hw !in setOf("path", "track", "bridleway")) "$hw|unpaved" else hw)
                 }
                 "node" -> {
                     val name = tags?.optString("name")?.takeIf { it.isNotBlank() } ?: continue

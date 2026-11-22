@@ -19,6 +19,8 @@ internal fun Simulation.roads(d: Simulation.Day) {
         val footLen = mergedLength(covs.filter { it.mode == Mode.FOOT }.map { it.fromM to it.toM })
         val cycleLen = mergedLength(covs.filter { it.mode == Mode.CYCLE }.map { it.fromM to it.toM })
         d.gain(areaAt(info.midpoint), stone = harvest.take("e:$edgeId", day, footLen / 1000.0))
+        // Unpaved trails also give wood, like shores give food (0.12).
+        if (info.trail) d.gain(areaAt(info.midpoint), wood = harvest.take("t:$edgeId", day, footLen / 1000.0 * Yields.TRAIL_WOOD_PER_KM))
         val wearNeed = min(p.wearDayFraction * len, p.wearDayMaxM)
         val boost = homecoming(e.wear, e.best)
         when {

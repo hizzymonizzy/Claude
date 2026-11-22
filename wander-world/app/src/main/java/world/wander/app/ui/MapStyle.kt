@@ -82,7 +82,7 @@ internal const val INK = "#5B4636"
 internal fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
 internal val OUR_LAYERS = listOf(
-    "explored", "green-places", "shore", "water-over", "fog", "fog-edge", "peek", "roads-edge", "roads-trail-edge", "roads-trail", "roads-dirt", "roads-cobble",
+    "explored", "green-places", "shore", "water-over", "fog", "fog-edge", "peek-edge", "peek", "roads-edge", "roads-trail-edge", "roads-trail", "roads-dirt", "roads-cobble",
     "roads-trees-l", "roads-trees-r", "wild-1", "wild-2", "wild-3", "wild-gravel", "wild-cairns-l", "wild-cairns-r",
     "sand-places", "water-route", "water-light",
     "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
@@ -136,8 +136,15 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     s.addLayer(LineLayer("fog-edge", "fog").withProperties(lineColor(FOG), lineWidth(12f), lineBlur(10f), lineOpacity(0.6f)))
     s.addLayer(
         // Unwalked streets in explored land: a clearly dashed, muted path. Walked roads are always solid.
+        // 0.12: light dashes with a dark edge so they read on grass (the old muted brown disappeared on it).
+        // Dash lengths scale with line width, so the top dashes are lengthened to line up with the edge's.
+        LineLayer("peek-edge", "peek").withProperties(
+            lineColor("#4A3A28"), lineOpacity(0.7f), lineWidth(4.5f), lineDasharray(arrayOf(2f, 2f)),
+        ),
+    )
+    s.addLayer(
         LineLayer("peek", "peek").withProperties(
-            lineColor("#8C7A62"), lineOpacity(0.65f), lineWidth(2f), lineDasharray(arrayOf(2f, 2f)),
+            lineColor("#F2E6C8"), lineOpacity(0.95f), lineWidth(2.5f), lineDasharray(arrayOf(3.6f, 3.6f)),
         ),
     )
     // Charted roads, five stages by distinct days walked (see the Legend):

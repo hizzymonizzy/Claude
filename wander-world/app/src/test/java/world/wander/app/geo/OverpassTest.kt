@@ -147,4 +147,20 @@ class OverpassTest {
         assertEquals("community_garden", Overpass.categorize(JSONObject(mapOf("leisure" to "garden", "garden:type" to "community"))))
         assertTrue(Overpass.landmarkQuery("40.0,-74.1,40.1,-74.0").contains("farmland|orchard|vineyard|allotments"))
     }
+
+    @Test
+    fun bigParksAreKeptAndFallBackToTheirBoundingBox() {
+        // 0.12: a 9 km nature reserve is fetched on its own; if that fails, its bounding box becomes a rough place.
+        val els = org.json.JSONArray("""[
+          {"type":"relation","id":7,"tags":{"leisure":"nature_reserve","name":"Oakdale Reservation"},"bounds":{"minlat":40.30,"minlon":-74.40,"maxlat":40.36,"maxlon":-74.33}},
+          {"type":"relation","id":8,"tags":{"natural":"water","name":"Big Bay"},"bounds":{"minlat":40.30,"minlon":-74.40,"maxlat":40.40,"maxlon":-74.20}},
+          {"type":"relation","id":9,"tags":{"leisure":"park","name":"Elm Park"},"bounds":{"minlat":40.30,"minlon":-74.30,"maxlat":40.301,"maxlon":-74.299}}
+        ]""")
+        assertEquals(listOf(7L), Overpass.bigGreenRelations(els).map { it.getLong("id") })
+        val box = Overpass.boundsAsRelation(els.getJSONObject(0))!!
+        val parsed = Overpass.parseLandmarks(org.json.JSONObject().put("elements", org.json.JSONArray().put(box)).toString(), "t")
+        assertEquals("r7", parsed.single().id)
+        assertEquals("Oakdale Reservation", parsed.single().name)
+        assertTrue(parsed.single().areaM2 > 10_000_000)
+    }
 }
