@@ -165,8 +165,9 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "peek: $e"; null }
         peek?.let { s.source("peek")?.setGeoJson(it) }
         fogSummary = "peek=${peek?.features()?.size ?: -1}" + if (errors.isEmpty()) "" else " | errors: " + errors.joinToString("; ")
+        repo.log("map", "Fog and unwalked streets: $fogSummary")
     }
-    LaunchedEffect(style, layers, world, wornBanner, exploredGeometry, fogSummary) {
+    LaunchedEffect(style, layers, world, wornBanner, exploredGeometry) {
         val s = style ?: return@LaunchedEffect
         val errors = mutableListOf<String>()
         fun update(id: String, build: () -> FeatureCollection): Int = try {
@@ -194,7 +195,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             "waypoints" to update("waypoints") { MapLayersBuilder.waypoints(world) },
             "waystones" to update("waystones") { MapLayersBuilder.waystones(world) },
         )
-        val summary = counts.entries.joinToString { "${it.key}=${it.value}" } + ", $fogSummary" + if (errors.isEmpty()) "" else " | errors: " + errors.joinToString("; ")
+        val summary = counts.entries.joinToString { "${it.key}=${it.value}" } + if (errors.isEmpty()) "" else " | errors: " + errors.joinToString("; ")
         if (summary != lastSummary) { lastSummary = summary; repo.log("map", summary) }
     }
     // Fly to whatever the Atlas or search picked.
@@ -227,6 +228,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     val dwell = remember { HashMap<String, Double>() }
     var pendingGathered by remember { mutableStateOf<Set<String>>(emptySet()) }
     var lastSearch by remember { mutableStateOf<Pair<WLatLng, Long>?>(null) }
+    var lastNodesLine by remember { mutableStateOf("") }
     val recordingNow = captureMode != null
     LaunchedEffect(recordingNow) { if (!recordingNow) { dwell.clear(); pendingGathered = emptySet() } }
     // Resource nodes around you (or home), refreshed as you move, while recording every 20 s, and when the world changes.
@@ -255,9 +257,11 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
                 pendingGathered = pendingGathered + newlyGathered.map { it.sourceId }
                 newlyGathered.forEach { repo.log("gather", "Gathering ${it.resource} at ${it.name}; credited when this walk ends") }
             }
-            repo.log("map", "Resource nodes: " + targets.groupBy { it.resource }.entries.joinToString { (r, ns) ->
-                "$r ${ns.size}" + (ns.firstOrNull { it.best }?.let { " (best ${it.name} ${formatDistance(it.distanceM)}${if (it.note.isNotEmpty()) " ${it.note}" else ""})" } ?: "")
-            }.ifEmpty { "none nearby yet" })
+            // Logged only when the set of nodes changes (it used to fill half the log every 20 s while recording).
+            val nodesLine = "Resource nodes: " + targets.groupBy { it.resource }.entries.joinToString { (r, ns) ->
+                "$r ${ns.size}" + (ns.firstOrNull { it.best }?.let { " (best ${it.name}${if (it.note.isNotEmpty()) " ${it.note}" else ""})" } ?: "")
+            }.ifEmpty { "none nearby yet" }
+            if (nodesLine != lastNodesLine) { lastNodesLine = nodesLine; repo.log("map", nodesLine) }
             if (repo.placesLoadedAt(from)) break
             searching = false
             delay(90_000)
@@ -303,9 +307,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
                     Text(status, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(2.dp))
                     Text(today?.lines?.firstOrNull() ?: "Your world is waiting. Go for a walk.", style = MaterialTheme.typography.bodyMedium)
-                    world?.goal?.let { g ->
-                        Text("Week: %.0f / %d min · %s".format(g.trailing7Minutes, g.goal, g.protection.label), style = MaterialTheme.typography.labelSmall)
-                    }
+                    world?.let { w -> Text(weekLine(w), style = MaterialTheme.typography.labelSmall) }
                 }
             }
             world?.let { w ->
@@ -370,3 +372,26 @@ private suspend fun currentLocation(context: Context): WLatLng? = try {
     val loc = client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).await() ?: client.lastLocation.await()
     loc?.let { WLatLng(it.latitude, it.longitude) }
 } catch (_: Exception) { null }
+
+/**
+ * This week's active minutes and what next Tuesday's scoring will do if the week ended now (ADR 0008), so a missed
+ * week is never a surprise.
+ */
+internal fun weekLine(w: world.wander.engine.WorldState): String {
+    val g = w.goal
+    val ratio = g.weekMinutes / g.goal
+    val head = "This week: %.0f / %d active min".format(g.weekMinutes, g.goal)
+    val daysLeft = 6 - (w.today - g.weekStartDay)
+    val outlook = when {
+        !g.coolingApplies -> if (g.protection == world.wander.engine.Protection.RESTING) "resting" else "new world grace"
+        ratio >= 1.5 -> "places are recovering"
+        ratio >= 1.0 -> "on track: nothing fades"
+        else -> {
+            val need = "%.0f min to go".format(g.goal - g.weekMinutes)
+            val loss = world.wander.engine.WorldEngine.weeklyLoss(ratio)
+            if (daysLeft > 0) "$need, $daysLeft ${if (daysLeft == 1) "day" else "days"} left"
+            else "$need; Tuesday places fade ${(loss * 100).toInt()}%"
+        }
+    }
+    return "$head · $outlook"
+}

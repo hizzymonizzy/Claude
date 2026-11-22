@@ -132,11 +132,17 @@ class Repository(context: Context) {
     /** Tiles whose download failed recently, and when to try again (backoff doubles each failure). */
     private val tileRetry = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Long>>()
 
-    private suspend fun ensureTiles(tiles: Collection<String>): Boolean {
+    /**
+     * One map download at a time (0.12): the resource search and walk processing used to ask for the same missing
+     * tile at the same moment, and the server answered the second request with 429 Too Many Requests.
+     */
+    private val geoLock = Mutex()
+
+    private suspend fun ensureTiles(tiles: Collection<String>): Boolean = geoLock.withLock {
         for (tile in tiles) {
             if (dao.tile(tile) != null) continue
             val retry = tileRetry[tile]
-            if (retry != null && System.currentTimeMillis() < retry.first) return false
+            if (retry != null && System.currentTimeMillis() < retry.first) return@withLock false
             try {
                 val data = Overpass.fetchTile(tile)
                 dao.insertEdges(data.edges)
@@ -150,18 +156,18 @@ class Repository(context: Context) {
                 val wait = ((retry?.second ?: 30_000L) * 2).coerceAtMost(30 * 60_000L)
                 tileRetry[tile] = (System.currentTimeMillis() + wait) to wait
                 log("geo", "Tile $tile fetch failed (${e.message?.lineSequence()?.firstOrNull()}); retrying in ${wait / 60_000} min")
-                return false
+                return@withLock false
             }
             delay(1_000) // be polite to the public Overpass server
         }
-        return true
+        true
     }
 
     /**
      * Named places are a bonus layer: they never hold up a walk. When a tile's places arrive later,
      * walks in that tile are re-processed so their visits count.
      */
-    private suspend fun ensureLandmarks(tiles: Collection<String>, maxWaitMs: Long = 30 * 60_000L) {
+    private suspend fun ensureLandmarks(tiles: Collection<String>, maxWaitMs: Long = 30 * 60_000L) = geoLock.withLock {
         for (tile in tiles) {
             if (dao.tile(tile) == null || dao.landmarkTile(tile) != null) continue
             val key = "lm:$tile"
@@ -592,13 +598,13 @@ class Repository(context: Context) {
                 appendLine("Treasury: ${w.treasury.toString().ifEmpty { "empty" }} · proposal: ${w.proposal?.let { "${it.projectId} for ${it.areaId}" } ?: "none"} · monuments: ${w.monuments.joinToString { it.id }.ifEmpty { "none" }}")
                 appendLine("Waystones: ${w.waystones.size} (${w.waystones.count { it.great }} great) · portals: ${w.portals.size}")
                 appendLine("Places discovered: " + w.landmarks.joinToString { "${it.name} (${it.kind}, ${it.visitDays}d)" }.ifEmpty { "none" })
-                appendLine("Goal: %.0f / %d min (ratio %.2f, %s)".format(w.goal.trailing7Minutes, w.goal.goal, w.goal.ratio, w.goal.protection))
+                appendLine("Goal: %.0f / %d active min, last 7 days (ratio %.2f, %s) · this week %.0f · cooling applies: ${w.goal.coolingApplies}".format(w.goal.trailing7Minutes, w.goal.goal, w.goal.ratio, w.goal.protection, w.goal.weekMinutes))
                 for (st in w.settlements) appendLine("  ${st.name} [${st.areaId}] ${st.tier} (peak ${st.peakTier}) D=%.1f days=${st.areaDays} cells=${st.exploredCells} at %.4f,%.4f".format(st.development, st.position.lat, st.position.lng))
                 appendLine("Waypoints: ${w.exploredAreas.count { !it.settled }} · map layers: see [map] lines in the log")
-                appendLine("Last 14 days (intensity min · walked km):")
+                appendLine("Last 14 days (active min · intensity min · walked km):")
                 for (d in w.today - 13..w.today) {
                     val s = w.days[d] ?: continue
-                    appendLine("  ${java.time.LocalDate.ofEpochDay(d.toLong())}  %5.1f min · %.2f km · %s".format(s.intensityMinutes, s.footMeters / 1000, s.protection))
+                    appendLine("  ${java.time.LocalDate.ofEpochDay(d.toLong())}  %5.1f · %5.1f min · %.2f km · %s".format(s.activeMinutes, s.intensityMinutes, s.footMeters / 1000, s.protection))
                 }
             } else appendLine("(could not be built; see log)")
             val waiting = dao.pendingSegments()
@@ -619,7 +625,7 @@ class Repository(context: Context) {
             }
             appendLine()
             appendLine("== Log (newest first) ==")
-            dao.recentLogs(500).forEach { appendLine("${fmt.format(java.time.Instant.ofEpochMilli(it.timeMs))} [${it.tag}] ${it.message}") }
+            dao.recentLogs(1000).forEach { appendLine("${fmt.format(java.time.Instant.ofEpochMilli(it.timeMs))} [${it.tag}] ${it.message}") }
         }
     }
 

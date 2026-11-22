@@ -257,6 +257,8 @@ data class DaySummary(
     val cycleMeters: Double,
     val intensityMinutes: Double,
     val waterMeters: Double = 0.0,
+    /** Active minutes toward the weekly goal (intensity-weighted). */
+    val activeMinutes: Double = 0.0,
     val ratio: Double,
     /** What you earned that day. */
     val earned: Treasury = Treasury(),

@@ -333,7 +333,8 @@ class PrivacyActivity : ComponentActivity() {
                     Text("Wander World and your health data", style = MaterialTheme.typography.titleLarge)
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "Wander World reads your activity intensity minutes to protect your world when you meet your weekly goal, " +
+                        "Wander World counts your active minutes (walks it records, plus your watch's intensity minutes, which count extra) " +
+                            "toward your weekly goal, which protects your world, " +
                             "and reads GPS routes from your workouts (for example, from your watch) to chart the roads you walked. " +
                             "All data stays on this phone. Nothing is uploaded.",
                     )

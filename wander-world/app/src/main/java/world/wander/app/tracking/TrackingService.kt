@@ -59,6 +59,7 @@ class TrackingService : LifecycleService() {
     private var vehicleSinceMs: Long? = null
     private var stillJob: Job? = null
     private var idleWatchJob: Job? = null
+    private var confirmJob: Job? = null
 
     private val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -89,10 +90,15 @@ class TrackingService : LifecycleService() {
                         repo.log("track", "Ignoring movement right after a vehicle was detected")
                         maybeStop()
                     }
+                    confirmJob?.isActive == true -> {}
+                    recentShortCaptures(now) >= SHORT_RUNS_BEFORE_CONFIRM -> confirmThenStart(intent.getStringExtra(EXTRA_MODE))
                     else -> startCapture(intent.getStringExtra(EXTRA_MODE))
                 }
             }
-            ACTION_STILL -> if (capturing && !manual) scheduleStillStop()
+            ACTION_STILL -> {
+                if (confirmJob?.isActive == true) { confirmJob?.cancel(); repo.log("track", "Stopped again before 2 min: not a walk, GPS stayed off"); maybeStop() }
+                if (capturing && !manual) scheduleStillStop()
+            }
             ACTION_PROBE -> if (!capturing) {
                 // "In vehicle" can mean a car or a paddleboard. Record briefly: car speeds end it within
                 // 45 s (vehicle guard); paddling speeds keep going and are recognised as water later.
@@ -107,6 +113,25 @@ class TrackingService : LifecycleService() {
             }
         }
         return START_STICKY
+    }
+
+    /**
+     * After several short "no walk" recordings in a row (moving around indoors), wait for 2 minutes of continuous
+     * walking before turning GPS on, so pottering doesn't keep starting recordings (alpha 0.12). Real walks still
+     * start; they just begin 2 minutes in.
+     */
+    private fun confirmThenStart(mode: String?) {
+        repo.log("track", "Several short stops in a row: waiting for 2 min of walking before recording")
+        repo.trackingStatus.value = "Checking for a walk"
+        confirmJob = lifecycleScope.launch {
+            delay(CONFIRM_MS)
+            if (!capturing) startCapture(mode)
+        }
+    }
+
+    private fun recentShortCaptures(now: Long): Int = synchronized(shortCaptureEnds) {
+        shortCaptureEnds.removeAll { now - it > 60 * 60_000L }
+        shortCaptureEnds.size
     }
 
     private fun goForeground(): Boolean = try {
@@ -233,6 +258,7 @@ class TrackingService : LifecycleService() {
         segmentId = null
         val end = System.currentTimeMillis()
         repo.log("track", "Capture ended ($reason), %.2f km".format(distanceM / 1000))
+        if (!manual && distanceM < SHORT_CAPTURE_M) synchronized(shortCaptureEnds) { shortCaptureEnds += end }
         repo.captureMode.value = null
         repo.trackingStatus.value = if (allDay) "Waiting for movement" else "Idle"
         lifecycleScope.launch(Dispatchers.IO) {
@@ -244,7 +270,7 @@ class TrackingService : LifecycleService() {
     }
 
     private fun maybeStop() {
-        if (!capturing && !allDay && !manual) {
+        if (!capturing && !allDay && !manual && confirmJob?.isActive != true) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         } else updateNotification()
@@ -301,6 +327,11 @@ class TrackingService : LifecycleService() {
         /** When the vehicle guard last ended a recording; no new probe for 20 minutes after. */
         @Volatile var lastVehicleEndMs = 0L
         private const val VEHICLE_COOLDOWN_MS = 90_000L
+        /** Recordings shorter than this count as "short stops"; this many in an hour turns on the 2-minute check. */
+        private const val SHORT_CAPTURE_M = 100.0
+        private const val SHORT_RUNS_BEFORE_CONFIRM = 3
+        private const val CONFIRM_MS = 2 * 60_000L
+        private val shortCaptureEnds = mutableListOf<Long>()
         private const val VEHICLE_SPEED_MPS = 7.0
 
         fun intent(context: Context, action: String, mode: String? = null) =

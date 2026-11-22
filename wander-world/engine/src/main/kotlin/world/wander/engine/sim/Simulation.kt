@@ -169,6 +169,7 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
             waterMeters = mv?.sumOf { it.waterMeters } ?: 0.0,
             earned = d.earned,
             intensityMinutes = intensityByDay[d.day] ?: 0.0,
+            activeMinutes = effortByDay[d.day] ?: 0.0,
             ratio = d.ratio,
             protection = d.protection,
             goal = goal,
