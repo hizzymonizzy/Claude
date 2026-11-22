@@ -117,8 +117,9 @@ object DispatchWriter {
                 w.loss > 0 && w.fadedRoads.isNotEmpty() -> "$head ${w.fadedRoads.size} ${plural(w.fadedRoads.size, "road")} faded a step (" +
                     w.fadedRoads.take(3).joinToString(", ") + (if (w.fadedRoads.size > 3) ", …" else "") + ")." +
                     if (w.settlementsDropped.isNotEmpty()) " ${w.settlementsDropped.joinToString { name(it) }} lost a tier." else ""
-                w.loss > 0 -> "$head The edges of your world cooled a little."
-                w.recovery > 0 -> "$head Strong week: cooled places came back" + if (w.recoveredRoads > 0) " (${w.recoveredRoads} ${plural(w.recoveredRoads, "road")} regained a step)." else "."
+                w.loss >= 0.2 -> "$head Your world cooled a quarter step; four weeks like this fade a full step."
+                w.loss > 0 -> "$head Your world cooled a little."
+                w.recovery > 0 -> "$head Over the goal: faded places came back a quarter step" + if (w.recoveredRoads > 0) " (${w.recoveredRoads} ${plural(w.recoveredRoads, "road")} regained a step)." else "."
                 else -> "$head Goal met: nothing faded."
             }
         }

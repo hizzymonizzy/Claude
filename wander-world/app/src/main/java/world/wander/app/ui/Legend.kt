@@ -99,7 +99,7 @@ private val LEGEND = listOf(
     LegendItem(R.drawable.oad_legend_pointer, "Best source", "Wood, food or metal: the arrow points to the best node you haven't gathered today. Stone needs no pointer: walk any road."),
     LegendItem(R.drawable.legend_gathering, "Gathering", "Nodes stay put; tap one for details. Green ring: you're in its zone. 30 s gathers; a tick = gathered today. Everything goes into one shared stock."),
     LegendItem(null, "Heat map"),
-    LegendItem(R.drawable.legend_heat_steps, "Heat", "Ground you walk richens in five steps, like roads: 1, 3, 10, 30, 100 days. Missed weekly goals cool it a step at a time, never more than two below its best.", wide = true),
+    LegendItem(R.drawable.legend_heat_steps, "Heat", "Ground you walk richens in five steps, like roads: 1, 3, 10, 30, 100 days. A badly missed week cools it a quarter step (a step after four); a week over the goal brings a quarter back.", wide = true),
     LegendItem(R.drawable.legend_heat_county, "County board", "Zoomed out: big hexes by ground and heat. Further out, each region is one medallion.", wide = true),
     LegendItem(null, "Villages"),
     LegendItem(R.drawable.legend_heat_town, "Paved hexes", "A settlement's ground: it spreads a ring of hexes as it grows a tier.", wide = true),

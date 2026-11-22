@@ -41,7 +41,8 @@ internal fun Simulation.areas(d: Simulation.Day) {
         val footMin = footByArea[areaId] ?: 0.0
         val cycleMin = cycleByArea[areaId] ?: 0.0
         val s = settlements[areaId]
-        val remember = if (s != null && s.tier.ordinal <= s.peakTier.ordinal - 2) p.ruinsRememberMultiplier else 1.0
+        // Homecoming (0.12.1): any settlement below its best tier counts double until it's back, like roads and hexes.
+        val remember = if (s != null && s.tier.ordinal < s.peakTier.ordinal) p.ruinsRememberMultiplier else 1.0
         val gain = when {
             footMin >= p.areaDayMinutes -> {
                 a.footDays += day
@@ -125,7 +126,12 @@ private fun Simulation.placeSettlement(s: SettlementAcc, a: AreaAcc) {
 }
 
 internal fun Simulation.updateTier(day: Int, s: SettlementAcc, a: AreaAcc) {
-    val t = computeTier(s, a)
+    var t = computeTier(s, a)
+    // Cooling never costs a tier until a whole tier's worth is lost since the peak (0.12.1, partial decay).
+    if (t.ordinal < s.tier.ordinal && s.d < s.peakD) {
+        val held = Tier.entries[(s.peakTier.ordinal - stepsLost(StepScale(p.tierThresholds), s.d, s.peakD)).coerceIn(0, s.tier.ordinal)]
+        if (held.ordinal > t.ordinal) t = held
+    }
     if (t != s.tier) {
         events += WorldEvent.TierChanged(day, s.areaId, s.tier, t)
         if (t.ordinal > s.tier.ordinal) placeSettlement(s, a)

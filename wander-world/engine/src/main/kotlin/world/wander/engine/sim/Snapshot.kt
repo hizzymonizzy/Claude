@@ -40,8 +40,8 @@ internal fun Simulation.snapshot(): WorldState {
                 name = e.info.name,
                 discovered = e.discoveredDay != null,
                 discoveredDay = e.discoveredDay,
-                wear = e.wear,
-                level = if (e.discoveredDay == null) 0 else roadLevel(e.wear),
+                wear = shownWear(e.wear, e.best),
+                level = if (e.discoveredDay == null) 0 else roadLevel(shownWear(e.wear, e.best)),
                 coveredM = e.coveredM,
                 lengthM = e.info.lengthM,
             )
@@ -77,8 +77,8 @@ internal fun Simulation.snapshot(): WorldState {
             val info = input.landmarks.getValue(id)
             LandmarkState(id, info.name, info.kind, info.areaM2, first, landmarkDays[id] ?: 0, landmarkLast[id] ?: first)
         },
-        troddenWear = trodden,
-        wakeWear = wake,
+        troddenWear = trodden.mapValues { (c, v) -> shownWear(v, troddenBest[c] ?: v) },
+        wakeWear = wake.mapValues { (c, v) -> shownWear(v, wakeBest[c] ?: v) },
         regions = regions.map { r ->
             RegionState(
                 id = r.id,
@@ -104,7 +104,9 @@ internal fun Simulation.snapshot(): WorldState {
             else -> null
         } }.toSet(),
         shoreWalked = harvest.snapshot(today).filterKeys { it.startsWith("s:") },
-        heat = HashMap(heat), heatHood = HashMap(heatHood), heatCounty = HashMap(heatCounty),
+        heat = heat.mapValues { (c, v) -> shownWear(v, heatBest[c] ?: v) },
+        heatHood = heatHood.mapValues { (c, v) -> shownWear(v, heatHoodBest[c] ?: v) },
+        heatCounty = heatCounty.mapValues { (c, v) -> shownWear(v, heatCountyBest[c] ?: v) },
         monuments = monuments.map { (id, d) -> Monuments.byId(id).let { MonumentState(it.id, it.name, it.description, d) } },
         exploredAreas = areas.filter { (id, a) -> a.cells.isNotEmpty() || id in settlements }
             .map { (id, a) ->

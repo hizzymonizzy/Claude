@@ -107,8 +107,6 @@ data class WorldParams(
     val intensityBonus: Double = 0.5,
     /** Decay multiplier by tier; bigger places are sturdier. */
     val sturdiness: List<Double> = listOf(1.0, 1.0, 0.8, 0.6, 0.45, 0.3, 0.2),
-    /** Recovery per week at 150% of the goal: this share of what cooled comes back (scaled from 100%). */
-    val weeklyRecovery: Double = 0.5,
     val ruinsRememberMultiplier: Double = 2.0,
     /** A cooled place never drops more than this many steps below its best. */
     val coolingFloorSteps: Int = 2,

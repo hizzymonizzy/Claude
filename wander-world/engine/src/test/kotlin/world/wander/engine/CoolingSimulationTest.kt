@@ -35,23 +35,26 @@ class CoolingSimulationTest {
         val before = engine.build(input(built), start + 111)
         assertEquals("walked daily: an avenue", 5, stepOf(before))
         val town = before.settlements.single()
-        val rows = mutableListOf("Tuesday after last walk (missed weeks = n-1) | street step | wear | home tier")
-        val byWeeks = (1..8).associateWith { weeks ->
-            // Last walk on day 111 (a Sunday); scorings fall on the following Tuesdays.
-            engine.build(input(built), start + 111 + 2 + 7 * (weeks - 1))
+        val rows = mutableListOf("missed weeks | street step | shown wear | home tier")
+        val byWeeks = (1..13).associateWith { n ->
+            // Last walk on day 111 (a Sunday); scorings fall on the following Tuesdays. Row n = n-1 missed weeks.
+            engine.build(input(built), start + 111 + 2 + 7 * (n - 1))
         }
-        for ((weeks, w) in byWeeks) rows += "$weeks | ${stepOf(w)} | %.1f | ${w.settlements.single().tier}".format(w.edges.getValue("e1").wear)
+        for ((n, w) in byWeeks) rows += "${n - 1} | ${stepOf(w)} | %.1f | ${w.settlements.single().tier}".format(w.edges.getValue("e1").wear)
         println("Cooling with no walking (peak ${town.tier}, avenue wear %.0f):\n".format(before.edges.getValue("e1").wear) + rows.joinToString("\n"))
-        // Week 1 is the last walked week itself (met the goal): nothing fades.
-        assertEquals(5, stepOf(byWeeks.getValue(1)))
-        assertEquals("one missed week: cobbled", 4, stepOf(byWeeks.getValue(2)))
-        assertEquals("floor: two steps below the avenue", 3, stepOf(byWeeks.getValue(8)))
-        val tier = byWeeks.getValue(8).settlements.single().tier
-        assertTrue("never more than two tiers down", tier.ordinal >= town.peakTier.ordinal - 2)
-        assertTrue("a missed month costs a tier", byWeeks.getValue(5).settlements.single().tier.ordinal < town.tier.ordinal)
-        val scored = byWeeks.getValue(3).events.filterIsInstance<WorldEvent.WeekScored>().last()
+        fun missed(k: Int) = byWeeks.getValue(k + 1)
+        // 0.12.1 partial decay: ¼ step a badly missed week, counted from the best, so a step goes after 4 weeks.
+        for (k in 0..3) assertEquals("$k missed weeks: still an avenue", 5, stepOf(missed(k)))
+        assertEquals("4 missed weeks: cobbled", 4, stepOf(missed(4)))
+        assertEquals("8 missed weeks: lane, the floor", 3, stepOf(missed(8)))
+        assertEquals("12 missed weeks: still the floor", 3, stepOf(missed(12)))
+        assertEquals(town.tier, missed(3).settlements.single().tier)
+        assertEquals("a missed month costs a tier", town.tier.ordinal - 1, missed(4).settlements.single().tier.ordinal)
+        assertTrue("never more than two tiers down", missed(12).settlements.single().tier.ordinal >= town.peakTier.ordinal - 2)
+        val byWeeks2 = byWeeks
+        val scored = byWeeks2.getValue(3).events.filterIsInstance<WorldEvent.WeekScored>().last()
         assertTrue(scored.fadedRoads.isNotEmpty() || scored.loss > 0)
-        println(DispatchWriter.write(byWeeks.getValue(2), byWeeks.getValue(2).today).text)
+        println(DispatchWriter.write(missed(4), missed(4).today).text)
     }
 
     @Test
@@ -100,6 +103,6 @@ class CoolingSimulationTest {
         assertEquals(4, w.levelFor(w.heatCounty.getValue(Cells.parent(c, Cells.COUNTY_RES))))
         val later = WorldEngine().build(inp, start + 39 + 7 * 9)
         println("hex heat: %.0f after 40 days → %.1f after 8 missed weeks".format(w.heat.getValue(c), later.heat.getValue(c)))
-        assertEquals("two steps below its best, never fog", 2, later.levelFor(later.heat.getValue(c)))
+        assertEquals("8 missed weeks: two steps below its best (its floor), never fog", 2, later.levelFor(later.heat.getValue(c)))
     }
 }

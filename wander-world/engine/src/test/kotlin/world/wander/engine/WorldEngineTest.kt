@@ -162,15 +162,16 @@ class WorldEngineTest {
 
     @Test
     fun weeklyLossAndRecoveryBands() {
-        // ADR 0008: −30% below half the goal, sliding to −15% at 80%, at most −3% for a near miss, none at the goal.
-        assertEquals(0.30, WorldEngine.weeklyLoss(0.0), 1e-9)
-        assertEquals(0.30, WorldEngine.weeklyLoss(0.5), 1e-9)
-        assertEquals(0.15, WorldEngine.weeklyLoss(0.7999999), 1e-6)
-        assertEquals(0.03, WorldEngine.weeklyLoss(0.8), 1e-9)
+        // ADR 0008 as revised in 0.12.1, in steps: ¼ below half the goal, sliding to ⅛ at 80%, at most 1/40 for a near
+        // miss, none at the goal; any week over the goal brings back ¼.
+        assertEquals(0.25, WorldEngine.weeklyLoss(0.0), 1e-9)
+        assertEquals(0.25, WorldEngine.weeklyLoss(0.5), 1e-9)
+        assertEquals(0.125, WorldEngine.weeklyLoss(0.7999999), 1e-6)
+        assertEquals(0.025, WorldEngine.weeklyLoss(0.8), 1e-9)
         assertEquals(0.0, WorldEngine.weeklyLoss(1.0), 1e-9)
         assertEquals(0.0, WorldEngine.weeklyRecovery(1.0), 1e-9)
-        assertEquals(0.25, WorldEngine.weeklyRecovery(1.25), 1e-9)
-        assertEquals(0.5, WorldEngine.weeklyRecovery(2.0), 1e-9)
+        assertEquals(0.25, WorldEngine.weeklyRecovery(1.01), 1e-9)
+        assertEquals(0.25, WorldEngine.weeklyRecovery(2.0), 1e-9)
     }
 
     @Test

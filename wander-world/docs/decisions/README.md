@@ -13,3 +13,4 @@ of editing an old one; mark the old one "Superseded by NNNN".
 | [0006](0006-gentle-decay.md) | Decay is gentle and tied to the weekly health goal; ruins are the floor | Superseded by 0008 |
 | [0007](0007-world-is-a-heat-map.md) | The world is a heat map: one heat value, five steps, four zoom levels | Accepted (built 0.12.0) |
 | [0008](0008-weekly-cooling.md) | Decay is felt weekly: heat cools when you miss your goal, floor two steps below best | Accepted (built 0.12.0) |
+| [0009](0009-partial-decay.md) | Partial decay: ¼ step per badly missed week from the best; ¼ step back for a week over the goal | Accepted (built 0.12.1) |

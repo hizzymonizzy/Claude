@@ -856,6 +856,10 @@ Tuesday tick (a day late so watch syncs land), scoring last Monday–Sunday; `r`
 0 at 1.0. `heat -= heat × L(r) × dormancy`. Floor: `threshold(max(1, bestStep − 2))`. Recovery for `1 < r ≤ 1.5`:
 `heat += (best − heat) × 0.5 × (r − 1) / 0.5`. Homecoming ×2 until the previous step is regained. Rest mode freezes.
 
+> **0.12.1 (ADR 0009):** amounts are now in steps: ¼ step per badly missed week (⅛ at 80%, 1/40 for a near miss),
+> counted from the best so a step goes only after a whole step has cooled (4 bad weeks); any week over the goal brings
+> back ¼ step; settlements use their tiers the same way and count double as soon as they drop a tier.
+
 ### 20.2.1 The goal's measure (0.12)
 Active minutes: every minute recorded walking, cycling or paddling counts once (or the watch's intensity minutes if
 more); intensity adds half a minute per intensity minute on top (vigorous counts double), so a moderate minute counts

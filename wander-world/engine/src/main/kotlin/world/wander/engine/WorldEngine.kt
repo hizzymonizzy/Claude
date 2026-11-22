@@ -17,19 +17,19 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
 
     companion object {
         /**
-         * The share of heat a place loses at the weekly scoring (ADR 0008), by last week's ratio to the goal:
-         * 30% below half the goal, sliding to 15% at 80%, then at most 3% for a near miss, nothing at 100%.
+         * Steps a place loses at the weekly scoring (ADR 0008, revised 0.12.1: partial decay): a quarter of a step
+         * below half the goal, sliding to an eighth at 80%, at most a fortieth for a near miss, nothing at the goal.
+         * So 2 missed weeks dim a place by half a step and 4 cost a whole step.
          */
         fun weeklyLoss(ratio: Double): Double = when {
             ratio >= 1.0 -> 0.0
-            ratio >= 0.8 -> 0.03 * (1.0 - ratio) / 0.2
-            ratio >= 0.5 -> 0.30 - 0.15 * (ratio - 0.5) / 0.3
-            else -> 0.30
+            ratio >= 0.8 -> 0.025 * (1.0 - ratio) / 0.2
+            ratio >= 0.5 -> 0.25 - 0.125 * (ratio - 0.5) / 0.3
+            else -> 0.25
         }
 
-        /** The share of what cooled that comes back at the weekly scoring, for a week above the goal (up to 150%). */
-        fun weeklyRecovery(ratio: Double, full: Double = 0.5): Double =
-            if (ratio <= 1.0) 0.0 else full * (minOf(ratio, 1.5) - 1.0) / 0.5
+        /** Steps that come back at the weekly scoring after a week over the goal: a quarter, like a missed week's loss. */
+        fun weeklyRecovery(ratio: Double): Double = if (ratio > 1.0) 0.25 else 0.0
 
         fun mergeIntervals(list: List<Pair<Double, Double>>): List<Pair<Double, Double>> {
             if (list.isEmpty()) return emptyList()

@@ -396,13 +396,13 @@ internal fun weekLine(w: world.wander.engine.WorldState): String {
     val daysLeft = 6 - (w.today - g.weekStartDay)
     val outlook = when {
         !g.coolingApplies -> if (g.protection == world.wander.engine.Protection.RESTING) "resting" else "new world grace"
-        ratio >= 1.5 -> "places are recovering"
+        ratio > 1.0 -> "over the goal: faded places come back ¼ step"
         ratio >= 1.0 -> "on track: nothing fades"
         else -> {
             val need = "%.0f min to go".format(g.goal - g.weekMinutes)
             val loss = world.wander.engine.WorldEngine.weeklyLoss(ratio)
             if (daysLeft > 0) "$need, $daysLeft ${if (daysLeft == 1) "day" else "days"} left"
-            else "$need; Tuesday places fade ${(loss * 100).toInt()}%"
+            else "$need; Tuesday places fade " + if (loss >= 0.2) "¼ step" else if (loss >= 0.1) "⅛ step" else "a little"
         }
     }
     return "$head · $outlook"
