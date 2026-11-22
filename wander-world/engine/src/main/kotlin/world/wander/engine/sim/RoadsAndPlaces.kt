@@ -20,9 +20,10 @@ internal fun Simulation.roads(d: Simulation.Day) {
         val cycleLen = mergedLength(covs.filter { it.mode == Mode.CYCLE }.map { it.fromM to it.toM })
         d.gain(areaAt(info.midpoint), stone = harvest.take("e:$edgeId", day, footLen / 1000.0))
         val wearNeed = min(p.wearDayFraction * len, p.wearDayMaxM)
+        val boost = homecoming(e.wear, e.best)
         when {
-            footLen >= wearNeed -> e.wear += 1.0
-            cycleLen >= wearNeed -> e.wear += p.cyclingWeight
+            footLen >= wearNeed -> e.wear += 1.0 * boost
+            cycleLen >= wearNeed -> e.wear += p.cyclingWeight * boost
         }
         e.intervals += covs.map { it.fromM to it.toM }
         e.coveredM = mergedLength(e.intervals)
@@ -32,6 +33,7 @@ internal fun Simulation.roads(d: Simulation.Day) {
             e.wear = max(e.wear, 1.0)
             newlyDiscovered += edgeId
         }
+        e.best = max(e.best, e.wear)
     }
     if (newlyDiscovered.isNotEmpty()) events += WorldEvent.RoadsCharted(day, newlyDiscovered)
 }
@@ -57,8 +59,8 @@ internal fun Simulation.places(d: Simulation.Day) {
             events += WorldEvent.LandmarkDiscovered(day, id)
         }
     }
-    troddenByDay[day]?.map { it.cell }?.distinct()?.forEach { trodden.merge(it, 1.0, Double::plus) }
-    wakeByDay[day]?.map { it.cell }?.distinct()?.forEach { wake.merge(it, 1.0, Double::plus) }
+    troddenByDay[day]?.map { it.cell }?.distinct()?.forEach { c -> wearCell(trodden, troddenBest, c) }
+    wakeByDay[day]?.map { it.cell }?.distinct()?.forEach { c -> wearCell(wake, wakeBest, c) }
     // Shores: food for every stretch you walked along, like stone from roads; new shore pays double, worn shore less.
     shoreByDay[day]?.map { it.cell }?.distinct()?.forEach { d.gain(areaOfFine(it), food = harvest.take("s:$it", day, Yields.SHORE_FOOD_PER_CELL)) }
 }
@@ -75,4 +77,11 @@ private fun compact(e: EdgeAcc) {
     if (e.intervals.size < 16) return
     val merged = mergeIntervals(e.intervals)
     e.intervals.clear(); e.intervals += merged
+}
+
+private fun Simulation.wearCell(wear: HashMap<String, Double>, best: HashMap<String, Double>, cell: String) {
+    val v = (wear[cell] ?: 0.0)
+    val nv = v + homecoming(v, best[cell] ?: 0.0)
+    wear[cell] = nv
+    best[cell] = max(best[cell] ?: 0.0, nv)
 }

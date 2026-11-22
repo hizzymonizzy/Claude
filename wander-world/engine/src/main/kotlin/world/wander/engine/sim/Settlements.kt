@@ -5,7 +5,6 @@ import world.wander.engine.Geo
 import world.wander.engine.LatLng
 import world.wander.engine.Protection
 import world.wander.engine.Tier
-import world.wander.engine.WorldEngine.Companion.decayMultiplier
 import world.wander.engine.WorldEvent
 import kotlin.math.max
 import kotlin.math.min
@@ -93,26 +92,7 @@ internal fun Simulation.protection(d: Simulation.Day) {
         ratio >= 0.8 -> Protection.SLOWED
         else -> Protection.DECAYING
     }
-    if (d.resting || inGrace) return
-    val m = decayMultiplier(ratio)
-    for (s in settlements.values) {
-        if (m > 0) {
-            val floorD = p.tierThresholds[floorTier(s).ordinal]
-            val dormancy = areaRegion[s.areaId]?.let { if (regions[it].dormant) p.dormantDecay else 1.0 } ?: 1.0
-            s.d -= max(0.0, s.d - floorD) * p.baseDecayDaily * m * p.sturdiness[s.tier.ordinal] * dormancy
-        }
-        if (ratio > 1.0) {
-            s.d += (s.peakD - s.d).coerceAtLeast(0.0) * p.restoreDaily * (min(ratio, 1.5) - 1.0) / 0.5
-        }
-        updateTier(day, s, areas.getValue(s.areaId))
-    }
-    if (ratio < 0.8) {
-        for (e in edges.values) if (e.discoveredDay != null) {
-            e.wear = max(1.0, e.wear - e.wear * p.wearDecayWeekly / 7.0 * m)
-        }
-        for (c in trodden.keys) trodden[c] = max(1.0, trodden.getValue(c) * (1 - p.wearDecayWeekly / 7.0 * m))
-        for (c in wake.keys) wake[c] = max(1.0, wake.getValue(c) * (1 - p.wearDecayWeekly / 7.0 * m))
-    }
+    // Decay and restoration happen once a week now, in cooling() (ADR 0008).
 }
 
 private fun Simulation.computeTier(s: SettlementAcc, a: AreaAcc): Tier {
@@ -144,7 +124,7 @@ private fun Simulation.placeSettlement(s: SettlementAcc, a: AreaAcc) {
     s.position = centers.values.minBy { Geo.distanceM(it, centroid) }
 }
 
-private fun Simulation.updateTier(day: Int, s: SettlementAcc, a: AreaAcc) {
+internal fun Simulation.updateTier(day: Int, s: SettlementAcc, a: AreaAcc) {
     val t = computeTier(s, a)
     if (t != s.tier) {
         events += WorldEvent.TierChanged(day, s.areaId, s.tier, t)

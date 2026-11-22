@@ -30,6 +30,16 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     val coverageByDay = input.coverage.groupBy { it.day }
     val presenceByDay = input.presence.groupBy { it.day }
     val intensityByDay = input.intensity.associate { it.day to (it.moderateMin + p.vigorousWeight * it.vigorousMin) }
+    private val rawIntensityByDay = input.intensity.associate { it.day to (it.moderateMin + it.vigorousMin) }
+    private val activeMinutesByDay = input.presence.groupBy { it.day }.mapValues { (_, ps) -> ps.sumOf { it.seconds } / 60.0 }
+    /**
+     * The weekly goal's measure (0.12): every active minute counts once (walking, cycling, paddling, from your
+     * recordings, or the watch's intensity minutes if more), and intensity adds half a minute on top per intensity
+     * minute (vigorous counts double), so moderate minutes count 1.5× and vigorous 2×.
+     */
+    val effortByDay: Map<Int, Double> = (activeMinutesByDay.keys + intensityByDay.keys).associateWith { day ->
+        maxOf(activeMinutesByDay[day] ?: 0.0, rawIntensityByDay[day] ?: 0.0) + p.intensityBonus * (intensityByDay[day] ?: 0.0)
+    }
     val movementByDay = input.movement.groupBy { it.day }
     val visitsByDay = input.landmarkVisits.groupBy { it.day }
     val troddenByDay = input.trodden.groupBy { it.day }
@@ -45,6 +55,8 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     val landmarkLast = HashMap<String, Int>()
     val trodden = HashMap<String, Double>()
     val wake = HashMap<String, Double>()
+    val troddenBest = HashMap<String, Double>()
+    val wakeBest = HashMap<String, Double>()
 
     // Cells, areas, settlements.
     val familiarity = HashMap<String, Double>()
@@ -111,8 +123,9 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
             founding(day)          // 3. new settlements
             growth(day)            // 4. tier changes
             quietRegions(day)      // 4b. home region; regions going dormant
-            protection(day)        // 5. decay or restoration
-            weeklyGoal(day)        // 6. goal adjustment on Sundays
+            protection(day)        // 5. how this week is going (label only)
+            cooling(day)           // 5b. Tuesday: last week scored; places fade or recover (ADR 0008)
+            weeklyGoal(day)        // 6. Tuesday: goal adjustment from last week
             economy(day)           // 7. earnings, monuments, next proposal
             purchases(day)         // 7b. what you bought from the trader or a market
             decisions(day)         // 8. your answers to proposals (after today's proposal)
@@ -138,7 +151,11 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     /** The area of a fine (res 11) cell. */
     fun areaOfFine(cell: String): String? = try { input.cellArea[Cells.parent(cell, Cells.CELL_RES)] } catch (_: Exception) { null }
 
-    fun trailing7(day: Int) = (day - 6..day).sumOf { intensityByDay[it] ?: 0.0 }
+    fun trailing7(day: Int) = (day - 6..day).sumOf { effortByDay[it] ?: 0.0 }
+    /** Wear step 0–5 (fog, trail … avenue) for a wear value. */
+    fun step(v: Double): Int = p.wearLevels.count { v >= it }
+    /** Walking a place that has cooled below its best step counts double until it's back (homecoming). */
+    fun homecoming(v: Double, best: Double): Double = if (step(v) < step(best)) 2.0 else 1.0
     fun isResting(day: Int) = input.restPeriods.any { day in it }
     fun centerOf(cell: String) = centerCache.getOrPut(cell) { Cells.center(cell) }
     fun raise(id: String, day: Int) { if (id !in monuments) { monuments[id] = day; events += WorldEvent.MonumentRaised(day, id) } }

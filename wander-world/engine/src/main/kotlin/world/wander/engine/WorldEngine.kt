@@ -16,11 +16,20 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
     fun build(input: WorldInput, today: Int): WorldState = Simulation(input, params, today).run()
 
     companion object {
-        fun decayMultiplier(ratio: Double): Double = when {
+        /**
+         * The share of heat a place loses at the weekly scoring (ADR 0008), by last week's ratio to the goal:
+         * 30% below half the goal, sliding to 15% at 80%, then at most 3% for a near miss, nothing at 100%.
+         */
+        fun weeklyLoss(ratio: Double): Double = when {
             ratio >= 1.0 -> 0.0
-            ratio >= 0.8 -> 0.5 * (1.0 - ratio)
-            else -> 1.0 - ratio.coerceAtLeast(0.0)
+            ratio >= 0.8 -> 0.03 * (1.0 - ratio) / 0.2
+            ratio >= 0.5 -> 0.30 - 0.15 * (ratio - 0.5) / 0.3
+            else -> 0.30
         }
+
+        /** The share of what cooled that comes back at the weekly scoring, for a week above the goal (up to 150%). */
+        fun weeklyRecovery(ratio: Double, full: Double = 0.5): Double =
+            if (ratio <= 1.0) 0.0 else full * (minOf(ratio, 1.5) - 1.0) / 0.5
 
         fun mergeIntervals(list: List<Pair<Double, Double>>): List<Pair<Double, Double>> {
             if (list.isEmpty()) return emptyList()

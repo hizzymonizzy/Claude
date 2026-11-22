@@ -475,6 +475,9 @@ The **Capital** is founded on the first day with moving presence in the **home a
 
 ## 8. Protection, decay and restoration
 
+> **Superseded in alpha 0.12** by weekly cooling (§20.2, ADR 0008): §8.1–8.4 below are history. Rest mode (§8.5)
+> and dormancy still apply.
+
 Runs in the **daily tick**, after the health sync.
 
 ### 8.1 Decay multiplier
@@ -838,10 +841,15 @@ Mockups: `docs/art/mockup_hex*.png` (iterations 1–4; `tools/mockups/hex*.py`).
 - Steps: 1, 3, 10, 30, 100 (same as road wear). Step 0 = fog.
 - Roads, own paths and water routes keep their own wear (heat along a line) with the same steps and cooling.
 
-### 20.2 Weekly cooling (replaces §8.2 for heat and §8.4 for wear)
-Monday tick, `r` = last week's ratio: loss `L(r)` = 0.30 below 0.5; 0.30→0.15 from 0.5 to 0.8; 0.03→0 from 0.8 to 1.0;
+### 20.2 Weekly cooling (replaces §8.2 for heat and §8.4 for wear; built in 0.12)
+Tuesday tick (a day late so watch syncs land), scoring last Monday–Sunday; `r` = that week's active minutes / goal: loss `L(r)` = 0.30 below 0.5; 0.30→0.15 from 0.5 to 0.8; 0.03→0 from 0.8 to 1.0;
 0 at 1.0. `heat -= heat × L(r) × dormancy`. Floor: `threshold(max(1, bestStep − 2))`. Recovery for `1 < r ≤ 1.5`:
 `heat += (best − heat) × 0.5 × (r − 1) / 0.5`. Homecoming ×2 until the previous step is regained. Rest mode freezes.
+
+### 20.2.1 The goal's measure (0.12)
+Active minutes: every minute recorded walking, cycling or paddling counts once (or the watch's intensity minutes if
+more); intensity adds half a minute per intensity minute on top (vigorous counts double), so a moderate minute counts
+1.5× and a vigorous one 2×. Slow walks count. The goal (150–300) adapts on the same Tuesday.
 
 ### 20.3 Rules audit (what happens to each existing rule)
 

@@ -8,12 +8,15 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** 6. Weekly goal: recorded each Sunday; rises slowly after strong weeks, eases quickly after weak ones. */
+/**
+ * 6. Weekly goal: last Monday-to-Sunday week is recorded each Tuesday (a day late, so late watch syncs count); the goal
+ * rises slowly after strong weeks and eases quickly after weak ones. Measured in active minutes (see effortByDay).
+ */
 internal fun Simulation.weeklyGoal(d: Simulation.Day) {
     val day = d.day
-    if (LocalDate.ofEpochDay(day.toLong()).dayOfWeek == DayOfWeek.SUNDAY) {
-        val weekStart = day - 6
-        val weekMinutes = (weekStart..day).sumOf { intensityByDay[it] ?: 0.0 }
+    if (LocalDate.ofEpochDay(day.toLong()).dayOfWeek == DayOfWeek.TUESDAY && day - 8 >= startDay) {
+        val weekStart = day - 8
+        val weekMinutes = (weekStart..day - 2).sumOf { effortByDay[it] ?: 0.0 }
         weeks += WeekRecord(weekStart, goal, weekMinutes)
         val eligible = weeks.filter { it.weekStartDay >= startDay }
         val restingWeek = (weekStart..day).any { isResting(it) }

@@ -60,14 +60,17 @@ class RegionsTest {
 
     @Test
     fun distantRegionGoesDormantAndBarelyDecays() {
-        val s = WorldEngine().build(trip(), start + 199)
+        // Since 0.12 the daily home walks count toward the goal, so lock a goal they fall well short of.
+        val trip = trip().copy(goalLocked = true, lockedGoal = 1000)
+        val s = WorldEngine().build(trip, start + 199)
         val hnl = s.settlements.single { it.areaId == "hnl" }
         assertTrue(s.regions.single { !it.isHome }.dormant)
         assertTrue(hnl.dormant)
-        // ~160 days with no exercise logged anywhere. Compare with the same trip if dormancy didn't exist.
-        val awake = WorldEngine(WorldParams(dormantDecay = 1.0)).build(trip(), start + 199).settlements.single { it.areaId == "hnl" }
+        // ~160 days well under the goal. Compare with the same trip if dormancy didn't exist.
+        val awake = WorldEngine(WorldParams(dormantDecay = 1.0)).build(trip, start + 199).settlements.single { it.areaId == "hnl" }
         assertTrue("dormant D=${hnl.development} vs awake D=${awake.development}", hnl.development > awake.development * 2.5)
-        assertTrue(hnl.development > hnl.peakDevelopment * 0.6)
+        // ADR 0008: two weeks at full rate before it goes dormant, then ×0.1; it keeps a real share, awake keeps nothing.
+        assertTrue("dormant D=${hnl.development} peak=${hnl.peakDevelopment} awake=${awake.development}", hnl.development > hnl.peakDevelopment * 0.15)
     }
 
     @Test

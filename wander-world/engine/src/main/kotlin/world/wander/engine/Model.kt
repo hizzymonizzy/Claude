@@ -99,12 +99,15 @@ data class WorldParams(
     val tierThresholds: List<Double> = listOf(0.0, 3.0, 10.0, 25.0, 60.0, 150.0, 400.0),
     /** Distinct explored cells needed for each tier. */
     val tierBreadth: List<Int> = listOf(0, 1, 3, 6, 12, 25, 40),
-    val baseDecayDaily: Double = 0.0073,
+    /** Each active minute counts once toward the weekly goal; intensity adds this much per intensity minute on top. */
+    val intensityBonus: Double = 0.5,
     /** Decay multiplier by tier; bigger places are sturdier. */
     val sturdiness: List<Double> = listOf(1.0, 1.0, 0.8, 0.6, 0.45, 0.3, 0.2),
-    val restoreDaily: Double = 0.04,
+    /** Recovery per week at 150% of the goal: this share of what cooled comes back (scaled from 100%). */
+    val weeklyRecovery: Double = 0.5,
     val ruinsRememberMultiplier: Double = 2.0,
-    val wearDecayWeekly: Double = 0.02,
+    /** A cooled place never drops more than this many steps below its best. */
+    val coolingFloorSteps: Int = 2,
     val graceDays: Int = 14,
     val livelinessHalfLifeDays: Double = 30.0,
     val goalStart: Int = 150,
@@ -177,10 +180,16 @@ data class WeekRecord(val weekStartDay: Int, val goal: Int, val minutes: Double)
 data class GoalState(
     val goal: Int,
     val locked: Boolean,
+    /** Active minutes (intensity-weighted) in the last 7 days. */
     val trailing7Minutes: Double,
     val ratio: Double,
     val protection: Protection,
     val weeks: List<WeekRecord>,
+    /** This Monday-to-Sunday week so far, which is scored next Tuesday. */
+    val weekMinutes: Double = 0.0,
+    val weekStartDay: Int = 0,
+    /** Whether next Tuesday's scoring would cool anything (grace and rest mode never do). */
+    val coolingApplies: Boolean = true,
 )
 
 sealed class WorldEvent {
@@ -201,6 +210,11 @@ sealed class WorldEvent {
     data class Purchased(override val day: Int, val item: String, val qty: Int, val price: Int, val seller: String) : WorldEvent()
     data class PurchaseRefused(override val day: Int, val item: String) : WorldEvent()
     data class GoalChanged(override val day: Int, val from: Int, val to: Int) : WorldEvent()
+    /** Tuesday: last Monday-to-Sunday week scored against the goal; places faded or recovered a step. */
+    data class WeekScored(
+        override val day: Int, val minutes: Double, val goal: Int, val loss: Double, val recovery: Double,
+        val fadedRoads: List<String>, val recoveredRoads: Int, val settlementsDropped: List<String>,
+    ) : WorldEvent()
 }
 
 data class RegionState(

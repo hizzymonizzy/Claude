@@ -110,6 +110,19 @@ object DispatchWriter {
         val returned = events.count { it is WorldEvent.WaystoneReturned }
         if (returned > 0) lines += if (returned == 1) "A waystone hums again as you return." else "$returned waystones hum again as you return."
 
+        // Tuesday: last week's scoring (ADR 0008).
+        events.filterIsInstance<WorldEvent.WeekScored>().firstOrNull()?.let { w ->
+            val head = "Last week: ${w.minutes.roundToInt()} / ${w.goal} active minutes."
+            lines += when {
+                w.loss > 0 && w.fadedRoads.isNotEmpty() -> "$head ${w.fadedRoads.size} ${plural(w.fadedRoads.size, "road")} faded a step (" +
+                    w.fadedRoads.take(3).joinToString(", ") + (if (w.fadedRoads.size > 3) ", …" else "") + ")." +
+                    if (w.settlementsDropped.isNotEmpty()) " ${w.settlementsDropped.joinToString { name(it) }} lost a tier." else ""
+                w.loss > 0 -> "$head The edges of your world cooled a little."
+                w.recovery > 0 -> "$head Strong week: cooled places came back" + if (w.recoveredRoads > 0) " (${w.recoveredRoads} ${plural(w.recoveredRoads, "road")} regained a step)." else "."
+                else -> "$head Goal met: nothing faded."
+            }
+        }
+
         // Goal line.
         if (summary != null) {
             val mins = (summary.ratio * summary.goal).roundToInt()

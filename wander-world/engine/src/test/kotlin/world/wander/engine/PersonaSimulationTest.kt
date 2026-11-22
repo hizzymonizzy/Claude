@@ -86,8 +86,8 @@ class PersonaSimulationTest {
 
     @Test
     fun overtrainerEarnsNoExtraProtection() {
-        val normal = WorldEngine.decayMultiplier(1.0)
-        val extreme = WorldEngine.decayMultiplier(3.0)
-        assertTrue(normal == 0.0 && extreme == 0.0)
+        // No cooling at the goal, and recovery is capped at 150%: training far beyond it buys nothing more.
+        assertTrue(WorldEngine.weeklyLoss(1.0) == 0.0 && WorldEngine.weeklyLoss(3.0) == 0.0)
+        assertTrue(WorldEngine.weeklyRecovery(3.0) == WorldEngine.weeklyRecovery(1.5))
     }
 }

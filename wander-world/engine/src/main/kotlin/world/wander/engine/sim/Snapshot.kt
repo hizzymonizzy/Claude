@@ -28,6 +28,9 @@ internal fun Simulation.snapshot(): WorldState {
         ratio = trailing7(today) / goal,
         protection = lastSummary?.protection ?: Protection.GRACE,
         weeks = weeks,
+        weekMinutes = (weekStartOf(today)..today).sumOf { effortByDay[it] ?: 0.0 },
+        weekStartDay = weekStartOf(today),
+        coolingApplies = weekStartOf(today) >= startDay && weekStartOf(today) + 6 - startDay >= p.graceDays && !isResting(today),
     )
     return WorldState(
         today = today,
@@ -135,3 +138,6 @@ private fun Simulation.roadLevel(wear: Double): Int {
     p.wearLevels.forEachIndexed { i, need -> if (wear >= need) level = i + 1 }
     return level
 }
+
+/** The Monday of the week containing this day. */
+internal fun weekStartOf(day: Int): Int = day - (java.time.LocalDate.ofEpochDay(day.toLong()).dayOfWeek.value - 1)

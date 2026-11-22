@@ -10,6 +10,8 @@ internal class EdgeAcc(val info: EdgeInfo) {
     var coveredM = 0.0
     var discoveredDay: Int? = null
     var wear = 0.0
+    /** The most worn it has ever been: cooling stops two steps below this, and walking it counts double until regained. */
+    var best = 0.0
 }
 
 internal class SettlementAcc(val areaId: String, val capital: Boolean, val foundedDay: Int) {
