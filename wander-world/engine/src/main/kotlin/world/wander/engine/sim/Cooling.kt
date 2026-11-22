@@ -49,9 +49,12 @@ internal fun Simulation.cooling(d: Simulation.Day) {
         e.info.name?.takeIf { after < before && it.isNotBlank() }?.let { faded.add(it) }
         if (after > before) recovered++
     }
-    for ((cells, best) in listOf(trodden to troddenBest, wake to wakeBest)) {
+    for ((cells, best) in listOf(trodden to troddenBest, wake to wakeBest, heat to heatBest, heatHood to heatHoodBest, heatCounty to heatCountyBest)) {
         for (c in cells.keys) {
-            val parent = try { Cells.parent(c, Cells.CELL_RES) } catch (_: Exception) { null }
+            // The region a hex belongs to, by its res-9 cell (a county hex is coarser: use its centre's cell).
+            val parent = try {
+                if (Cells.resolution(c) >= Cells.CELL_RES) Cells.parent(c, Cells.CELL_RES) else Cells.center(c).let { Cells.cell(it.lat, it.lng) }
+            } catch (_: Exception) { null }
             cells[c] = cool(cells.getValue(c), best[c] ?: cells.getValue(c), dormancy(parent))
         }
     }

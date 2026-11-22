@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import world.wander.engine.Cells
 import world.wander.engine.Geo
 import world.wander.engine.ResourceTarget
 import world.wander.engine.Yields
@@ -176,11 +177,20 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             src.setGeoJson(fc)
             fc.features()?.size ?: 0
         } catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "$id: ${e.javaClass.simpleName} ${e.message}"; -1 }
-        try {
-            val (plaza, gardens, paths) = withContext(Dispatchers.Default) { MapLayersBuilder.village(world, exploredGeometry) }
-            update("village-plaza") { plaza }; update("village-gardens") { gardens }; update("village-paths") { paths }
-        } catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "village: $e" }
         val kinds = world?.landmarks.orEmpty().associate { it.name to it.kind }
+        // The heat map at three hex sizes (built off the main thread: thousands of hexes for a year of walking).
+        val heatCounts = try {
+            val (block, hood, county) = withContext(Dispatchers.Default) {
+                val grounds = HeatLayers.grounds(layers, kinds)
+                val w = world
+                Triple(
+                    HeatLayers.hexes(w?.heat.orEmpty(), Cells.HEAT_RES, grounds, w, exploredGeometry),
+                    HeatLayers.hexes(w?.heatHood.orEmpty(), Cells.HOOD_RES, grounds, w, exploredGeometry),
+                    HeatLayers.hexes(w?.heatCounty.orEmpty(), Cells.COUNTY_RES, grounds, w, exploredGeometry),
+                )
+            }
+            "heat=${update("heat-block") { block }}/${update("heat-hood") { hood }}/${update("heat-county") { county }}"
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "heat: $e"; "heat=-1" }
         val counts = linkedMapOf(
             "green" to update("green-places") { MapLayersBuilder.greenPlaces(layers, kinds) },
             "sand" to update("sand-places") { MapLayersBuilder.sandPlaces(layers, kinds) },
@@ -194,8 +204,9 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             "trader" to update("trader") { MapLayersBuilder.trader(world) },
             "waypoints" to update("waypoints") { MapLayersBuilder.waypoints(world) },
             "waystones" to update("waystones") { MapLayersBuilder.waystones(world) },
+            "regions" to update("region-nodes") { HeatLayers.regionNodes(world) }.also { update("region-links") { HeatLayers.regionLinks(world) } },
         )
-        val summary = counts.entries.joinToString { "${it.key}=${it.value}" } + if (errors.isEmpty()) "" else " | errors: " + errors.joinToString("; ")
+        val summary = counts.entries.joinToString { "${it.key}=${it.value}" } + ", $heatCounts" + if (errors.isEmpty()) "" else " | errors: " + errors.joinToString("; ")
         if (summary != lastSummary) { lastSummary = summary; repo.log("map", summary) }
     }
     // Fly to whatever the Atlas or search picked.

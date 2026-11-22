@@ -163,36 +163,6 @@ object MapLayersBuilder {
         }),
     )
 
-    /**
-     * The village filling in (drawn on explored ground only, so the green still means "walked here"): a paved plaza
-     * that grows with tier and buildings, garden plots around it, and worn paths out to each building.
-     */
-    fun village(state: WorldState?, explored: Geometry?): Triple<FeatureCollection, FeatureCollection, FeatureCollection> {
-        val plazas = mutableListOf<Geometry>(); val gardens = mutableListOf<Geometry>(); val paths = mutableListOf<Feature>()
-        for (s in state?.settlements.orEmpty()) {
-            if (s.tier.ordinal == 0) continue
-            val shown = world.wander.engine.Projects.shown(s.projects)
-            val r = PLAZA_M[s.tier.ordinal] + 6.0 * shown.size
-            circle(s.position, r)?.let { plazas += it }
-            val plots = minOf(s.tier.ordinal, 4) + if (shown.any { it == "well" || it == "fountain" }) 2 else 0
-            for (k in 0 until plots) {
-                val c = around(s.position, 20.0 + k * 360.0 / plots, r + 22.0)
-                val proj = LocalProjection(c)
-                val sq = listOf(-9.0 to -6.0, 9.0 to -6.0, 9.0 to 6.0, -9.0 to 6.0, -9.0 to -6.0).map { (x, y) -> proj.toLatLng(x, y) }
-                try { gardens += gf.createPolygon(sq.map { Coordinate(it.lng, it.lat) }.toTypedArray()) } catch (_: Exception) {}
-            }
-            shown.forEachIndexed { i, _ ->
-                val b = around(s.position, 210.0 + i * 360.0 / maxOf(shown.size, 5), PLAZA_M[s.tier.ordinal] + 26.0)
-                paths += Feature.fromGeometry(line(listOf(around(s.position, 210.0 + i * 360.0 / maxOf(shown.size, 5), r * 0.8), b)))
-            }
-        }
-        fun clip(gs: List<Geometry>): FeatureCollection {
-            if (gs.isEmpty() || explored == null) return FeatureCollection.fromFeatures(emptyList())
-            val u = try { UnaryUnionOp.union(gs).intersection(explored) } catch (_: Exception) { null }
-            return FeatureCollection.fromFeatures(polygons(u).map { Feature.fromGeometry(toGeo(it)) })
-        }
-        return Triple(clip(plazas), clip(gardens), FeatureCollection.fromFeatures(paths))
-    }
 
     /** Resource pointers as map points, so they stay pinned to the ground while you pan and zoom. */
     fun resources(targets: List<world.wander.engine.ResourceTarget>): FeatureCollection = FeatureCollection.fromFeatures(
@@ -257,13 +227,13 @@ object MapLayersBuilder {
         return Triple(fc(fog), fc(explored), explored)
     }
 
-    private fun polygons(g: Geometry?): List<Polygon> = when (g) {
+    internal fun polygons(g: Geometry?): List<Polygon> = when (g) {
         is Polygon -> listOf(g)
         is MultiPolygon -> (0 until g.numGeometries).map { g.getGeometryN(it) as Polygon }
         else -> emptyList()
     }
 
-    private fun placePolygon(rings: List<List<LatLng>>): Geometry? = try {
+    internal fun placePolygon(rings: List<List<LatLng>>): Geometry? = try {
         val polys = rings.filter { it.size >= 4 }.map { r -> gf.createPolygon(r.map { Coordinate(it.lng, it.lat) }.toTypedArray()) }
         if (polys.isEmpty()) null else UnaryUnionOp.union(polys)
     } catch (_: Exception) { null }
@@ -314,7 +284,7 @@ object MapLayersBuilder {
         return gf.createPolygon(ring(buf.exteriorRing), (0 until buf.numInteriorRing).map { ring(buf.getInteriorRingN(it)) }.toTypedArray())
     }
 
-    private fun toGeo(p: Polygon): GeoPolygon {
+    internal fun toGeo(p: Polygon): GeoPolygon {
         val rings = mutableListOf(p.exteriorRing.coordinates.map { Point.fromLngLat(it.x, it.y) })
         for (i in 0 until p.numInteriorRing) rings += p.getInteriorRingN(i).coordinates.map { Point.fromLngLat(it.x, it.y) }
         return GeoPolygon.fromLngLats(rings)

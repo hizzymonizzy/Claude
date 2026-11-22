@@ -9,6 +9,7 @@ import org.maplibre.geojson.Polygon
 import world.wander.app.data.EdgeEntity
 import world.wander.app.data.MapLayers
 import world.wander.app.geo.Overpass
+import world.wander.engine.Cells
 import world.wander.engine.AreaState
 import world.wander.engine.EdgeState
 import world.wander.engine.GoalState
@@ -144,15 +145,20 @@ class MapLayersBuilderTest {
         icons.forEach { assertTrue(it, MapIcons.images.containsKey(it)) }
         assertEquals("market:a", bldgs.single { it.getStringProperty("icon") == "bldg_market" }.getStringProperty("id"))
         assertEquals("medal_tier_3_cap_bcrimson", MapLayersBuilder.settlements(w, "crimson").features()!!.single().getStringProperty("icon"))
-        // Explored only on one side (x < 0): the plaza is cut at the edge of the green.
+        // 0.12: the village is paved hexes (block size) on explored ground only; walked hexes carry their heat step.
         val half = org.locationtech.jts.geom.GeometryFactory().createPolygon(listOf(at(-500.0, -500.0), at(0.0, -500.0), at(0.0, 500.0), at(-500.0, 500.0), at(-500.0, -500.0))
             .map { org.locationtech.jts.geom.Coordinate(it.lng, it.lat) }.toTypedArray())
-        val (plaza, gardens, _) = MapLayersBuilder.village(w, half)
-        assertTrue(plaza.features()!!.isNotEmpty())
-        val maxLng = plaza.features()!!.flatMap { (it.geometry() as org.maplibre.geojson.Polygon).coordinates().flatten() }.maxOf { it.longitude() }
-        assertTrue("plaza stays on explored ground", maxLng <= origin.lng + 1e-7)
-        assertTrue(gardens.features()!!.isNotEmpty())
-        assertTrue(MapLayersBuilder.village(w, null).first.features()!!.isEmpty())
+        val walked = Cells.cellAt(at(-200.0, 0.0).lat, at(-200.0, 0.0).lng, Cells.HEAT_RES)
+        val grounds = HeatLayers.Grounds(null, null)
+        val hexes = HeatLayers.hexes(mapOf(walked to 12.0), Cells.HEAT_RES, grounds, w, half).features()!!
+        val patterns = hexes.map { it.getStringProperty("pattern") }
+        assertTrue(patterns.contains("heat_grass_3"))   // 12 days: lane step
+        assertTrue(patterns.count { it.startsWith("heat_town_") } in 2..36)  // village ring 2, cut to the explored half
+        val centers = hexes.filter { it.getStringProperty("pattern").startsWith("heat_town") }.map { (it.geometry() as org.maplibre.geojson.Polygon).coordinates()[0].let { r -> r.sumOf { p -> p.longitude() } / r.size } }
+        assertTrue("paved hexes stay on explored ground", centers.all { it <= origin.lng + 0.0003 })
+        HeatLayers.TEXTURES.values.forEach { assertTrue(it, MapIcons.images.containsKey(it)) }
+        // Beyond county zoom: one node per region at its best settlement.
+        assertEquals(0, HeatLayers.regionNodes(w).features()!!.size)  // no regions in this fixture
     }
 
     @Test
@@ -166,5 +172,19 @@ class MapLayersBuilderTest {
         assertTrue(dashes.isNotEmpty())
         val ys = dashes.flatMap { (it.geometry() as org.maplibre.geojson.LineString).coordinates() }.map { (it.latitude() - origin.lat) * 111_320.0 }
         assertTrue("dashes stay within the cleared band, not the full 800 m street: ${ys.min()}..${ys.max()}", ys.max() - ys.min() < 200)
+    }
+
+    @Test
+    fun aYearOfHexesBuildsInReasonableTime() {
+        val cells = Cells.disk(Cells.cellAt(origin.lat, origin.lng, Cells.HEAT_RES), 43).take(5_600)
+        val heat = cells.associateWith { (it.hashCode() and 127).toDouble() }
+        val forest = org.locationtech.jts.geom.prep.PreparedGeometryFactory.prepare(
+            org.locationtech.jts.geom.GeometryFactory().createPolygon(listOf(at(0.0, 0.0), at(300.0, 0.0), at(300.0, 300.0), at(0.0, 300.0), at(0.0, 0.0))
+                .map { org.locationtech.jts.geom.Coordinate(it.lng, it.lat) }.toTypedArray()))
+        HeatLayers.hexes(heat, Cells.HEAT_RES, HeatLayers.Grounds(forest, null), null, null)
+        val t0 = System.nanoTime()
+        val fc = HeatLayers.hexes(heat, Cells.HEAT_RES, HeatLayers.Grounds(forest, null), null, null)
+        println("5600 block hexes built in ${(System.nanoTime() - t0) / 1_000_000} ms (JVM); patterns: " + fc.features()!!.map { it.getStringProperty("pattern") }.toSet().sorted())
+        assertEquals(5_600, fc.features()!!.size)
     }
 }

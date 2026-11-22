@@ -281,7 +281,7 @@ class Repository(context: Context) {
                     db.runInTransaction {
                         dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
                         dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
-                        dao.deleteWaterTrails(seg.id); dao.deleteWake(seg.id); dao.deleteShore(seg.id)
+                        dao.deleteWaterTrails(seg.id); dao.deleteWake(seg.id); dao.deleteShore(seg.id); dao.deleteHeat(seg.id)
                         // Even a short stop marks where travel set you down.
                         arrivalSincePrevious(seg, pts)?.let { dao.insertArrivals(listOf(ArrivalEntity(segmentId = seg.id, day = it.day, lat = it.lat, lng = it.lng))) }
                         dao.markProcessed(seg.id, true, "no walk: moving around a building, in a vehicle, or poor GPS")
@@ -307,13 +307,14 @@ class Repository(context: Context) {
                 val r0 = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks, water, coastal, coast, fieldLines(tiles))
                 val r = if (!probe) r0 else r0.copy(
                     coverage = emptyList(), presence = emptyList(), trails = emptyList(), wildTrails = emptyList(),
-                    trodden = emptyList(), arrivals = emptyList(),
+                    trodden = emptyList(), arrivals = emptyList(), heat = emptyList(),
                     movement = r0.movement.map { it.copy(footMeters = 0.0, cycleMeters = 0.0) },
                 )
                 db.runInTransaction {
                     dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
                     dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
-                    dao.deleteWaterTrails(seg.id); dao.deleteWake(seg.id); dao.deleteShore(seg.id)
+                    dao.deleteWaterTrails(seg.id); dao.deleteWake(seg.id); dao.deleteShore(seg.id); dao.deleteHeat(seg.id)
+                    dao.insertHeat(r.heat.map { HeatCellEntity(segmentId = seg.id, cell = it.cell, day = it.day) })
                     dao.insertWaterTrails(r.waterTrails.filter { it.points.size >= 2 }.map { WaterTrailEntity(segmentId = seg.id, day = it.day, geometry = Overpass.encode(it.points)) })
                     dao.insertWake(r.wake.map { WakeEntity(segmentId = seg.id, cell = it.cell, day = it.day) })
                     dao.insertShore(r.shore.map { ShoreEntity(segmentId = seg.id, cell = it.cell, day = it.day) })
@@ -430,6 +431,7 @@ class Repository(context: Context) {
             arrivals = dao.allArrivals().map { Arrival(it.day, it.lat, it.lng) },
             wake = dao.allWake().map { TroddenCell(it.cell, it.day) },
             shore = dao.allShore().map { TroddenCell(it.cell, it.day) },
+            heat = dao.allHeat().map { TroddenCell(it.cell, it.day) },
         )
         val state = engine.build(input, today)
         // Freeze fallback names the first time an unnamed area earns one.
@@ -641,7 +643,7 @@ class Repository(context: Context) {
          * v4: paddling (water routes) and wider place categories.
          * v5: paddling detected from being on water (water areas, coast).
          */
-        const val PROCESSING_VERSION = 10
+        const val PROCESSING_VERSION = 11
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }

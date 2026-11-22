@@ -137,6 +137,15 @@ data class WakeEntity(
 )
 
 /** Fine cells walked along a shore (food, like stone from roads); recorded at the shoreline itself. */
+/** A heat map hex (H3 res 12, ~20 m) walked on a day (ADR 0007). */
+@Entity(tableName = "heat_cell", indices = [Index("segmentId")])
+data class HeatCellEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val segmentId: Long,
+    val cell: String,
+    val day: Int,
+)
+
 @Entity(tableName = "shore", indices = [Index("segmentId")])
 data class ShoreEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val segmentId: Long, val cell: String, val day: Int)
 
@@ -273,6 +282,9 @@ interface WanderDao {
     @Query("SELECT (SELECT COUNT(*) FROM track_point WHERE segmentId = :segmentId) + IFNULL((SELECT count FROM track_archive WHERE segmentId = :segmentId), 0)")
     fun pointCount(segmentId: Long): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun insertArchive(a: TrackArchiveEntity)
+    @Insert fun insertHeat(h: List<HeatCellEntity>)
+    @Query("DELETE FROM heat_cell WHERE segmentId = :segmentId") fun deleteHeat(segmentId: Long)
+    @Query("SELECT * FROM heat_cell") fun allHeat(): List<HeatCellEntity>
     @Query("SELECT * FROM track_archive WHERE segmentId = :segmentId") fun archive(segmentId: Long): TrackArchiveEntity?
     @Query("DELETE FROM track_point WHERE segmentId = :segmentId") fun deletePoints(segmentId: Long)
     /** Finished, processed walks that ended before this time and still have loose point rows. */
@@ -370,7 +382,7 @@ interface WanderDao {
         TrailEntity::class, WildTrailEntity::class, TroddenEntity::class, LandmarkEntity::class,
         LandmarkTileEntity::class, LandmarkVisitEntity::class, ArrivalEntity::class, WaterTrailEntity::class, WakeEntity::class,
         WaterAreaEntity::class, WaterTileEntity::class, ProjectDecisionEntity::class, TerrainAreaEntity::class, ShoreEntity::class, PurchaseEntity::class,
-        TrackArchiveEntity::class,
+        TrackArchiveEntity::class, HeatCellEntity::class,
     ],
     version = DbMigrations.LATEST,
     exportSchema = true,

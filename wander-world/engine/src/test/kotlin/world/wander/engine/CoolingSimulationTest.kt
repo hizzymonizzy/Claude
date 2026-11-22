@@ -86,4 +86,20 @@ class CoolingSimulationTest {
         assertEquals(before.edges.getValue("e1").wear, rested.edges.getValue("e1").wear, 1e-9)
         assertEquals(before.settlements.single().tier, rested.settlements.single().tier)
     }
+
+    @Test
+    fun hexHeatStepsUpByDaysAndCoolsToItsFloor() {
+        // 0.12 heat map: 40 walked days on the same hexes → step 4 (30+ days) at every size; then 8 missed weeks.
+        val hexes = Cells.disk(Cells.cellAt(40.30, -74.30, Cells.HEAT_RES), 2)
+        val days = (0 until 40).map { start + it }
+        val inp = input(days).copy(heat = days.flatMap { d -> hexes.map { TroddenCell(it, d) } })
+        val w = WorldEngine().build(inp, start + 39)
+        val c = hexes.first()
+        assertEquals(4, w.levelFor(w.heat.getValue(c)))
+        assertEquals(4, w.levelFor(w.heatHood.getValue(Cells.parent(c, Cells.HOOD_RES))))
+        assertEquals(4, w.levelFor(w.heatCounty.getValue(Cells.parent(c, Cells.COUNTY_RES))))
+        val later = WorldEngine().build(inp, start + 39 + 7 * 9)
+        println("hex heat: %.0f after 40 days → %.1f after 8 missed weeks".format(w.heat.getValue(c), later.heat.getValue(c)))
+        assertEquals("two steps below its best, never fog", 2, later.levelFor(later.heat.getValue(c)))
+    }
 }

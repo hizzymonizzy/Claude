@@ -75,6 +75,8 @@ data class WorldInput(
     val wake: List<TroddenCell> = emptyList(),
     /** Fine cells walked along shores, per day (food). */
     val shore: List<TroddenCell> = emptyList(),
+    /** Heat map hexes (res 12) walked per day (ADR 0007). */
+    val heat: List<TroddenCell> = emptyList(),
     /** Things you bought, replayed like decisions. */
     val purchases: List<Purchase> = emptyList(),
     /** Your approvals and declines of project proposals. */
@@ -295,6 +297,10 @@ data class WorldState(
     val gatheredToday: Set<String> = emptySet(),
     /** Shore cells you've ever walked ("s:<cell>") and how full they are today. */
     val shoreWalked: Map<String, Double> = emptyMap(),
+    /** Heat per hex (distinct days, after cooling) at block (res 12), neighbourhood (res 10) and county (res 8). */
+    val heat: Map<String, Double> = emptyMap(),
+    val heatHood: Map<String, Double> = emptyMap(),
+    val heatCounty: Map<String, Double> = emptyMap(),
     /** Cosmetics you own. */
     val owned: Set<String> = emptySet(),
     /** Units of each resource bought this week (prices climb with each). */

@@ -77,7 +77,14 @@ object DbMigrations {
         10 to listOf(
             "CREATE TABLE IF NOT EXISTS `track_archive` (`segmentId` INTEGER NOT NULL, `data` BLOB NOT NULL, `count` INTEGER NOT NULL, PRIMARY KEY(`segmentId`))",
         ),
+        // v12 (0.12): heat map hexes; walks are re-processed (PROCESSING_VERSION) to fill them. Places are fetched
+        // again so large parks, woods and reserves skipped before are kept now.
+        11 to listOf(
+            "CREATE TABLE IF NOT EXISTS `heat_cell` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `cell` TEXT NOT NULL, `day` INTEGER NOT NULL)",
+            "CREATE INDEX IF NOT EXISTS `index_heat_cell_segmentId` ON `heat_cell` (`segmentId`)",
+            "DELETE FROM `landmark_tile`",
+        ),
     )
 
-    const val LATEST = 11
+    const val LATEST = 12
 }

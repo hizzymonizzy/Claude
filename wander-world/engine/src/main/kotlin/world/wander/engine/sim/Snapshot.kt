@@ -104,6 +104,7 @@ internal fun Simulation.snapshot(): WorldState {
             else -> null
         } }.toSet(),
         shoreWalked = harvest.snapshot(today).filterKeys { it.startsWith("s:") },
+        heat = HashMap(heat), heatHood = HashMap(heatHood), heatCounty = HashMap(heatCounty),
         monuments = monuments.map { (id, d) -> Monuments.byId(id).let { MonumentState(it.id, it.name, it.description, d) } },
         exploredAreas = areas.filter { (id, a) -> a.cells.isNotEmpty() || id in settlements }
             .map { (id, a) ->

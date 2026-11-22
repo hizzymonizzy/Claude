@@ -47,6 +47,7 @@ import org.maplibre.android.style.layers.PropertyFactory.linePattern
 import org.maplibre.android.style.layers.PropertyFactory.fillColor
 import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
+import org.maplibre.android.style.layers.PropertyFactory.fillOutlineColor
 import org.maplibre.android.style.layers.PropertyFactory.lineColor
 import org.maplibre.android.style.layers.PropertyFactory.lineDasharray
 import org.maplibre.android.style.layers.PropertyFactory.lineJoin
@@ -87,13 +88,13 @@ internal val OUR_LAYERS = listOf(
     "sand-places", "water-route", "water-light",
     "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
     "resource-rings", "resource-icons", "me",
-    "village-gardens", "village-plaza", "village-paths", "buildings", "trader",
+    "heat-hood", "heat-block", "heat-county", "region-links", "region-nodes", "buildings", "trader",
 )
 
 internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     val empty = FeatureCollection.fromFeatures(emptyList())
     for (id in listOf("explored", "green-places", "sand-places", "shore", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "resources", "me",
-        "village-plaza", "village-gardens", "village-paths", "buildings", "trader")) s.addSource(GeoJsonSource(id, empty))
+        "heat-block", "heat-hood", "heat-county", "region-nodes", "region-links", "buildings", "trader")) s.addSource(GeoJsonSource(id, empty))
 
     // Explored ground: real terrain texture (0 A.D. grass / forest floor) laid OVER the base map's streets and
     // buildings, so inside explored land every street is drawn by its status (walked: trail…avenue; unwalked:
@@ -114,15 +115,15 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
         }
     }
 
-    // The village filling in (0.11): garden plots and a paved plaza around each settlement, on explored ground only,
-    // so the green still means "walked here" and the village grows over it with tier and buildings.
-    guard(problems, "village") {
-        s.addLayer(FillLayer("village-gardens", "village-gardens").withProperties(fillPattern("ground_farm"), fillOpacity(0.9f)))
-        s.addLayer(FillLayer("village-plaza", "village-plaza").withProperties(fillPattern("road_cobble"), fillOpacity(0.85f)))
-        s.addLayer(LineLayer("village-paths", "village-paths").withProperties(
-            lineColor("#B79A6B"), lineWidth(interpolate(linear(), zoom(), stop(13, 1.5f), stop(17, 4f))), lineOpacity(0.85f),
-            lineCap(Property.LINE_CAP_ROUND),
-        ))
+    // The heat map (0.12, ADR 0007): hexes textured by ground and heat step, no outlines (same ground merges).
+    // Block hexes (~20 m) up close with a faint grid, neighbourhood hexes (~130 m) in between.
+    guard(problems, "heat") {
+        s.addLayer(FillLayer("heat-hood", "heat-hood").withProperties(fillPattern(get("pattern")), fillOpacity(0.92f)).apply {
+            minZoom = 12.5f; maxZoom = 15.5f
+        })
+        s.addLayer(FillLayer("heat-block", "heat-block").withProperties(
+            fillPattern(get("pattern")), fillOpacity(0.92f), fillOutlineColor("rgba(30,40,20,0.18)"),
+        ).apply { minZoom = 15.5f })
     }
 
     // Fog: parchment you can see the land through, thicker when zoomed out so explored areas pop.
@@ -134,6 +135,15 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     )
     // Soft edge: a wide blurred line along the fog boundary.
     s.addLayer(LineLayer("fog-edge", "fog").withProperties(lineColor(FOG), lineWidth(12f), lineBlur(10f), lineOpacity(0.6f)))
+    // County (~1 km hexes) is the overview board, drawn over the fog; beyond it, regions are nodes.
+    guard(problems, "heat-county") {
+        s.addLayer(FillLayer("heat-county", "heat-county").withProperties(
+            fillPattern(get("pattern")), fillOpacity(0.95f), fillOutlineColor("rgba(92,74,50,0.45)"),
+        ).apply { minZoom = 8.5f; maxZoom = 12.5f })
+        s.addLayer(LineLayer("region-links", "region-links").withProperties(
+            lineColor("#5A82BE"), lineWidth(3f), lineDasharray(arrayOf(1.5f, 1.5f)), lineOpacity(0.85f),
+        ).apply { maxZoom = 8.5f })
+    }
     s.addLayer(
         // Unwalked streets in explored land: a clearly dashed, muted path. Walked roads are always solid.
         // 0.12: light dashes with a dark edge so they read on grass (the old muted brown disappeared on it).
@@ -301,14 +311,14 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(false), iconPadding(6f),
             iconSize(interpolate(linear(), zoom(), stop(8, 0.34f), stop(12, 0.42f), stop(15, 0.5f), stop(17, 0.62f))),
             iconAnchor(Property.ICON_ANCHOR_CENTER),
-        ),
+        ).apply { minZoom = 8.5f },
     )
     guard(problems, "settlement-labels") { s.addLayer(
         SymbolLayer("settlement-labels", "settlements").withProperties(
             textField(get("label")), textFont(FONT), textSize(interpolate(linear(), zoom(), stop(10, 11f), stop(16, 15f))),
             textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f), textAllowOverlap(true), textIgnorePlacement(false),
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.4f)),
-        ),
+        ).apply { minZoom = 8.5f },
     ) }
     // Buildings at each settlement (latest of each upgrade chain); a market opens the shop when tapped.
     guard(problems, "buildings") { s.addLayer(
@@ -326,6 +336,14 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.3f)), textAllowOverlap(true),
             textOptional(true),
         ),
+    ) }
+    guard(problems, "region-nodes") { s.addLayer(
+        SymbolLayer("region-nodes", "region-nodes").withProperties(
+            iconImage(get("icon")), iconAllowOverlap(true),
+            iconSize(interpolate(linear(), get("tier"), stop(0, 0.3f), stop(6, 0.75f))),
+            textField(get("label")), textFont(FONT), textSize(12f), textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.2f)), textAllowOverlap(true),
+        ).apply { maxZoom = 8.5f },
     ) }
     // Resource nodes: fixed spots on places and streets, drawn in the map so they stay pinned to the ground.
     // Ring: gold = fresh, bright gold + thicker = the one the arrow points to, green = you're in its zone,
@@ -375,6 +393,11 @@ internal fun addSprites(s: Style, context: Context) {
     val opts = BitmapFactory.Options().apply { inScaled = false }
     val loaded = SPRITES.mapNotNull { (name, res) -> BitmapFactory.decodeResource(context.resources, res, opts)?.let { name to it } }.toMap()
     for ((name, bmp) in loaded) s.addImage(name, bmp)
+    // Heat steps (ADR 0007): each ground texture in five tints, faded → rich, like the roads' five stages.
+    for ((ground, tex) in HeatLayers.TEXTURES) {
+        val base = loaded[tex] ?: continue
+        for (step in 1..5) s.addImage("heat_${ground}_$step", heatTint(base, step))
+    }
     // Capital medallions with the star (and monument, once raised) baked in, one image per tier.
     val star = loaded["badge_capital"] ?: return
     val monument = loaded["medal_monument"]
@@ -433,4 +456,19 @@ internal fun restyleBasemap(s: Style) {
             is SymbolLayer -> layer.setProperties(visibility(Property.NONE))
         }
     }
+}
+
+/** A ground texture at heat step 1–5: brightness, saturation and contrast from faded (1) to rich (5). */
+private fun heatTint(src: Bitmap, step: Int): Bitmap {
+    val (bright, sat, contrast) = listOf(Triple(1.30f, 0.28f, 1.0f), Triple(1.14f, 0.6f, 1.0f), Triple(1.0f, 1.0f, 1.0f),
+        Triple(0.9f, 1.25f, 1.06f), Triple(0.8f, 1.45f, 1.14f))[step - 1]
+    val cm = android.graphics.ColorMatrix().apply { setSaturation(sat) }
+    val t = (1 - contrast) * 128f
+    val scale = bright * contrast
+    cm.postConcat(android.graphics.ColorMatrix(floatArrayOf(
+        scale, 0f, 0f, 0f, t, 0f, scale, 0f, 0f, t, 0f, 0f, scale, 0f, t, 0f, 0f, 0f, 1f, 0f,
+    )))
+    val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+    Canvas(out).drawBitmap(src, 0f, 0f, Paint().apply { colorFilter = android.graphics.ColorMatrixColorFilter(cm) })
+    return out
 }

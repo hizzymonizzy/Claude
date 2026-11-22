@@ -45,6 +45,7 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     val troddenByDay = input.trodden.groupBy { it.day }
     val wakeByDay = input.wake.groupBy { it.day }
     val shoreByDay = input.shore.groupBy { it.day }
+    val heatByDay = input.heat.groupBy { it.day }
     val arrivalsByDay = input.arrivals.groupBy { it.day }
     val decisionsByDay = input.decisions.groupBy { it.day }
 
@@ -57,6 +58,10 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     val wake = HashMap<String, Double>()
     val troddenBest = HashMap<String, Double>()
     val wakeBest = HashMap<String, Double>()
+    // The heat map (ADR 0007): distinct days walked per hex at three sizes, cooling like roads.
+    val heat = HashMap<String, Double>(); val heatBest = HashMap<String, Double>()
+    val heatHood = HashMap<String, Double>(); val heatHoodBest = HashMap<String, Double>()
+    val heatCounty = HashMap<String, Double>(); val heatCountyBest = HashMap<String, Double>()
 
     // Cells, areas, settlements.
     val familiarity = HashMap<String, Double>()

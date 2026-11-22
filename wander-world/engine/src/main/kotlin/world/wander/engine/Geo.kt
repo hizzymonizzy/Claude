@@ -82,11 +82,16 @@ object Cells {
 
     /** Fine cell (~25 m) for wear on paths you make yourself. */
     const val TRODDEN_RES = 11
+    /** Heat map hexes (ADR 0007): block (~20 m), neighbourhood (~130 m) and county (~1 km). */
+    const val HEAT_RES = 12
+    const val HOOD_RES = 10
+    const val COUNTY_RES = 8
 
     fun cell(lat: Double, lng: Double): String = h3.latLngToCellAddress(lat, lng, CELL_RES)
     fun cellAt(lat: Double, lng: Double, res: Int): String = h3.latLngToCellAddress(lat, lng, res)
     fun tile(lat: Double, lng: Double): String = h3.latLngToCellAddress(lat, lng, TILE_RES)
     fun parent(cell: String, res: Int): String = h3.cellToParentAddress(cell, res)
+    fun resolution(cell: String): Int = h3.getResolution(cell)
 
     fun center(cell: String): LatLng = h3.cellToLatLng(cell).let { LatLng(it.lat, it.lng) }
 

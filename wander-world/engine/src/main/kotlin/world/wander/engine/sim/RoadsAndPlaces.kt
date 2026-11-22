@@ -1,5 +1,6 @@
 package world.wander.engine.sim
 
+import world.wander.engine.Cells
 import world.wander.engine.Mode
 import world.wander.engine.WorldEngine.Companion.mergeIntervals
 import world.wander.engine.WorldEngine.Companion.mergedLength
@@ -63,6 +64,11 @@ internal fun Simulation.places(d: Simulation.Day) {
     }
     troddenByDay[day]?.map { it.cell }?.distinct()?.forEach { c -> wearCell(trodden, troddenBest, c) }
     wakeByDay[day]?.map { it.cell }?.distinct()?.forEach { c -> wearCell(wake, wakeBest, c) }
+    heatByDay[day]?.map { it.cell }?.distinct()?.let { cells ->
+        cells.forEach { c -> wearCell(heat, heatBest, c) }
+        cells.mapNotNull { c -> try { Cells.parent(c, Cells.HOOD_RES) } catch (_: Exception) { null } }.distinct().forEach { c -> wearCell(heatHood, heatHoodBest, c) }
+        cells.mapNotNull { c -> try { Cells.parent(c, Cells.COUNTY_RES) } catch (_: Exception) { null } }.distinct().forEach { c -> wearCell(heatCounty, heatCountyBest, c) }
+    }
     // Shores: food for every stretch you walked along, like stone from roads; new shore pays double, worn shore less.
     shoreByDay[day]?.map { it.cell }?.distinct()?.forEach { d.gain(areaOfFine(it), food = harvest.take("s:$it", day, Yields.SHORE_FOOD_PER_CELL)) }
 }
