@@ -15,6 +15,8 @@ import world.wander.engine.RegionState
 import world.wander.engine.SettlementState
 import world.wander.engine.WaystoneState
 import world.wander.engine.WorldEngine
+import world.wander.engine.Story
+import world.wander.engine.AchievementState
 import world.wander.engine.WorldState
 import kotlin.math.pow
 
@@ -111,6 +113,11 @@ internal fun Simulation.snapshot(): WorldState {
             else -> null
         } }.toSet(),
         shoreWalked = harvest.snapshot(today).filterKeys { it.startsWith("s:") },
+        encounters = activeEncounters.toList(),
+        request = request,
+        achievements = Story.LADDERS.map { l ->
+            AchievementState(l.id, l.name, l.unit, ladderValue(l.id), l.targets, l.targets.count { ladderValue(l.id) >= it }, l.reward, l.rewardAt)
+        },
         heat = heat.mapValues { (c, v) -> shownWear(v, heatBest[c] ?: v) },
         heatHood = heatHood.mapValues { (c, v) -> shownWear(v, heatHoodBest[c] ?: v) },
         heatCounty = heatCounty.mapValues { (c, v) -> shownWear(v, heatCountyBest[c] ?: v) },
@@ -131,7 +138,7 @@ internal fun Simulation.snapshot(): WorldState {
 }
 
 /** Names: real place names, else the area's most-worn named road. */
-private fun Simulation.areaNames(): Map<String, String> {
+internal fun Simulation.areaNames(): Map<String, String> {
     val roadsByArea = HashMap<String, MutableList<EdgeAcc>>()
     for (e in edges.values) {
         if (e.discoveredDay == null || e.info.name.isNullOrBlank()) continue

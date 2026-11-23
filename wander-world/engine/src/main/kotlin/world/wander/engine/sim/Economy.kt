@@ -21,18 +21,30 @@ internal fun Simulation.economy(d: Simulation.Day) {
     val wakeCells = wakeByDay[day]?.map { it.cell }?.distinct().orEmpty()
     if (waterKm > 0) {
         if (wakeCells.isEmpty()) d.gain(null, food = waterKm * 2)
-        else wakeCells.forEach { d.gain(areaOfFine(it), food = harvest.take("w:$it", day, waterKm * 2 / wakeCells.size)) }
+        else wakeCells.forEach { c ->
+            val area = areaOfFine(c)
+            val list = area?.let { built[it] }.orEmpty()
+            // Water buildings (0.13): a bridge or lighthouse +25%, a pier +50%, a harbour doubles it.
+            val boost = when { "harbour" in list -> 2.0; "pier" in list -> 1.5; "lighthouse" in list || "bridge" in list -> 1.25; else -> 1.0 }
+            d.gain(area, food = harvest.take("w:$c", day, waterKm * 2 / wakeCells.size) * boost)
+        }
     }
-    // A campfire (or its meeting hall / town hall) feeds you on each day you walk in its area.
+    // Buildings' perks on days you walk in their area (0.13).
     for ((areaId, list) in built) {
-        if (Projects.hasChain(list, "campfire") && areas[areaId]?.footDays?.lastOrNull() == day) d.gain(areaId, food = 1.0)
+        if (areas[areaId]?.footDays?.lastOrNull() != day) continue
+        val hearth = when { "town_hall" in list -> 3.0; "meeting_hall" in list -> 2.0; "campfire" in list -> 1.0; else -> 0.0 }
+        var food = hearth + (if ("vegetable_patch" in list) 1.0 else 0.0) + (if ("great_hall" in list) 2.0 else 0.0)
+        if ("forager_cache" in list && footKm >= 2) food += 1.0
+        d.gain(areaId, food = food, wood = if ("great_hall" in list) 1.0 else 0.0)
     }
     // Everything goes into one shared stock.
     val goldToday = Yields.gold(intensityByDay[day] ?: 0.0, outdoorKm)
-    val materials = d.gains.values.fold(Treasury()) { acc, t -> acc + t }
+    // Local multipliers: a mill on shore/field food, a library on metal, woodsheds on trail wood (see perkBoost).
+    val materials = d.gains.entries.fold(Treasury()) { acc, (area, t) -> acc + perkBoost(area ?: d.mainArea, t) }
     d.earned = materials.copy(gold = goldToday)
     treasury += d.earned
     totalKm += outdoorKm
+    paddledKm += waterKm
     if (footKm >= 5) raise("day_5k", day)
     if (footKm >= 10) raise("day_10k", day)
     if (footKm >= 21.1) raise("day_21k", day)
@@ -86,11 +98,13 @@ private fun Simulation.propose(day: Int): Proposal? {
                 def.id !in built[s.areaId].orEmpty() &&
                 (def.upgrades == null || def.upgrades in built[s.areaId].orEmpty()) &&
                 (declinedOn[s.areaId to def.id]?.let { day - it >= 14 } ?: true) &&
-                (!def.needsWater || nearWater(s))
+                (!def.needsWater || nearWater(s)) &&
+                (!def.capitalOnly || s.capital)
         }.map { s to it }
     }
     val pick = options.sortedWith(
-        compareByDescending<Pair<SettlementAcc, ProjectDef>> { it.first.lastVisit }.thenBy { it.second.cost.gold },
+        // Story order (0.13): each tier's projects in the order Projects.ALL lists them (campfire first).
+        compareByDescending<Pair<SettlementAcc, ProjectDef>> { it.first.lastVisit }.thenBy { Projects.ALL.indexOf(it.second) },
     ).firstOrNull() ?: return null
     return Proposal(day, pick.first.areaId, pick.second.id)
 }
@@ -103,6 +117,7 @@ internal fun Simulation.purchases(d: Simulation.Day) {
     val day = d.day
     val week = world.wander.engine.Shop.week(day)
     for (pu in purchasesByDay[day].orEmpty()) {
+        if (pu.seller == "encounter" || pu.seller == "request") continue   // trades: see story()
         val shop = world.wander.engine.Shop
         if (pu.item in shop.COSMETICS) {
             val price = shop.COSMETICS.getValue(pu.item)
@@ -114,6 +129,7 @@ internal fun Simulation.purchases(d: Simulation.Day) {
         }
         val multiplier = when {
             pu.seller == shop.TRADER -> shop.TRADER_MULTIPLIER
+            Projects.hasChain(built[pu.seller].orEmpty(), "market_hall") && "guildhall" in built[pu.seller].orEmpty() -> shop.MARKET_HALL_MULTIPLIER - 0.1
             Projects.hasChain(built[pu.seller].orEmpty(), "market_hall") -> shop.MARKET_HALL_MULTIPLIER
             Projects.hasChain(built[pu.seller].orEmpty(), "market") -> 1.0
             else -> { events += WorldEvent.PurchaseRefused(day, pu.item); continue }   // no market there (yet)
@@ -128,4 +144,18 @@ internal fun Simulation.purchases(d: Simulation.Day) {
         bought[week to pu.item] = n + pu.qty
         events += WorldEvent.Purchased(day, pu.item, pu.qty, price, pu.seller)
     }
+}
+
+/**
+ * Building perks that scale what you gathered in an area (0.13). Day gains don't say which source they came from, so
+ * the boosts apply to the area's whole day of that resource: a light approximation, tuned by simulation.
+ */
+internal fun Simulation.perkBoost(areaId: String?, t: Treasury): Treasury {
+    val list = areaId?.let { built[it] }.orEmpty()
+    if (list.isEmpty()) return t
+    var food = t.food; var wood = t.wood; var metal = t.metal
+    if ("mill" in list) food *= 1.5
+    if ("woodshed" in list) wood *= 1.25
+    if ("library" in list) metal *= 1.5
+    return t.copy(food = food, wood = wood, metal = metal)
 }

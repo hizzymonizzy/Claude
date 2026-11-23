@@ -95,12 +95,23 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     val bought = HashMap<Pair<Int, String>, Int>()
     val purchasesByDay = input.purchases.groupBy { it.day }
     // A well or fountain in an area makes thinned sources there regrow faster.
-    val harvest = Harvest(p.harvest) { key -> if (areaOfSource(key)?.let { a -> Projects.hasChain(built[a].orEmpty(), "well") } == true) WELL_REGROWTH else 1.0 }
+    val harvest = Harvest(p.harvest) { key ->
+        val list = areaOfSource(key)?.let { built[it] }.orEmpty()
+        when { "fountain" in list -> 2.0; "well" in list -> WELL_REGROWTH; else -> 1.0 }
+    }
     val built = HashMap<String, MutableList<String>>()          // areaId -> project ids
     val declinedOn = HashMap<Pair<String, String>, Int>()       // (areaId, projectId) -> day
     var pending: Proposal? = null
     val monuments = LinkedHashMap<String, Int>()
     var totalKm = 0.0
+    var paddledKm = 0.0
+    // The development story (0.13).
+    val activeEncounters = mutableListOf<world.wander.engine.EncounterState>()
+    var encounterSeq = 0
+    val encounterProgress = HashMap<Int, Int>()
+    val seenHex = HashSet<String>()
+    var request: world.wander.engine.TraderRequest? = null
+    val achievementTiers = HashMap<String, Int>()
     var paddledEver = false
 
     // Output.
@@ -137,6 +148,7 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
             economy(day)           // 7. earnings, monuments, next proposal
             purchases(day)         // 7b. what you bought from the trader or a market
             decisions(day)         // 8. your answers to proposals (after today's proposal)
+            story(day)             // 9. encounters, the trader's request, looks, achievements (0.13)
             summarize(day)
         }
         return snapshot()

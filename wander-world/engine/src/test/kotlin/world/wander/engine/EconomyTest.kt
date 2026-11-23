@@ -43,11 +43,15 @@ class EconomyTest {
 
     @Test
     fun decliningRemovesTheProposalForTwoWeeks() {
+        // 0.13: declining the campfire moves on to the Camp's next project; the campfire waits two weeks.
         val declined = WorldEngine().build(input(5, 30.0, 3.0, listOf(ProjectDecision(start + 3, "home", "campfire", false))), start + 4)
-        assertNull(declined.proposal)   // nothing else a Camp can build yet
-        // Meanwhile the capital grows into a Hamlet and proposes a well instead; the campfire waits its turn.
-        val later = WorldEngine().build(input(20, 30.0, 3.0, listOf(ProjectDecision(start + 3, "home", "campfire", false))), start + 19)
-        assertEquals("well", later.proposal?.projectId)
+        assertEquals("signpost", declined.proposal?.projectId)
+        val laterInputs = listOf(ProjectDecision(start + 3, "home", "campfire", false), ProjectDecision(start + 5, "home", "signpost", false),
+            ProjectDecision(start + 6, "home", "forager_cache", false), ProjectDecision(start + 7, "home", "lean_to", false))
+        val later = WorldEngine().build(input(20, 30.0, 3.0, laterInputs), start + 15)
+        assertTrue(later.proposal?.projectId != "campfire")   // still within its two weeks
+        val after = WorldEngine().build(input(20, 30.0, 3.0, laterInputs), start + 18)
+        assertTrue(after.proposal != null)
     }
 
     @Test

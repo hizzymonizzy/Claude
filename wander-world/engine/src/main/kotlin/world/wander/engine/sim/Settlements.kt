@@ -41,8 +41,11 @@ internal fun Simulation.areas(d: Simulation.Day) {
         val footMin = footByArea[areaId] ?: 0.0
         val cycleMin = cycleByArea[areaId] ?: 0.0
         val s = settlements[areaId]
-        // Homecoming (0.12.1): any settlement below its best tier counts double until it's back, like roads and hexes.
-        val remember = if (s != null && s.tier.ordinal < s.peakTier.ordinal) p.ruinsRememberMultiplier else 1.0
+        // Homecoming (0.12.1): any settlement below its best tier counts double until it's back, like roads and hexes;
+        // a shrine makes it triple (0.13). A lean-to makes every visit-day count 25% extra.
+        val list = built[areaId].orEmpty()
+        val remember = (if (s != null && s.tier.ordinal < s.peakTier.ordinal) (if ("shrine" in list) 3.0 else p.ruinsRememberMultiplier) else 1.0) *
+            (if ("lean_to" in list) 1.25 else 1.0)
         val gain = when {
             footMin >= p.areaDayMinutes -> {
                 a.footDays += day

@@ -42,24 +42,47 @@ data class ProjectDef(
     val needsWater: Boolean = false,
     /** An upgrade: only offered once this project is built here, and drawn in its place. */
     val upgrades: String? = null,
+    /** What it does for you, in a line (0.13: every building has a small, local perk). */
+    val perk: String = "",
+    /** Only at the capital (the Wonder). */
+    val capitalOnly: Boolean = false,
 )
 
 object Projects {
     val ALL = listOf(
-        ProjectDef("campfire", "Campfire circle", Tier.CAMP, Cost(gold = 20, wood = 5), 1, "Somewhere to gather at night."),
-        ProjectDef("well", "Well", Tier.HAMLET, Cost(gold = 50, stone = 10), 1, "Fresh water for the square."),
-        ProjectDef("market", "Market square", Tier.VILLAGE, Cost(gold = 150, wood = 10, stone = 20), 2, "Traders come from the roads you've walked."),
-        ProjectDef("bridge", "Bridge", Tier.VILLAGE, Cost(gold = 120, wood = 30), 1, "Joins the banks.", needsWater = true),
-        ProjectDef("inn", "Inn", Tier.TOWN, Cost(gold = 200, wood = 20, stone = 40), 2, "Travellers stop and tell stories."),
-        ProjectDef("pier", "Pier", Tier.TOWN, Cost(gold = 200, wood = 40, food = 20), 2, "Boats tie up here.", needsWater = true),
-        ProjectDef("lighthouse", "Lighthouse", Tier.TOWN, Cost(gold = 300, stone = 60, metal = 10), 3, "A light for the water.", needsWater = true),
-        ProjectDef("walls", "Town walls", Tier.TOWN, Cost(gold = 300, stone = 80, metal = 20), 3, "Stone walls and a gate."),
-        ProjectDef("great_hall", "Great hall", Tier.CITY, Cost(gold = 800, wood = 60, stone = 120, metal = 40), 5, "The pride of the city."),
-        // Upgrade chains (0.11): each replaces the one before it on the map.
-        ProjectDef("meeting_hall", "Meeting hall", Tier.HAMLET, Cost(gold = 80, wood = 15, stone = 10), 2, "The campfire gets a roof.", upgrades = "campfire"),
-        ProjectDef("town_hall", "Town hall", Tier.TOWN, Cost(gold = 250, wood = 30, stone = 60, metal = 10), 3, "Where the town decides things.", upgrades = "meeting_hall"),
-        ProjectDef("fountain", "Fountain", Tier.VILLAGE, Cost(gold = 120, stone = 30, metal = 5), 2, "The well becomes the square's centrepiece.", upgrades = "well"),
-        ProjectDef("market_hall", "Market hall", Tier.TOWN, Cost(gold = 300, wood = 20, stone = 40, metal = 10), 2, "A covered market: better prices.", upgrades = "market"),
+        // Camp
+        ProjectDef("campfire", "Campfire circle", Tier.CAMP, Cost(gold = 20, wood = 5), 1, "Somewhere to gather at night.", perk = "+1 food each day you walk here"),
+        ProjectDef("signpost", "Signpost", Tier.CAMP, Cost(gold = 10, stone = 3), 1, "Points the way home and onward.", perk = "Shows the way to this settlement's next tier"),
+        ProjectDef("forager_cache", "Forager's cache", Tier.CAMP, Cost(gold = 20, wood = 3, food = 2), 1, "Baskets hung from a branch.", perk = "+1 food on days you walk 2 km or more"),
+        ProjectDef("lean_to", "Lean-to", Tier.CAMP, Cost(gold = 15, wood = 4, stone = 2), 1, "A dry place to sleep.", perk = "Visit-days here count 25% extra"),
+        // Hamlet
+        ProjectDef("well", "Well", Tier.HAMLET, Cost(gold = 50, stone = 10), 1, "Fresh water for the square.", perk = "Thinned sources here regrow 1.5× as fast"),
+        ProjectDef("meeting_hall", "Meeting hall", Tier.HAMLET, Cost(gold = 80, wood = 15, stone = 10), 2, "The campfire gets a roof.", upgrades = "campfire", perk = "+2 food each day you walk here"),
+        ProjectDef("woodshed", "Woodshed", Tier.HAMLET, Cost(gold = 60, wood = 10, stone = 5), 1, "Logs stacked for winter.", perk = "Trail wood here +25%"),
+        ProjectDef("vegetable_patch", "Vegetable patch", Tier.HAMLET, Cost(gold = 50, wood = 5, food = 5), 1, "Rows of greens.", perk = "+1 food each day you walk here"),
+        // Village
+        ProjectDef("market", "Market square", Tier.VILLAGE, Cost(gold = 150, wood = 10, stone = 20), 2, "Traders come from the roads you've walked.", perk = "A shop at market prices"),
+        ProjectDef("fountain", "Fountain", Tier.VILLAGE, Cost(gold = 120, stone = 30, metal = 5), 2, "The well becomes the square's centrepiece.", upgrades = "well", perk = "Thinned sources here regrow 2× as fast"),
+        ProjectDef("mill", "Mill", Tier.VILLAGE, Cost(gold = 140, wood = 20, stone = 15), 2, "Grinds the harvest.", perk = "Food from shores and field edges here +50%"),
+        ProjectDef("shrine", "Shrine", Tier.VILLAGE, Cost(gold = 100, stone = 20, metal = 5), 2, "A quiet place.", perk = "Coming back after it quietens counts ×3, not ×2"),
+        ProjectDef("bridge", "Bridge", Tier.VILLAGE, Cost(gold = 120, wood = 30), 1, "Joins the banks.", needsWater = true, perk = "Paddling food here +25%"),
+        // Town
+        ProjectDef("town_hall", "Town hall", Tier.TOWN, Cost(gold = 250, wood = 30, stone = 60, metal = 10), 3, "Where the town decides things.", upgrades = "meeting_hall", perk = "+3 food each day you walk here"),
+        ProjectDef("inn", "Inn", Tier.TOWN, Cost(gold = 200, wood = 20, stone = 40), 2, "Travellers stop and tell stories.", perk = "Encounters twice as likely after walks here"),
+        ProjectDef("market_hall", "Market hall", Tier.TOWN, Cost(gold = 300, wood = 20, stone = 40, metal = 10), 2, "A covered market: better prices.", upgrades = "market", perk = "Shop 10% off"),
+        ProjectDef("walls", "Town walls", Tier.TOWN, Cost(gold = 300, stone = 80, metal = 20), 3, "Stone walls and a gate.", perk = "This settlement cools half as fast"),
+        ProjectDef("pier", "Pier", Tier.TOWN, Cost(gold = 200, wood = 40, food = 20), 2, "Boats tie up here.", needsWater = true, perk = "Paddling food here +50%"),
+        ProjectDef("lighthouse", "Lighthouse", Tier.TOWN, Cost(gold = 300, stone = 60, metal = 10), 3, "A light for the water.", needsWater = true, perk = "Paddling food here +25%"),
+        // City
+        ProjectDef("great_hall", "Great hall", Tier.CITY, Cost(gold = 800, wood = 60, stone = 120, metal = 40), 5, "The pride of the city.", perk = "+1 wood and +2 food each day you walk here"),
+        ProjectDef("library", "Library", Tier.CITY, Cost(gold = 500, wood = 40, stone = 60, metal = 30), 4, "Shelves of maps and stories.", perk = "Metal from places here +50%"),
+        ProjectDef("guildhall", "Guildhall", Tier.CITY, Cost(gold = 600, wood = 40, stone = 80, metal = 40), 4, "Merchants' guild.", perk = "Shop a further 10% off"),
+        ProjectDef("harbour", "Harbour", Tier.CITY, Cost(gold = 700, wood = 80, stone = 60), 4, "Ships from far shores.", needsWater = true, perk = "Paddling food here doubled"),
+        // Metropolis: the Wonder, at the capital, in four stages
+        ProjectDef("wonder_1", "Wonder: Foundation", Tier.METROPOLIS, Cost(gold = 1000, stone = 200, wood = 100), 6, "The ground is laid.", capitalOnly = true, perk = "A legendary banner"),
+        ProjectDef("wonder_2", "Wonder: Walls", Tier.METROPOLIS, Cost(gold = 1200, stone = 250, metal = 60), 6, "It rises.", upgrades = "wonder_1", capitalOnly = true, perk = "A legendary banner"),
+        ProjectDef("wonder_3", "Wonder: Spire", Tier.METROPOLIS, Cost(gold = 1500, stone = 200, metal = 120, wood = 100), 7, "Seen from every road.", upgrades = "wonder_2", capitalOnly = true, perk = "A legendary banner"),
+        ProjectDef("wonder_4", "Wonder: Crown", Tier.METROPOLIS, Cost(gold = 2000, stone = 200, metal = 200, wood = 150, food = 100), 8, "Finished. Yours.", upgrades = "wonder_3", capitalOnly = true, perk = "A legendary banner"),
     )
     fun byId(id: String) = ALL.firstOrNull { it.id == id }
 

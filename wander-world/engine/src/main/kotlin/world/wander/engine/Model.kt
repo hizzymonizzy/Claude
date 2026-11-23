@@ -222,6 +222,12 @@ sealed class WorldEvent {
     data class Purchased(override val day: Int, val item: String, val qty: Int, val price: Int, val seller: String) : WorldEvent()
     data class PurchaseRefused(override val day: Int, val item: String) : WorldEvent()
     data class CampedOvernight(override val day: Int, val areaId: String) : WorldEvent()
+    data class EncounterAppeared(override val day: Int, val encounter: EncounterState) : WorldEvent()
+    data class EncounterDone(override val day: Int, val encounter: EncounterState) : WorldEvent()
+    data class EncounterGone(override val day: Int, val encounter: EncounterState) : WorldEvent()
+    data class LookEarned(override val day: Int, val item: String, val how: String) : WorldEvent()
+    data class AchievementEarned(override val day: Int, val id: String, val name: String, val tier: Int) : WorldEvent()
+    data class RequestFulfilled(override val day: Int, val request: TraderRequest) : WorldEvent()
     data class GoalChanged(override val day: Int, val from: Int, val to: Int) : WorldEvent()
     /** Tuesday: last Monday-to-Sunday week scored against the goal; places faded or recovered a step. */
     data class WeekScored(
@@ -306,6 +312,10 @@ data class WorldState(
     val gatheredToday: Set<String> = emptySet(),
     /** Shore cells you've ever walked ("s:<cell>") and how full they are today. */
     val shoreWalked: Map<String, Double> = emptyMap(),
+    /** Encounters waiting on the map (0.13), the trader's request this week, your achievements. */
+    val encounters: List<EncounterState> = emptyList(),
+    val request: TraderRequest? = null,
+    val achievements: List<AchievementState> = emptyList(),
     /** Heat per hex (distinct days, after cooling) at block (res 12), neighbourhood (res 10) and county (res 8). */
     val heat: Map<String, Double> = emptyMap(),
     val heatHood: Map<String, Double> = emptyMap(),
@@ -329,3 +339,21 @@ data class WorldState(
     fun eventsOn(day: Int) = events.filter { it.day == day }
     val discoveredCount get() = edges.values.count { it.discovered }
 }
+
+/**
+ * A chance meeting after a walk (0.13): it waits on the map for a few days; ignoring it costs nothing.
+ * [kind]: bard, courier, lost_pet, peddler, collector, festival. [cost] is what a trade asks (peddler, collector).
+ */
+data class EncounterState(
+    val id: Int, val kind: String, val day: Int, val expires: Int, val at: LatLng,
+    val ask: String, val reward: String, val targetArea: String? = null, val cost: Cost? = null, val look: String? = null,
+)
+
+/** The trader's request this week: [qty] of [resource] for [rewardQty] of [rewardResource] (about 20% better). */
+data class TraderRequest(val week: Int, val resource: String, val qty: Int, val rewardResource: String, val rewardQty: Int, val done: Boolean = false)
+
+/** An achievement ladder: [tier] reached (0 none … 3 gold) of [targets], at [value]; [reward] a rare look at some tier. */
+data class AchievementState(
+    val id: String, val name: String, val unit: String, val value: Double, val targets: List<Double>, val tier: Int,
+    val reward: String? = null, val rewardAt: Int = -1,
+)

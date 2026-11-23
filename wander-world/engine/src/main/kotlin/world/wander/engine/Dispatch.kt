@@ -78,6 +78,25 @@ object DispatchWriter {
                 "A new land: ${state.regionName(e.regionId)}. A great waystone now links it to ${state.regionName(e.fromRegionId)}."
             else "A new land: ${state.regionName(e.regionId)}."
             is WorldEvent.RegionWoke -> lines += "${state.regionName(e.regionId)} stirs. The townspeople remember you."
+            is WorldEvent.EncounterAppeared -> lines += when (e.encounter.kind) {
+                "bard" -> "A wandering bard sat by the road where your walk ended: \u201cSing me somewhere new.\u201d"
+                "courier" -> "A courier is looking for someone heading out: ${e.encounter.ask.lowercase()}."
+                "lost_pet" -> "Someone has lost their dog. It was last seen near a park."
+                "peddler" -> "A lost peddler waits on the map with a patchwork cloak to trade."
+                "collector" -> "A collector waits on the map, eyeing metal for an ironbound banner."
+                else -> "A festival fills the square."
+            }
+            is WorldEvent.EncounterDone -> lines += when (e.encounter.kind) {
+                "bard" -> "The bard got the song: ${e.encounter.reward}."
+                "courier" -> "The letter arrived: ${e.encounter.reward}."
+                "lost_pet" -> "You found the dog! ${e.encounter.reward.replaceFirstChar { it.uppercase() }} from a grateful owner."
+                "festival" -> "A festival for your good weeks: ${e.encounter.reward}."
+                else -> "A fair trade: ${e.encounter.reward}."
+            }
+            is WorldEvent.EncounterGone -> lines += "The ${e.encounter.kind.replace('_', ' ').replace("lost pet", "dog's owner")} moved on. Another may come."
+            is WorldEvent.LookEarned -> lines += "New look: ${Story.LOOK_NAMES[e.item] ?: e.item}. Wear it from the shop's Looks."
+            is WorldEvent.AchievementEarned -> lines += "Achievement: ${e.name} ${listOf("", "bronze", "silver", "gold")[e.tier]}."
+            is WorldEvent.RequestFulfilled -> lines += "The trader took your ${e.request.qty} ${e.request.resource} for ${e.request.rewardQty} ${e.request.rewardResource}."
             is WorldEvent.WaystoneFound, is WorldEvent.WaystoneReturned -> {} // summarized below
             is WorldEvent.ProjectBuilt, is WorldEvent.MonumentRaised, is WorldEvent.ProjectProposed -> {} // economy, below
             is WorldEvent.GoalChanged -> lines += if (e.to > e.from)

@@ -361,7 +361,14 @@ OUTFITS = {   # id -> (cloak, highlight, shadow); "hat" adds a wide-brimmed hat 
     "navy": ((44, 62, 112, 255), (78, 100, 156, 255), (30, 42, 78, 255)),
     "ochre": ((176, 128, 42, 255), (214, 170, 80, 255), (128, 90, 28, 255)),
     "hat": None,
+    # 0.13 rare looks (never sold): from encounters and feats
+    "patchwork": ((120, 92, 60, 255), (150, 132, 70, 255), (84, 62, 40, 255)),
+    "pathfinder": ((54, 96, 58, 255), (90, 136, 84, 255), (36, 66, 40, 255)),
+    "wayfarer": ((70, 104, 112, 255), (106, 144, 150, 255), (46, 72, 78, 255)),
+    "laurel": ((226, 220, 200, 255), (248, 244, 230, 255), (170, 150, 90, 255)),
+    "cartographer": ((40, 92, 104, 255), (70, 128, 140, 255), (26, 62, 70, 255)),
 }
+HATTED = {"hat", "cartographer"}
 
 
 def outfit_palette(oid):
@@ -382,7 +389,7 @@ def add_hat(fig, dx=0, dy=0):
 
 def avatar_walk_outfit(oid):
     fig = render_grid(AVATAR, outfit_palette(oid))
-    if oid == "hat":
+    if oid in HATTED:
         fig = add_hat(fig)
     out = Image.new("RGBA", (28, 28), (0, 0, 0, 0))
     d = ImageDraw.Draw(out)
@@ -400,7 +407,7 @@ def avatar_paddle_outfit(oid):
         img = avatar_paddle()
     finally:
         AVATAR_PALETTE = saved
-    if oid == "hat":
+    if oid in HATTED:
         add_hat(img, 4, 3)
     return img
 
@@ -409,6 +416,34 @@ BANNERS = {
     "crimson": (176, 44, 44, 255), "royal": (52, 84, 170, 255), "forest": (48, 112, 56, 255),
     "gold": (214, 170, 52, 255), "violet": (112, 64, 150, 255),
 }
+# 0.13 rare banners (never sold): colour and a small emblem
+RARE_BANNERS = {
+    "ironbound": ((84, 86, 92, 255), "bands"), "spring": ((222, 140, 170, 255), "dot"), "summer": ((236, 196, 60, 255), "sun"),
+    "harvest": ((206, 110, 40, 255), "dot"), "winter": ((150, 196, 226, 255), "star"), "tidewalker": ((40, 140, 150, 255), "wave"),
+    "evergreen": ((30, 86, 44, 255), "tree"), "wonder_1": ((120, 80, 160, 255), "star"), "wonder_2": ((150, 60, 60, 255), "star"),
+    "wonder_3": ((40, 80, 150, 255), "star"), "wonder_4": ((214, 170, 52, 255), "crown"),
+}
+
+
+def rare_banner(color, emblem):
+    img = banner(color)
+    d = ImageDraw.Draw(img)
+    e = (255, 244, 214, 255)
+    if emblem == "bands":
+        d.line([(6, 3), (6, 12)], fill=(190, 190, 196, 255)); d.line([(10, 4), (10, 11)], fill=(190, 190, 196, 255))
+    elif emblem == "dot":
+        d.rectangle([8, 6, 9, 8], fill=e)
+    elif emblem == "sun":
+        d.ellipse([7, 5, 10, 9], fill=(255, 250, 200, 255), outline=(170, 120, 20, 255))
+    elif emblem == "star":
+        d.point([(8, 5), (7, 7), (8, 7), (9, 7), (8, 8), (7, 9), (9, 9)], fill=e)
+    elif emblem == "wave":
+        d.line([(5, 8), (7, 7), (9, 8), (11, 7)], fill=e)
+    elif emblem == "tree":
+        d.polygon([(8, 4), (6, 9), (10, 9)], fill=(110, 170, 90, 255)); d.point((8, 10), fill=(90, 60, 30, 255))
+    elif emblem == "crown":
+        d.line([(6, 9), (10, 9)], fill=e); d.point([(6, 7), (8, 6), (10, 7), (6, 8), (8, 8), (10, 8)], fill=e)
+    return img
 
 
 def banner(color):
@@ -503,6 +538,8 @@ def main():
         avatar_paddle_outfit(oid).resize((128, 112), Image.NEAREST).save(OUT / f"sprite_wanderer_paddle_{oid}.png", optimize=True)
     for cid, col in BANNERS.items():
         banner(col).resize((48, 72), Image.NEAREST).save(OUT / f"banner_{cid}.png", optimize=True)
+    for cid, (col, em) in RARE_BANNERS.items():
+        rare_banner(col, em).resize((48, 72), Image.NEAREST).save(OUT / f"banner_{cid}.png", optimize=True)
     trader().resize((160, 112), Image.NEAREST).save(OUT / "sprite_trader.png", optimize=True)
     for bid, fn in {"campfire": campfire, "well": well, "fountain": fountain, "bridge": bridge}.items():
         ring_medallion(fn(), 80, (222, 196, 140, 255), (130, 100, 60, 255)).save(OUT / f"bldg_{bid}.png", optimize=True)
