@@ -71,6 +71,10 @@ outline; rebuild time on a year of synthetic walks; map frame time on the Fold a
 **Order of work** (each step passes `tools/check.sh`): B (cooling, engine and simulation), A, C, then the remaining D
 items. One APK at the end. Settlement cooling confirmed by the player (2026-11-21).
 
+## Next package (collecting feedback, 2026-11-23)
+Hex icons and developed cells (backlog section of that name): bigger icons, buildings as their own hex at close zoom,
+hex medallions and resource badges. Held until the player's next round of feedback, then bundled.
+
 ## 0.13 Safe and sturdy (proposed)
 Encrypted export/import of your world. (Map-server retry tests and the `Repository.kt` split moved into 0.12.)
 

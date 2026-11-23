@@ -65,3 +65,12 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Settlement decay on the same weekly tick | One rule for everything | shipped 0.12.0 |
 | Settlement tier from heat clusters | Fewer counters | proposed |
 | Upgrades that raise heat floors or slow cooling | Later option: fade to step 1, with upgrades to protect places | proposed |
+
+## Hex icons and developed cells (player, 2026-11-23; held for more feedback)
+| Item | Why | Status |
+|---|---|---|
+| Icons about 2× (buildings, banner, trader, resources), still easing down when zoomed out | Fire, banner and icons read at about half the size they should | agreed |
+| Buildings claim a block hex around their settlement and draw it as a developed cell (own ground + building art; upgrades change it) — at close zoom only, badges further out | "Unique cell development" | agreed |
+| Settlement medallions become hex-shaped | Consistent with the hex map | agreed |
+| Resource nodes and edge arrows as hex badges (ring colours become hex outlines) | Consistent with the hex map | agreed |
+
