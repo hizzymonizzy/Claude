@@ -439,6 +439,7 @@ class Repository(context: Context) {
             areas = dao.allAreas().associate { it.id to AreaInfo(it.id, it.name, it.placeType) },
             restPeriods = rest,
             goalLocked = prefs.goalLocked,
+            lockedGoal = prefs.lockedGoal.takeIf { prefs.goalLocked },
             landmarks = landmarkEntities.mapValues { (_, l) ->
                 val ring = ringsOf(l.id, l.geometry).maxByOrNull { it.size }
                 LandmarkInfo(

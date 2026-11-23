@@ -361,48 +361,6 @@ private fun HitRow(title: String, subtitle: String, sprite: Int? = null, onClick
     }
 }
 
-// ---- Goal ----
-
-@Composable
-fun GoalScreen(repo: Repository) {
-    val world by repo.world.collectAsState()
-    val w = world ?: return Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Building your world…") }
-    val g = w.goal
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        item {
-            Spacer(Modifier.height(12.dp))
-            SectionTitle("This week")
-            Text("%.0f / %d min".format(g.trailing7Minutes, g.goal), style = MaterialTheme.typography.displaySmall)
-            Text(g.protection.label + if (g.locked) " · goal locked" else "", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.secondary)
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(progress = { (g.ratio / 1.5).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(10.dp))
-            Text("Rolling 7 days · vigorous minutes count double · 100% stops decay, up to 150% restores", style = MaterialTheme.typography.labelSmall)
-            Spacer(Modifier.height(16.dp))
-            SectionTitle("Last 14 days")
-            Row(Modifier.fillMaxWidth().height(120.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Bottom) {
-                val days = (w.today - 13..w.today).map { w.days[it]?.intensityMinutes ?: 0.0 }
-                val max = (days.maxOrNull() ?: 0.0).coerceAtLeast(30.0)
-                days.forEach { v ->
-                    Box(
-                        Modifier.weight(1f).fillMaxHeight((v / max).toFloat().coerceIn(0.02f, 1f))
-                            .background(MaterialTheme.colorScheme.primary),
-                    )
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            SectionTitle("Weeks")
-        }
-        items(g.weeks.reversed().take(12)) { wk ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Week of ${dayLabel(wk.weekStartDay)}")
-                Text("%.0f / %d".format(wk.minutes, wk.goal))
-            }
-            HorizontalDivider()
-        }
-        item { Spacer(Modifier.height(24.dp)) }
-    }
-}
-
 /** How a harvested place is doing: thinned by frequent harvests, or grown back by rest. */
 fun abundanceLabel(a: Double): String = when {
     a >= 0.95 -> "flourishing"

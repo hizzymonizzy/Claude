@@ -99,13 +99,20 @@ fun SettingsScreen(repo: Repository) {
         refresh++
     }
 
+    // Settings in tabs (0.13): Tracking · Health · Map · Data · Credits.
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("Tracking") }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         item {
             ReadPrefs(refresh)
             Spacer(Modifier.height(12.dp))
+            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(listOf("Tracking", "Health", "Map", "Data", "Credits")) { t ->
+                    FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t) })
+                }
+            }
             message?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
-
-            SectionTitle("1 · Permissions")
+          if (tab == "Tracking") {
+            SectionTitle("Permissions")
             PermRow("Location (precise)", ctx.has(Manifest.permission.ACCESS_FINE_LOCATION)) {
                 permLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
             }
@@ -118,6 +125,8 @@ fun SettingsScreen(repo: Repository) {
             PermRow("Notifications", ctx.has(Manifest.permission.POST_NOTIFICATIONS)) {
                 permLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
             }
+          }
+          if (tab == "Health") {
             val healthAvailable = repo.health.available()
             SectionTitle("Health Connect")
             if (!healthAvailable) {
@@ -139,9 +148,35 @@ fun SettingsScreen(repo: Repository) {
                     )
                 }
             }
-            HorizontalDivider()
-
-            SectionTitle("2 · Home")
+            SectionTitle("Your weekly goal")
+            ToggleRow("Lock my weekly goal", prefs.goalLocked) { prefs.goalLocked = it; if (!it) prefs.lockedGoal = null; scope.launch { repo.rebuild() }; refresh++ }
+            Text("Or pick a band on the Goal tab. 150 active minutes a week holds your world; your goal warms it.", style = MaterialTheme.typography.bodySmall)
+            SectionTitle("Rest")
+            val today = repo.today()
+            val restingNow = prefs.restPeriods.any { today >= it.first && (it.second == -1 || today <= it.second) }
+            fun rest(until: Int) {
+                prefs.restPeriods = prefs.restPeriods + (today to until)
+                repo.log("settings", "Rest ${if (until == -1) "until turned off" else "for ${until - today + 1} days"}")
+                scope.launch { repo.rebuild() }; refresh++
+            }
+            if (restingNow) {
+                Text("Resting: nothing cools. The first three weeks back are gentle.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = {
+                    prefs.restPeriods = prefs.restPeriods.map { if (today >= it.first && (it.second == -1 || it.second >= today)) it.first to today else it }
+                    repo.log("settings", "Rest ended"); scope.launch { repo.rebuild() }; refresh++
+                }) { Text("I'm back") }
+            } else {
+                Text("Ill, injured, travelling or just tired: rest pauses your world. No reason needed.", style = MaterialTheme.typography.bodySmall)
+                val weekEnd = today + (7 - java.time.LocalDate.ofEpochDay(today.toLong()).dayOfWeek.value)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { rest(weekEnd) }) { Text("This week") }
+                    OutlinedButton(onClick = { rest(weekEnd + 7) }) { Text("Two weeks") }
+                    OutlinedButton(onClick = { rest(-1) }) { Text("Until I'm back") }
+                }
+            }
+          }
+          if (tab == "Tracking") {
+            SectionTitle("Home")
             Text(
                 if (prefs.homeAreaId != null) "Capital set (area ${prefs.homeAreaId})" else "Stand at home and set it here. Your capital is founded on your first walk there.",
                 style = MaterialTheme.typography.bodySmall,
@@ -161,7 +196,7 @@ fun SettingsScreen(repo: Repository) {
                 }
             }) { Text(if (prefs.homeAreaId == null) "Set home to my location" else "Move home here") }
 
-            SectionTitle("3 · Tracking")
+            SectionTitle("Tracking")
             ToggleRow("Track my walks automatically", prefs.autoTrackingEnabled) { setAuto(it) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = prefs.trackingMode == "allday", onClick = { setAuto(prefs.autoTrackingEnabled, "allday") }, label = { Text("All-day (reliable)") })
@@ -173,18 +208,14 @@ fun SettingsScreen(repo: Repository) {
                 style = MaterialTheme.typography.bodySmall,
             )
 
-            SectionTitle("4 · Your goal")
+          }
+          if (tab == "Map") {
+            SectionTitle("Map")
             ToggleRow("Resource pointers on the map", prefs.resourcePointers) { repo.setResourcePointers(it); refresh++ }
-            ToggleRow("Lock my weekly goal", prefs.goalLocked) { prefs.goalLocked = it; scope.launch { repo.rebuild() }; refresh++ }
-            ToggleRow("Rest mode (pause decay)", prefs.resting) { on ->
-                val today = repo.today()
-                prefs.restPeriods = if (on) prefs.restPeriods + (today to -1)
-                else prefs.restPeriods.map { if (it.second == -1) it.first to today else it }
-                repo.log("settings", "Rest mode ${if (on) "on" else "off"}")
-                scope.launch { repo.rebuild() }; refresh++
-            }
-
-            SectionTitle("5 · Run now")
+            Text("The legend (?) on the map explains every symbol.", style = MaterialTheme.typography.bodySmall)
+          }
+          if (tab == "Data") {
+            SectionTitle("Run now")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     scope.launch {
@@ -214,6 +245,8 @@ fun SettingsScreen(repo: Repository) {
                 }
             }) { Text("Share diagnostics") }
 
+          }
+          if (tab == "Credits") {
             SectionTitle("Credits & licenses")
             Text(
                 "Map art (terrain, settlement, place and resource images) is adapted from 0 A.D. by Wildfire Games, " +
@@ -227,10 +260,10 @@ fun SettingsScreen(repo: Repository) {
             Text("Base map tiles: OpenFreeMap. Map rendering: MapLibre (BSD). Hex grid: H3 by Uber (Apache 2.0). " +
                 "Geometry: JTS (EPL/EDL). Wanderer and waystone sprites, parchment fog: original to Wander World.",
                 style = MaterialTheme.typography.bodySmall)
-
-            SectionTitle("Recent captures")
+          }
+          if (tab == "Data") SectionTitle("Recent captures")
         }
-        item {
+        if (tab == "Data") item {
             ReadPrefs(refresh)
             var segs by remember { mutableStateOf(emptyList<SegmentEntity>()) }
             LaunchedEffect(refresh, logs.size) { segs = withContext(Dispatchers.IO) { repo.dao.recentSegments(8) } }
@@ -246,7 +279,7 @@ fun SettingsScreen(repo: Repository) {
             }
             SectionTitle("Diagnostics log")
         }
-        items(logs, key = { it.id }) { l ->
+        if (tab == "Data") items(logs, key = { it.id }) { l ->
             Text(
                 "${timeFmt.format(Instant.ofEpochMilli(l.timeMs))} [${l.tag}] ${l.message}",
                 style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,

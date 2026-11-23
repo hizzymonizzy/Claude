@@ -38,7 +38,7 @@ import world.wander.app.tracking.ActivityReceiver
 import world.wander.app.tracking.TrackingService
 
 enum class Tab(val label: String, val icon: String) {
-    MAP("Map", "🗺"), DISPATCH("Dispatch", "📜"), ATLAS("Atlas", "🏰"), GOAL("Goal", "❤"), SETTINGS("Settings", "⚙")
+    MAP("Map", "🗺"), DISPATCH("Dispatch", "📜"), ATLAS("Atlas", "🏰"), GOAL("You", "❤"), SETTINGS("Settings", "⚙")
 }
 
 private val Parchment = lightColorScheme(
@@ -127,7 +127,7 @@ private fun TabContent(repo: Repository, tab: Tab, onOpenDispatch: () -> Unit, o
         Tab.MAP -> MapScreen(repo, onOpenDispatch)
         Tab.DISPATCH -> DispatchScreen(repo, onShowOnMap)
         Tab.ATLAS -> AtlasScreen(repo, onShowOnMap)
-        Tab.GOAL -> GoalScreen(repo)
+        Tab.GOAL -> CharacterScreen(repo)
         Tab.SETTINGS -> SettingsScreen(repo)
     }
 }

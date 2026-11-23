@@ -45,6 +45,11 @@ class Prefs(context: Context) {
         get() = sp.getString("banner", null)
         set(v) = sp.edit { putString("banner", v) }
 
+    /** A goal you picked (a band's minutes); used while the goal is locked. */
+    var lockedGoal: Int?
+        get() = sp.getInt("lockedGoal", -1).takeIf { it > 0 }
+        set(v) = sp.edit { putInt("lockedGoal", v ?: -1) }
+
     var goalLocked: Boolean
         get() = sp.getBoolean("goalLocked", false)
         set(v) = sp.edit { putBoolean("goalLocked", v) }
