@@ -89,7 +89,7 @@ export ANDROID_HOME=/opt/android-sdk
 tools/check.sh                       # tests + build + lint + privacy policy; must pass before every commit
 ./gradlew :engine:test               # fast loop for game rules
 ./gradlew :app:testDebugUnitTest     # migrations, Overpass parsing, map layers
-python3 -I tools/gen_legend.py       # after any new map symbol; rewrites the swatches and the LEGEND list in Legend.kt
+python3 -I tools/gen_legend.py       # after any new map symbol; rewrites swatches, Legend.kt and docs/art/legend/*.png
 ```
 - The APK is at `app/build/outputs/apk/debug/app-debug.apk`. Send it as `wander-world-alpha-X.Y.Z.apk` from the scratchpad.
 - A fresh cloud container may lack the SDK: install cmdline-tools from dl.google.com, then

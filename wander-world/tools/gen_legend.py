@@ -241,29 +241,58 @@ LEGEND = [
 ]
 
 
-def sheet(swatches):
-    font = ImageFont.load_default(size=22)
-    small = ImageFont.load_default(size=17)
-    head = ImageFont.load_default(size=28)
-    rows = len(LEGEND)
-    S = Image.new("RGB", (900, 70 * rows + 40), (244, 236, 216))
+def sheet(swatches, items=None, title=None):
+    """One legend sheet: art at 2× the old size, descriptions wrapped so nothing runs off the page."""
+    items = LEGEND if items is None else items
+    font = ImageFont.load_default(size=30)
+    small = ImageFont.load_default(size=22)
+    head = ImageFont.load_default(size=40)
+    width, art_w, text_x = 1200, 360, 410
+
+    def wrap(text, f, maxw):
+        lines, cur = [], ""
+        for word in text.split():
+            t = (cur + " " + word).strip()
+            if f.getlength(t) <= maxw: cur = t
+            else: lines.append(cur); cur = word
+        return lines + ([cur] if cur else [])
+
+    rows = []
+    for key, t, desc in items:
+        if t is None: rows.append(("head", key, None, None, 90)); continue
+        img = swatches.get(key) or Image.open(RES / f"{key}.png").convert("RGBA")
+        if img.width > img.height * 2: img = img.resize((art_w, int(art_w * img.height / img.width)))
+        else: img = img.copy(); img.thumbnail((120, 120))
+        lines = wrap(desc, small, width - text_x - 30)
+        rows.append(("row", t, img, lines, max(img.height + 30, 50 + 30 * len(lines))))
+    if title: rows.insert(0, ("head", title, None, None, 90))
+    S = Image.new("RGB", (width, sum(r[4] for r in rows) + 40), (244, 236, 216))
     d = ImageDraw.Draw(S)
     y = 20
-    for key, title, desc in LEGEND:
-        if title is None:
-            d.text((24, y + 18), key, fill=(91, 70, 54), font=head)
-            y += 70
-            continue
-        img = swatches.get(key) or Image.open(RES / f"{key}.png").convert("RGBA")
-        if img.width > img.height * 2:
-            img = img.resize((180, 48))
+    for kind, t, img, lines, h in rows:
+        if kind == "head":
+            d.text((30, y + 25), t, fill=(91, 70, 54), font=head)
         else:
-            img.thumbnail((56, 56))
-        S.paste(img, (24 + (180 - img.width) // 2, y + (60 - img.height) // 2), img if img.mode == "RGBA" else None)
-        d.text((230, y + 8), title, fill=(40, 30, 20), font=font)
-        d.text((230, y + 36), desc, fill=(110, 90, 70), font=small)
-        y += 70
+            S.paste(img, (30 + (art_w - img.width) // 2, y + (h - img.height) // 2), img if img.mode == "RGBA" else None)
+            d.text((text_x, y + 12), t, fill=(40, 30, 20), font=font)
+            for i, ln in enumerate(lines): d.text((text_x, y + 52 + 30 * i), ln, fill=(110, 90, 70), font=small)
+        y += h
     return S
+
+
+def category_sheets(swatches):
+    """The legend split into one sheet per section (docs/art/legend/NN-section.png), easier to read than one long file."""
+    out_dir = ROOT / "docs/art/legend"
+    out_dir.mkdir(exist_ok=True)
+    for old in out_dir.glob("*.png"): old.unlink()
+    sections, cur = [], None
+    for item in LEGEND:
+        if item[1] is None: cur = (item[0], []); sections.append(cur)
+        elif cur is not None: cur[1].append(item)
+    for i, (name, items) in enumerate(sections, 1):
+        slug = "".join(ch if ch.isalnum() else "-" for ch in name.lower()).strip("-")
+        sheet(swatches, items, title=name).save(out_dir / f"{i:02d}-{slug}.png", optimize=True)
+    return len(sections)
 
 
 def write_kotlin():
@@ -292,7 +321,8 @@ def main():
     write_kotlin()
     out = ROOT / "docs/art/legend.png"
     sheet(sw).save(out)
-    print(f"wrote {len(sw)} swatches and {out}")
+    n = category_sheets(sw)
+    print(f"wrote {len(sw)} swatches, {out} and {n} category sheets in docs/art/legend/")
 
 
 if __name__ == "__main__":
