@@ -85,3 +85,12 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Greeting mentions today's weather | Fun; needs a weather source (see question) | open: needs a new host or an offline stand-in |
 | Occasional trade request ("Wanted: 3 stone → a metal ingot") | Gives spare resources a use | proposed: rules to agree |
 
+## Development story, encounters, Atlas (player, 2026-11-23; held; docs/development-story.md, mockup_atlas.png)
+| Item | Why | Status |
+|---|---|---|
+| Something to build at every tier (3–5 projects each, a Wonder at the capital), each a developed hex with a small perk | Requests stopped after the campfire: a Camp had only one project | agreed (design for review) |
+| Random encounters anywhere after walks (~1 a week, more with new ground; never a penalty) | Life and surprises | agreed |
+| Two look pools: shop (bought) and rare (encounters and feats only, never sold) | Rare things should feel earned | agreed |
+| Atlas: settlements only for now; capital card with next step; distance, direction, Go; sort chips; "becoming a settlement" | Wayfinding; long lists weren't useful | agreed |
+| Merge a new waystone into an existing one within ~1 km (count arrivals); merge existing duplicates | Five separate waystones in one area | agreed |
+
