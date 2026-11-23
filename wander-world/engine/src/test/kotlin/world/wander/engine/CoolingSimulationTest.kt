@@ -105,4 +105,36 @@ class CoolingSimulationTest {
         println("hex heat: %.0f after 40 days → %.1f after 8 missed weeks".format(w.heat.getValue(c), later.heat.getValue(c)))
         assertEquals("8 missed weeks: two steps below its best (its floor), never fog", 2, later.levelFor(later.heat.getValue(c)))
     }
+
+    @Test
+    fun aHighGoalNeverMakesAGuidelineWeekCool() {
+        // ADR 0011: goal locked at 300 (Pathfinder); 200 active minutes a week meets the guideline, so nothing cools,
+        // and nothing warms either (that needs the goal). 60 minutes a week does cool.
+        val engine = WorldEngine()
+        val streetDays = built
+        val after = (112 until 112 + 56).map { start + it }
+        fun weekOf(minPerDay: Double) = input(built, streetDays = streetDays).let { inp ->
+            inp.copy(presence = inp.presence + input(after, minutes = minPerDay).presence, goalLocked = true, lockedGoal = 300)
+        }
+        val ok = engine.build(weekOf(200.0 / 7), start + 112 + 56)
+        val low = engine.build(weekOf(60.0 / 7), start + 112 + 56)
+        val okScored = ok.events.filterIsInstance<WorldEvent.WeekScored>().filter { it.day > start + 112 }
+        println("goal 300: 200 min weeks → losses ${okScored.map { it.loss }}; 60 min weeks → losses " +
+            low.events.filterIsInstance<WorldEvent.WeekScored>().filter { it.day > start + 112 }.map { it.loss })
+        assertTrue(okScored.all { it.loss == 0.0 && it.recovery == 0.0 })
+        assertTrue(low.events.filterIsInstance<WorldEvent.WeekScored>().filter { it.day > start + 119 }.all { it.loss == 0.25 })
+        assertEquals("Pathfinder", ok.goal.band)
+    }
+
+    @Test
+    fun afterARestTheFirstThreeWeeksAreGentle() {
+        // Rest for two weeks, then 12 minutes a day (84 a week): normally an eighth of a step; ramping back, nothing.
+        val rest = listOf(start + 112..start + 125)
+        val back = (126 until 126 + 28).map { start + it }
+        val inp = input(built, rest = rest).let { it.copy(presence = it.presence + input(back, minutes = 12.0).presence) }
+        val w = WorldEngine().build(inp, start + 126 + 28)
+        val scored = w.events.filterIsInstance<WorldEvent.WeekScored>().filter { it.day > start + 126 }
+        println("ramping back after rest: " + scored.map { "%.0f min → %.3f".format(it.minutes, it.loss) })
+        assertTrue(scored.take(3).all { it.loss == 0.0 })
+    }
 }

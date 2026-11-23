@@ -162,16 +162,18 @@ class WorldEngineTest {
 
     @Test
     fun weeklyLossAndRecoveryBands() {
-        // ADR 0008 as revised in 0.12.1, in steps: ¼ below half the goal, sliding to ⅛ at 80%, at most 1/40 for a near
-        // miss, none at the goal; any week over the goal brings back ¼.
+        // ADR 0011: the 150-minute guideline decides cooling; the adaptive goal only decides warming.
         assertEquals(0.25, WorldEngine.weeklyLoss(0.0), 1e-9)
-        assertEquals(0.25, WorldEngine.weeklyLoss(0.5), 1e-9)
-        assertEquals(0.125, WorldEngine.weeklyLoss(0.7999999), 1e-6)
-        assertEquals(0.025, WorldEngine.weeklyLoss(0.8), 1e-9)
-        assertEquals(0.0, WorldEngine.weeklyLoss(1.0), 1e-9)
-        assertEquals(0.0, WorldEngine.weeklyRecovery(1.0), 1e-9)
-        assertEquals(0.25, WorldEngine.weeklyRecovery(1.01), 1e-9)
-        assertEquals(0.25, WorldEngine.weeklyRecovery(2.0), 1e-9)
+        assertEquals(0.25, WorldEngine.weeklyLoss(74.0), 1e-9)
+        assertEquals(0.125, WorldEngine.weeklyLoss(75.0), 1e-9)
+        assertEquals(0.025, WorldEngine.weeklyLoss(120.0), 1e-9)
+        assertEquals(0.0, WorldEngine.weeklyLoss(150.0), 1e-9)
+        assertEquals(0.0, WorldEngine.weeklyLoss(200.0), 1e-9)   // a goal of 300 never makes 200 minutes cool
+        assertEquals(0.0, WorldEngine.weeklyLoss(80.0, rampingBack = true), 1e-9)
+        assertEquals(0.125, WorldEngine.weeklyLoss(30.0, rampingBack = true), 1e-9)
+        assertEquals(0.0, WorldEngine.weeklyRecovery(199.0, 200), 1e-9)
+        assertEquals(0.25, WorldEngine.weeklyRecovery(200.0, 200), 1e-9)
+        assertEquals("Stroller", WorldEngine.band(190)); assertEquals("Rambler", WorldEngine.band(200)); assertEquals("Pathfinder", WorldEngine.band(300))
     }
 
     @Test

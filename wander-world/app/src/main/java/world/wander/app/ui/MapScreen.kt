@@ -399,20 +399,18 @@ private suspend fun currentLocation(context: Context): WLatLng? = try {
  * week is never a surprise.
  */
 internal fun weekLine(w: world.wander.engine.WorldState): String {
+    // ADR 0011: 150 (the guideline) holds your world; your goal warms it. Calm words, nothing alarming.
     val g = w.goal
-    val ratio = g.weekMinutes / g.goal
-    val head = "This week: %.0f / %d active min".format(g.weekMinutes, g.goal)
+    val m = g.weekMinutes
+    val head = "This week: %.0f / %d active min".format(m, g.goal)
     val daysLeft = 6 - (w.today - g.weekStartDay)
     val outlook = when {
         !g.coolingApplies -> if (g.protection == world.wander.engine.Protection.RESTING) "resting" else "new world grace"
-        ratio > 1.0 -> "over the goal: faded places come back ¼ step"
-        ratio >= 1.0 -> "on track: nothing fades"
-        else -> {
-            val need = "%.0f min to go".format(g.goal - g.weekMinutes)
-            val loss = world.wander.engine.WorldEngine.weeklyLoss(ratio)
-            if (daysLeft > 0) "$need, $daysLeft ${if (daysLeft == 1) "day" else "days"} left"
-            else "$need; Tuesday places fade " + if (loss >= 0.2) "¼ step" else if (loss >= 0.1) "⅛ step" else "a little"
-        }
+        m >= g.goal -> "goal reached: your world warms on Tuesday"
+        m >= world.wander.engine.WorldEngine.GUIDELINE_MINUTES -> "your world holds; %.0f more to warm it".format(g.goal - m)
+        g.rampingBack -> "easing back in: %.0f min holds your world".format(75 - m).takeIf { m < 75 } ?: "easing back in: your world holds"
+        daysLeft > 0 -> "%.0f min to hold your world, $daysLeft ${if (daysLeft == 1) "day" else "days"} left".format(150 - m)
+        else -> "a quiet week; a little frost on Tuesday"
     }
     return "$head · $outlook"
 }

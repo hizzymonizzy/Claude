@@ -13,9 +13,10 @@ A personal, non-competitive Android fitness app for one player. GPS walks, runs,
 - **The heat map (ADR 0007, 0010):** every hex you walk richens in five steps (1/3/10/30/100 days) and enriches that
   many rings around it, fading outward; fog clears to those hex edges. Block, neighbourhood and county views; regions
   become nodes beyond that.
-- **Weekly cooling (ADR 0008):** each Tuesday last week's active minutes (walks count; intensity adds 0.5×) are scored
-  against the goal; below it heat, roads and settlements cool ¼ step a bad week (ADR 0009: a step shows lost only
-  after 4 such weeks), a week over the goal brings back ¼ step. Floor: two steps below best.
+- **Weekly cooling (ADR 0008, 0009, 0011):** each Tuesday last week's active minutes (walks count; intensity adds 0.5×)
+  are scored. The 150-minute guideline decides cooling (under 75 ¼ step, 75–119 ⅛, 120–149 1/40); the adaptive goal
+  (150–300, bands Stroller…Pathfinder) only decides warming (+¼ step). A step shows lost only after a whole step has
+  cooled since the best; floor two steps below best; 3 gentle weeks after a rest.
 
 Concept: `docs/concept.md`. Rules and their history, the source of truth: `docs/design.md`. Settled
 choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/process/release.md`.

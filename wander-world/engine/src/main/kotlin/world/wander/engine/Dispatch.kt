@@ -80,8 +80,8 @@ object DispatchWriter {
             is WorldEvent.WaystoneFound, is WorldEvent.WaystoneReturned -> {} // summarized below
             is WorldEvent.ProjectBuilt, is WorldEvent.MonumentRaised, is WorldEvent.ProjectProposed -> {} // economy, below
             is WorldEvent.GoalChanged -> lines += if (e.to > e.from)
-                "You've been steady. Your weekly goal rises to ${e.to} minutes."
-            else "Your weekly goal eases to ${e.to} minutes. Rest is part of the journey."
+                "You've been walking past your goal. It grows to ${e.to} minutes (${WorldEngine.band(e.to)})."
+            else "Your weekly goal eases to ${e.to} minutes (${WorldEngine.band(e.to)}). Rest is part of the journey."
             else -> {}
         }
 
@@ -110,18 +110,19 @@ object DispatchWriter {
         val returned = events.count { it is WorldEvent.WaystoneReturned }
         if (returned > 0) lines += if (returned == 1) "A waystone hums again as you return." else "$returned waystones hum again as you return."
 
-        // Tuesday: last week's scoring (ADR 0008).
+        // Tuesday: last week's scoring (ADR 0008/0011). Calm, seasonal words; say what you kept, never "lost".
         events.filterIsInstance<WorldEvent.WeekScored>().firstOrNull()?.let { w ->
-            val head = "Last week: ${w.minutes.roundToInt()} / ${w.goal} active minutes."
+            val head = "Last week: ${w.minutes.roundToInt()} active minutes."
             lines += when {
-                w.loss > 0 && w.fadedRoads.isNotEmpty() -> "$head ${w.fadedRoads.size} ${plural(w.fadedRoads.size, "road")} faded a step (" +
-                    w.fadedRoads.take(3).joinToString(", ") + (if (w.fadedRoads.size > 3) ", …" else "") + ")." +
-                    if (w.settlementsDropped.isNotEmpty()) " ${w.settlementsDropped.joinToString { name(it) }} lost a tier." else ""
-                w.loss >= 0.2 -> "$head Your world cooled a quarter step; four weeks like this fade a full step."
-                w.loss > 0 -> "$head Your world cooled a little."
-                w.recovery > 0 -> "$head Over the goal: faded places came back a quarter step" + if (w.recoveredRoads > 0) " (${w.recoveredRoads} ${plural(w.recoveredRoads, "road")} regained a step)." else "."
-                else -> "$head Goal met: nothing faded."
+                w.loss >= 0.2 -> "$head A quiet week: frost crept over the outer lanes. Everything you built still stands."
+                w.loss >= 0.1 -> "$head A gentle week: a light frost on the edges of your world."
+                w.loss > 0 -> "$head Nearly there: barely a chill in the air."
+                w.recovery > 0 -> "$head A bright week: faded places warmed back" + if (w.recoveredRoads > 0) ", and ${w.recoveredRoads} ${plural(w.recoveredRoads, "road")} came back to life." else "."
+                else -> "$head Your world held steady."
             }
+            if (w.fadedRoads.isNotEmpty()) lines += w.fadedRoads.take(3).joinToString(", ") + (if (w.fadedRoads.size > 3) " and others" else "") +
+                " settled back a step; a walk along them brings them back."
+            if (w.settlementsDropped.isNotEmpty()) lines += w.settlementsDropped.joinToString { name(it) } + " grew quieter; visit to wake it."
         }
 
         // Goal line.

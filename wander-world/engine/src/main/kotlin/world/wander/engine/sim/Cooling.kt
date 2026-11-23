@@ -21,9 +21,11 @@ internal fun Simulation.cooling(d: Simulation.Day) {
     if (weekStart < startDay || weekEnd - startDay < p.graceDays) return
     if ((weekStart..day).any { isResting(it) }) return
     val minutes = (weekStart..weekEnd).sumOf { effortByDay[it] ?: 0.0 }
-    val ratio = minutes / goal
-    val loss = WorldEngine.weeklyLoss(ratio)
-    val recovery = WorldEngine.weeklyRecovery(ratio)
+    // Three weeks after a rest ends, return gently: only weeks under 75 minutes cool, and by an eighth.
+    val lastRest = input.restPeriods.filter { it.first <= weekEnd }.maxOfOrNull { minOf(it.last, weekEnd) }
+    val rampingBack = lastRest != null && weekStart - lastRest in 0..20
+    val loss = WorldEngine.weeklyLoss(minutes, rampingBack)
+    val recovery = WorldEngine.weeklyRecovery(minutes, goal)
     if (loss == 0.0 && recovery == 0.0) {
         events += WorldEvent.WeekScored(day, minutes, goal, 0.0, 0.0, emptyList(), 0, emptyList())
         return

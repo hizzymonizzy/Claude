@@ -16,20 +16,32 @@ class WorldEngine(private val params: WorldParams = WorldParams()) {
     fun build(input: WorldInput, today: Int): WorldState = Simulation(input, params, today).run()
 
     companion object {
+        /** The health guideline's weekly minimum (WHO 2020 / US 2018): it alone decides cooling (ADR 0011). */
+        const val GUIDELINE_MINUTES = 150.0
+
         /**
-         * Steps a place loses at the weekly scoring (ADR 0008, revised 0.12.1: partial decay): a quarter of a step
-         * below half the goal, sliding to an eighth at 80%, at most a fortieth for a near miss, nothing at the goal.
-         * So 2 missed weeks dim a place by half a step and 4 cost a whole step.
+         * Steps a place cools at the weekly scoring, judged against the fixed guideline, never the adaptive goal
+         * (ADR 0011): under 75 minutes a quarter step, 75–119 an eighth, 120–149 a fortieth, 150 or more nothing.
+         * During the three weeks after a rest, only weeks under 75 cool, and by an eighth.
          */
-        fun weeklyLoss(ratio: Double): Double = when {
-            ratio >= 1.0 -> 0.0
-            ratio >= 0.8 -> 0.025 * (1.0 - ratio) / 0.2
-            ratio >= 0.5 -> 0.25 - 0.125 * (ratio - 0.5) / 0.3
+        fun weeklyLoss(minutes: Double, rampingBack: Boolean = false): Double = when {
+            rampingBack -> if (minutes < 75) 0.125 else 0.0
+            minutes >= GUIDELINE_MINUTES -> 0.0
+            minutes >= 120 -> 0.025
+            minutes >= 75 -> 0.125
             else -> 0.25
         }
 
-        /** Steps that come back at the weekly scoring after a week over the goal: a quarter, like a missed week's loss. */
-        fun weeklyRecovery(ratio: Double): Double = if (ratio > 1.0) 0.25 else 0.0
+        /** Steps that warm back at the weekly scoring: a quarter for a week at or over your (adaptive) goal. */
+        fun weeklyRecovery(minutes: Double, goal: Int): Double = if (minutes >= goal) 0.25 else 0.0
+
+        /** Goal bands: names for ranges of the adaptive goal (ADR 0011). */
+        fun band(goal: Int): String = when {
+            goal >= 300 -> "Pathfinder"
+            goal >= 250 -> "Trekker"
+            goal >= 200 -> "Rambler"
+            else -> "Stroller"
+        }
 
         fun mergeIntervals(list: List<Pair<Double, Double>>): List<Pair<Double, Double>> {
             if (list.isEmpty()) return emptyList()

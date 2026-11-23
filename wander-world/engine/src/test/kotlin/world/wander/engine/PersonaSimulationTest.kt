@@ -87,7 +87,7 @@ class PersonaSimulationTest {
     @Test
     fun overtrainerEarnsNoExtraProtection() {
         // No cooling at the goal, and recovery is capped at 150%: training far beyond it buys nothing more.
-        assertTrue(WorldEngine.weeklyLoss(1.0) == 0.0 && WorldEngine.weeklyLoss(3.0) == 0.0)
-        assertTrue(WorldEngine.weeklyRecovery(3.0) == WorldEngine.weeklyRecovery(1.5))
+        assertTrue(WorldEngine.weeklyLoss(150.0) == 0.0 && WorldEngine.weeklyLoss(900.0) == 0.0)
+        assertTrue(WorldEngine.weeklyRecovery(900.0, 150) == WorldEngine.weeklyRecovery(150.0, 150))
     }
 }

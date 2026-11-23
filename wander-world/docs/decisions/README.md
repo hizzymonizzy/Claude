@@ -15,3 +15,4 @@ of editing an old one; mark the old one "Superseded by NNNN".
 | [0008](0008-weekly-cooling.md) | Decay is felt weekly: heat cools when you miss your goal, floor two steps below best | Accepted (built 0.12.0) |
 | [0009](0009-partial-decay.md) | Partial decay: ¼ step per badly missed week from the best; ¼ step back for a week over the goal | Accepted (built 0.12.1) |
 | [0010](0010-heat-spreads.md) | Heat spreads N rings from a hex walked to step N; fog clears to hex edges | Accepted (built 0.12.2) |
+| [0011](0011-guideline-cools-goal-warms.md) | The 150-minute guideline decides cooling; the adaptive goal only decides warming; bands; rest ramp | Accepted (built 0.13.0) |

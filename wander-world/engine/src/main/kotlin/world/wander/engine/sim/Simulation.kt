@@ -80,6 +80,8 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
 
     // Goal.
     var goal = p.goalStart
+    /** The highest goal ever reached: its band stays as a title, never taken away. */
+    var bestGoal = p.goalStart
     var lastRaiseWeek = -1_000
     val weeks = mutableListOf<WeekRecord>()
 

@@ -14,6 +14,7 @@ import world.wander.engine.Protection
 import world.wander.engine.RegionState
 import world.wander.engine.SettlementState
 import world.wander.engine.WaystoneState
+import world.wander.engine.WorldEngine
 import world.wander.engine.WorldState
 import kotlin.math.pow
 
@@ -31,6 +32,9 @@ internal fun Simulation.snapshot(): WorldState {
         weekMinutes = (weekStartOf(today)..today).sumOf { effortByDay[it] ?: 0.0 },
         weekStartDay = weekStartOf(today),
         coolingApplies = weekStartOf(today) >= startDay && weekStartOf(today) + 6 - startDay >= p.graceDays && !isResting(today),
+        band = WorldEngine.band(goal),
+        bestBand = WorldEngine.band(bestGoal),
+        rampingBack = input.restPeriods.filter { it.first <= today }.maxOfOrNull { minOf(it.last, today) }?.let { weekStartOf(today) - it in 0..20 } == true,
     )
     return WorldState(
         today = today,

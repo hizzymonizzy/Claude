@@ -60,8 +60,8 @@ class RegionsTest {
 
     @Test
     fun distantRegionGoesDormantAndBarelyDecays() {
-        // Since 0.12 the daily home walks count toward the goal, so lock a goal they fall well short of.
-        val trip = trip().copy(goalLocked = true, lockedGoal = 1000)
+        // Since 0.13 cooling follows the 150-minute guideline: stop walking after the trip so weeks fall short of it.
+        val trip = trip().let { t -> t.copy(presence = t.presence.filter { it.day < start + 39 }) }
         val s = WorldEngine().build(trip, start + 199)
         val hnl = s.settlements.single { it.areaId == "hnl" }
         assertTrue(s.regions.single { !it.isHome }.dormant)

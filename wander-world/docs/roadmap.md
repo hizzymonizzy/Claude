@@ -71,11 +71,23 @@ outline; rebuild time on a year of synthetic walks; map frame time on the Fold a
 **Order of work** (each step passes `tools/check.sh`): B (cooling, engine and simulation), A, C, then the remaining D
 items. One APK at the end. Settlement cooling confirmed by the player (2026-11-21).
 
-## Next package (collecting feedback, 2026-11-23)
-Hex icons and developed cells (backlog section of that name): bigger icons, buildings as their own hex at close zoom,
-hex medallions and resource badges. Held until the player's next round of feedback, then bundled.
+## 0.13 Villages with a story (agreed 2026-11-23, building)
+Everything held since 0.12.2 (backlog sections of 2026-11-23), in this order, one APK at the end:
+1. **Health goal** (research report `docs/research/reports/`): the 150-minute guideline decides cooling (<75 ¼ step,
+   75–119 ⅛, 120–149 1/40, 150+ holds); the adaptive goal only decides warming (at or over it: +¼ step). Goal moves in
+   ~10% steps between 150 and 300 (bands Stroller/Rambler/Trekker/Pathfinder name ranges; highest band kept as a
+   title); only real weeks count; rises at most 10% per 4 weeks, eases after 2 light weeks; Tuesday explains changes;
+   lock or pick a band. Rest mode with presets and a 3-week ramp back. Calm, seasonal wording. (No cooling-off setting
+   and no welcome-back bonus: player's choice.)
+2. **Camps by overnight stay only** (a 3 am location check, nothing leaves the phone); capital stays at home.
+3. **Waystones merge** within ~1 km (arrivals counted); existing duplicates merged.
+4. **Development story:** 3–5 projects per tier with perks, the Wonder; encounters anywhere; rare-look pool and feats;
+   achievements; trader requests.
+5. **Screens:** JRPG shop; Atlas (settlements and camp-able areas, distance, Go); character sheet; achievements;
+   settings in tabs with Credits; Goal screen bug fixed.
+6. **Map:** icons ~2×; settlement hex medallions; resource hex badges and arrows; buildings as developed hexes at close zoom.
 
-## 0.13 Safe and sturdy (proposed)
+## 0.14 Safe and sturdy (proposed)
 Encrypted export/import of your world. (Map-server retry tests and the `Repository.kt` split moved into 0.12.)
 
 ## Later

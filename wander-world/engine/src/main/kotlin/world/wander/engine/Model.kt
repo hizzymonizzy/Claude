@@ -192,6 +192,11 @@ data class GoalState(
     val weekStartDay: Int = 0,
     /** Whether next Tuesday's scoring would cool anything (grace and rest mode never do). */
     val coolingApplies: Boolean = true,
+    /** The band your goal is in now, and the best band you've ever reached (kept as a title). */
+    val band: String = "Stroller",
+    val bestBand: String = "Stroller",
+    /** The three weeks after a rest: only weeks under 75 minutes cool. */
+    val rampingBack: Boolean = false,
 )
 
 sealed class WorldEvent {
