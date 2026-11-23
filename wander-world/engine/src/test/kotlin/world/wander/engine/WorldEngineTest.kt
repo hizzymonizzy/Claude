@@ -35,6 +35,8 @@ class WorldEngineTest {
         areas = mapOf("home" to AreaInfo("home", "Ironbound", "neighbourhood"), "park" to AreaInfo("park", "Ridgefield", "suburb")),
         restPeriods = rest,
         goalLocked = locked,
+        // 0.13: camps are founded by a night away; fixtures that walk in the park also sleep there once, on day one.
+        nights = presence.filter { it.cell in parkCells }.minOfOrNull { it.day }?.let { listOf(Arrival(it, 40.7600, -74.2000)) }.orEmpty(),
     )
 
     /** Walks [minutes] minutes spread over [cellCount] cells of an area on a day. */
@@ -60,21 +62,21 @@ class WorldEngineTest {
     }
 
     @Test
-    fun campNeedsThreeFootDaysWithinAMonth() {
-        val sparse = (0..2).flatMap { walk(parkCells, start + it * 20, 20.0) } // 20 days apart: too sparse
-        assertTrue(WorldEngine().build(baseInput(sparse), start + 50).settlements.isEmpty())
-
-        val three = (0..2).flatMap { walk(parkCells, start + it * 5, 20.0) }
-        val s = WorldEngine().build(baseInput(three), start + 20).settlements.single()
-        assertEquals("Ridgefield", s.name)
-        assertEquals(Tier.CAMP, s.tier)
-        assertEquals(start + 10, s.foundedDay)
+    fun aCampIsFoundedOnlyByANightAway() {
+        // 0.13: walking an area on many days doesn't found a camp; one night spent there does.
+        val walks = (0..9).flatMap { walk(parkCells, start + it * 3, 20.0) }
+        val noNight = baseInput(walks).copy(nights = emptyList())
+        assertTrue(WorldEngine().build(noNight, start + 40).settlements.none { it.areaId == "park" })
+        val night = noNight.copy(nights = listOf(Arrival(start + 6, 40.7600, -74.2000)))
+        val s = WorldEngine().build(night, start + 40).settlements.single { it.areaId == "park" }
+        assertEquals(start + 6, s.foundedDay)
+        assertTrue(DispatchWriter.write(WorldEngine().build(night, start + 6), start + 6).text.contains("night"))
     }
 
     @Test
     fun everyAreaWalkedInIsAWaypointEvenWithoutASettlement() {
         val brief = listOf(CellPresence(parkCells[0], start + 2, 90.0, Mode.FOOT)) // 90 s: no area-day
-        val state = WorldEngine().build(baseInput(walk(homeCells, start, 20.0) + brief), start + 3)
+        val state = WorldEngine().build(baseInput(walk(homeCells, start, 20.0) + brief).copy(nights = emptyList()), start + 3)
         val park = state.exploredAreas.single { it.id == "park" }
         assertEquals("Ridgefield", park.name)
         assertTrue(!park.settled)
@@ -85,7 +87,7 @@ class WorldEngineTest {
     @Test
     fun cyclingAloneNeverFoundsASettlement() {
         val rides = (0..10).flatMap { walk(parkCells, start + it, 40.0, mode = Mode.CYCLE) }
-        assertTrue(WorldEngine().build(baseInput(rides), start + 15).settlements.isEmpty())
+        assertTrue(WorldEngine().build(baseInput(rides).copy(nights = emptyList()), start + 15).settlements.isEmpty())
     }
 
     @Test

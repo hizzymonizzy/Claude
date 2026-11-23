@@ -137,6 +137,16 @@ data class WakeEntity(
 )
 
 /** Fine cells walked along a shore (food, like stone from roads); recorded at the shoreline itself. */
+/** Where the phone was at about 3 am after [day] (one quiet location check; never leaves the phone). Founds camps. */
+@Entity(tableName = "night_stay")
+data class NightStayEntity(
+    @PrimaryKey val day: Int,
+    val lat: Double,
+    val lng: Double,
+    val accuracyM: Float,
+    val madeMs: Long,
+)
+
 /** A heat map hex (H3 res 12, ~20 m) walked on a day (ADR 0007). */
 @Entity(tableName = "heat_cell", indices = [Index("segmentId")])
 data class HeatCellEntity(
@@ -283,6 +293,8 @@ interface WanderDao {
     fun pointCount(segmentId: Long): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun insertArchive(a: TrackArchiveEntity)
     @Insert fun insertHeat(h: List<HeatCellEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun upsertNight(n: NightStayEntity)
+    @Query("SELECT * FROM night_stay") fun allNights(): List<NightStayEntity>
     @Query("DELETE FROM heat_cell WHERE segmentId = :segmentId") fun deleteHeat(segmentId: Long)
     @Query("SELECT * FROM heat_cell") fun allHeat(): List<HeatCellEntity>
     @Query("SELECT * FROM track_archive WHERE segmentId = :segmentId") fun archive(segmentId: Long): TrackArchiveEntity?
@@ -382,7 +394,7 @@ interface WanderDao {
         TrailEntity::class, WildTrailEntity::class, TroddenEntity::class, LandmarkEntity::class,
         LandmarkTileEntity::class, LandmarkVisitEntity::class, ArrivalEntity::class, WaterTrailEntity::class, WakeEntity::class,
         WaterAreaEntity::class, WaterTileEntity::class, ProjectDecisionEntity::class, TerrainAreaEntity::class, ShoreEntity::class, PurchaseEntity::class,
-        TrackArchiveEntity::class, HeatCellEntity::class,
+        TrackArchiveEntity::class, HeatCellEntity::class, NightStayEntity::class,
     ],
     version = DbMigrations.LATEST,
     exportSchema = true,

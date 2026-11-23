@@ -25,6 +25,7 @@ class WanderApp : Application() {
         val repo = Repository.get(this)
         repo.prefs.startDay // fixes the world's first day on first launch
         DailyWorker.schedule(this, repo.prefs.dispatchHour, repo.prefs.dispatchMinute)
+        world.wander.app.work.NightWorker.schedule(this)
     }
 
     companion object {

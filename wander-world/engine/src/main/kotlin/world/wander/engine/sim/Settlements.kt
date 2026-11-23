@@ -67,10 +67,16 @@ internal fun Simulation.areas(d: Simulation.Day) {
 
 /** 3. Founding: enough on-foot days within the window. */
 internal fun Simulation.founding(d: Simulation.Day) {
-    for ((areaId, a) in areas) {
-        if (areaId in settlements || a.footDays.lastOrNull() != d.day) continue
-        val recent = a.footDays.count { it > d.day - p.foundingWindowDays }
-        if (recent >= p.foundingDays) found(d.day, areaId, capital = areaId == input.homeAreaId)
+    // 0.13: a camp is founded only by staying the night there (player's choice), away from home. The capital is
+    // still founded the first day you move at home (see areas()).
+    for (n in nightsByDay[d.day].orEmpty()) {
+        val areaId = input.cellArea[Cells.cell(n.lat, n.lng)] ?: continue
+        if (areaId == input.homeAreaId || areaId in settlements) continue
+        if (input.homePoint?.let { Geo.distanceM(it, LatLng(n.lat, n.lng)) < p.campMinFromHomeM } == true) continue
+        val a = areas.getOrPut(areaId) { AreaAcc() }
+        a.lastAreaDay = d.day
+        found(d.day, areaId, capital = false)
+        events += WorldEvent.CampedOvernight(d.day, areaId)
     }
 }
 

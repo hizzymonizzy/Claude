@@ -252,6 +252,20 @@ class Repository(context: Context) {
         prefs.homeAreaId != null
     }
 
+    /**
+     * The 3 am check (0.13): where the phone spent the night. Stored on the phone only; the world founds a camp if that
+     * was an area away from home. The night belongs to the evening before ([day] = yesterday at 3 am).
+     */
+    suspend fun recordNight(lat: Double, lng: Double, accuracyM: Float) = withContext(Dispatchers.IO) {
+        val day = today() - 1
+        dao.upsertNight(NightStayEntity(day, lat, lng, accuracyM, System.currentTimeMillis()))
+        val cell = Cells.cell(lat, lng)
+        if (ensureTiles(listOf(Cells.tile(lat, lng)))) assignAreas(listOf(cell))
+        val area = dao.cellArea(cell)?.areaId
+        log("camp", "Night check: ${if (area == null) "area not known yet" else if (area == prefs.homeAreaId) "at home" else "away, in area $area"} (±${accuracyM.toInt()} m)")
+        rebuild()
+    }
+
     // ---- Processing captured tracks into observations ----
 
     suspend fun processPending(): Int = withContext(Dispatchers.IO) {
@@ -440,6 +454,7 @@ class Repository(context: Context) {
             wake = dao.allWake().map { TroddenCell(it.cell, it.day) },
             shore = dao.allShore().map { TroddenCell(it.cell, it.day) },
             heat = dao.allHeat().map { TroddenCell(it.cell, it.day) },
+            nights = dao.allNights().map { Arrival(it.day, it.lat, it.lng) },
         )
         val state = engine.build(input, today)
         // Freeze fallback names the first time an unnamed area earns one.

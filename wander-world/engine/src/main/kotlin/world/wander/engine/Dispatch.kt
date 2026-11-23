@@ -64,7 +64,8 @@ object DispatchWriter {
             is WorldEvent.Founded -> lines += if (e.capital)
                 "Your capital, ${name(e.areaId)}, is founded. A fire is lit at home."
             else
-                pick(rnd, "A camp has been raised at ${name(e.areaId)}.", "Travelers have pitched tents at ${name(e.areaId)}. A camp is born.")
+                pick(rnd, "You spent the night at ${name(e.areaId)}. By morning your tent had become a camp.",
+                    "A night under the stars at ${name(e.areaId)}: a camp is born.")
             is WorldEvent.TierChanged -> lines += if (e.to.ordinal > e.from.ordinal) {
                 if (e.from == Tier.RUINS || e.to.ordinal <= tierPeakHint(state, e.areaId))
                     "${name(e.areaId)} is rebuilt as a ${e.to.label}."

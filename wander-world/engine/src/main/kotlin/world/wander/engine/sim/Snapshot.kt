@@ -86,7 +86,10 @@ internal fun Simulation.snapshot(): WorldState {
         regions = regions.map { r ->
             RegionState(
                 id = r.id,
-                name = r.firstAreaId?.let { areaNames[it] } ?: "Unnamed lands",
+                // The home region carries the capital's name (it used to take whichever area joined first, which could
+                // change on replay); others keep their first area's name.
+                name = (if (r.id == (homeRegion ?: 0)) input.homeAreaId?.let { areaNames[it] } else null)
+                    ?: r.firstAreaId?.let { areaNames[it] } ?: "Unnamed lands",
                 center = r.seed, isHome = r.id == (homeRegion ?: 0), dormant = r.dormant, lastPresenceDay = r.lastPresence,
             )
         },

@@ -60,6 +60,10 @@ object DbMigrations {
             "CREATE INDEX IF NOT EXISTS `index_terrain_area_tile` ON `terrain_area` (`tile`)",
             "DELETE FROM `landmark_tile`",
         ),
+        // v13 (0.13): nights away found camps (one 3 am location check a night, kept on the phone).
+        12 to listOf(
+            "CREATE TABLE IF NOT EXISTS `night_stay` (`day` INTEGER NOT NULL, `lat` REAL NOT NULL, `lng` REAL NOT NULL, `accuracyM` REAL NOT NULL, `madeMs` INTEGER NOT NULL, PRIMARY KEY(`day`))",
+        ),
         // v8: shore walking (food is gathered along shores, like stone along roads); walks re-processed via PROCESSING_VERSION.
         7 to listOf(
             "CREATE TABLE IF NOT EXISTS `shore` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `segmentId` INTEGER NOT NULL, `cell` TEXT NOT NULL, `day` INTEGER NOT NULL)",
@@ -86,5 +90,5 @@ object DbMigrations {
         ),
     )
 
-    const val LATEST = 12
+    const val LATEST = 13
 }

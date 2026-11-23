@@ -47,6 +47,7 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     val shoreByDay = input.shore.groupBy { it.day }
     val heatByDay = input.heat.groupBy { it.day }
     val arrivalsByDay = input.arrivals.groupBy { it.day }
+    val nightsByDay = input.nights.groupBy { it.day }
     val decisionsByDay = input.decisions.groupBy { it.day }
 
     // Roads, places, your own paths.

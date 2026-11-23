@@ -71,6 +71,8 @@ data class WorldInput(
     val trodden: List<TroddenCell> = emptyList(),
     /** Where you started walking after a car ride or flight. */
     val arrivals: List<Arrival> = emptyList(),
+    /** Where the phone was at about 3 am, per night (the night after [Arrival.day]): staying overnight founds a camp. */
+    val nights: List<Arrival> = emptyList(),
     /** Fine cells paddled on a given day, for water-route wear. */
     val wake: List<TroddenCell> = emptyList(),
     /** Fine cells walked along shores, per day (food). */
@@ -137,8 +139,11 @@ data class WorldParams(
     val dormantDecay: Double = 0.1,
     /** An arrival this far from any explored ground finds a waystone. */
     val waystoneMinDistanceM: Double = 2_000.0,
+    /** A night spent this close to home doesn't found a camp (it's home). */
+    val campMinFromHomeM: Double = 1_500.0,
     /** Arriving within this distance of an existing waystone counts as a return trip. */
-    val waystoneReturnM: Double = 500.0,
+    /** Arriving within this of a waystone returns to it rather than founding another (0.13: was 500 m, made duplicates). */
+    val waystoneReturnM: Double = 1_000.0,
     /** Discovery bonus, thinning and regrowth of resource sources. */
     val harvest: HarvestParams = HarvestParams(),
 )
@@ -216,6 +221,7 @@ sealed class WorldEvent {
     data class SourceThinning(override val day: Int, val landmarkId: String) : WorldEvent()
     data class Purchased(override val day: Int, val item: String, val qty: Int, val price: Int, val seller: String) : WorldEvent()
     data class PurchaseRefused(override val day: Int, val item: String) : WorldEvent()
+    data class CampedOvernight(override val day: Int, val areaId: String) : WorldEvent()
     data class GoalChanged(override val day: Int, val from: Int, val to: Int) : WorldEvent()
     /** Tuesday: last Monday-to-Sunday week scored against the goal; places faded or recovered a step. */
     data class WeekScored(

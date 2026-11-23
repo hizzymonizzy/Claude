@@ -38,7 +38,8 @@ class RegionsTest {
             Arrival(start + 31, honoluluPt.lat, honoluluPt.lng),   // landed in Honolulu
             Arrival(start + 39, homePt.lat, homePt.lng),           // back home: known ground
         )
-        return input(presence, arrivals)
+        // 0.13: the hotel night founds the camp there.
+        return input(presence, arrivals).copy(nights = listOf(Arrival(start + 32, honoluluPt.lat, honoluluPt.lng)))
     }
 
     @Test
