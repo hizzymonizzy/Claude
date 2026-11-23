@@ -74,3 +74,14 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Settlement medallions become hex-shaped | Consistent with the hex map | agreed |
 | Resource nodes and edge arrows as hex badges (ring colours become hex outlines) | Consistent with the hex map | agreed |
 
+## Shop, JRPG-style (player, 2026-11-23; held for more feedback; mockup docs/art/mockup_shop.png)
+| Item | Why | Status |
+|---|---|---|
+| ✕ close top right; Wares / Looks tabs; framed parchment windows with a ▶ cursor on the selected row | JRPG menu feel; close at the bottom was awkward | agreed |
+| No rules text: prices, totals and greyed buttons show the mechanics (2×, market hall, weekly climb) | Brown mechanics text was overkill | agreed |
+| Quantity: − / + stepper, tap the number to type it (pad with Max), total in gold, Buy | Buy any amount, not just 1 or 5 | agreed |
+| One-line flavour text for each item (MMORPG-tooltip tone); none elsewhere for now | Charm; future NPC talk may use the same voice | agreed |
+| Merchant greeting (one or two lines) | Life in the shop | agreed |
+| Greeting mentions today's weather | Fun; needs a weather source (see question) | open: needs a new host or an offline stand-in |
+| Occasional trade request ("Wanted: 3 stone → a metal ingot") | Gives spare resources a use | proposed: rules to agree |
+
