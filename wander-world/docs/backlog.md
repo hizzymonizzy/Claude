@@ -94,3 +94,14 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Atlas: settlements only for now; capital card with next step; distance, direction, Go; sort chips; "becoming a settlement" | Wayfinding; long lists weren't useful | agreed |
 | Merge a new waystone into an existing one within ~1 km (count arrivals); merge existing duplicates | Five separate waystones in one area | agreed |
 
+## Camps, character sheet, achievements, settings (player, 2026-11-23; held)
+| Item | Why | Status |
+|---|---|---|
+| Camps founded only by staying overnight (a 3 am location check in the area, away from home); maybe a voluntary "Pitch camp here" | "I actually camp there then"; 3 walking days was too automatic | agreed in principle; overnight-only vs + pitch camp open |
+| Goal screen as a character sheet: wanderer, title and level, this week's quest, stats, week history | Feels like a game, not a chart | proposed |
+| Target goal developed: named bands (Stroller 150 … Pathfinder 300), what moves it next, maybe choose your band | Goal felt opaque | proposed; auto vs chosen open |
+| Achievements (ladders: km, places, roads, hexes, settlements, waystones, paddling, streaks) separate from quests; some give rare looks; monuments fold in | Long-term goals | proposed |
+| Settings paginated with tabs (Tracking, Health, Map, Data & privacy, Credits) | Long page; credits deserve their own tab | agreed |
+| Bug: Goal screen shows pre-0.12 rules text and a rolling-7-day total that disagrees with the map card | Outdated since ADR 0008/0009 | to fix |
+| Check: the home region is now named after a waypoint area instead of the capital's area | Diagnostics 2026-11-23 | to investigate |
+
