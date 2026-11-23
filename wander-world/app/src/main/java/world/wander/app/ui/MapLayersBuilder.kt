@@ -157,6 +157,24 @@ object MapLayersBuilder {
         },
     )
 
+    /** The banner you wear, planted beside your capital (0.13). */
+    fun capitalBanner(state: WorldState?, banner: String?): FeatureCollection = FeatureCollection.fromFeatures(
+        listOfNotNull(banner?.let { b -> state?.settlements?.firstOrNull { it.isCapital }?.let { c ->
+            Feature.fromGeometry(Point.fromLngLat(c.position.lng, c.position.lat)).apply { addStringProperty("icon", "banner_$b") }
+        } }),
+    )
+
+    /** People met after walks (0.13), standing where they appeared; tap to talk. */
+    fun encounters(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
+        state?.encounters.orEmpty().map { e ->
+            Feature.fromGeometry(Point.fromLngLat(e.at.lng, e.at.lat)).apply {
+                addStringProperty("id", "enc:${e.id}")
+                addStringProperty("icon", MapIcons.ENCOUNTER_ICONS[e.kind] ?: "trader")
+                addStringProperty("label", when (e.kind) { "bard" -> "Bard"; "courier" -> "Courier"; "lost_pet" -> "Neighbour"; "peddler" -> "Peddler"; "collector" -> "Collector"; else -> "" })
+            }
+        },
+    )
+
     /** The travelling trader, by the village you visited most recently. */
     fun trader(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
         listOfNotNull(state?.traderAt?.let { t ->
@@ -197,8 +215,7 @@ object MapLayersBuilder {
                     state?.monuments?.isNotEmpty() == true -> "_capmon"
                     else -> "_cap"
                 }
-                val flag = if (s.isCapital && banner != null) "_b$banner" else ""
-                addStringProperty("icon", "medal_tier_${s.tier.ordinal}$badge$flag")
+                addStringProperty("icon", "medal_tier_${s.tier.ordinal}$badge")
                 addNumberProperty("liveliness", s.liveliness)
             }
         },

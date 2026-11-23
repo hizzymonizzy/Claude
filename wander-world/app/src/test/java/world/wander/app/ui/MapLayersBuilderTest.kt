@@ -144,7 +144,8 @@ class MapLayersBuilderTest {
         assertEquals(setOf("bldg_meeting_hall", "bldg_well", "bldg_market"), icons)
         icons.forEach { assertTrue(it, MapIcons.images.containsKey(it)) }
         assertEquals("market:a", bldgs.single { it.getStringProperty("icon") == "bldg_market" }.getStringProperty("id"))
-        assertEquals("medal_tier_3_cap_bcrimson", MapLayersBuilder.settlements(w, "crimson").features()!!.single().getStringProperty("icon"))
+        assertEquals("medal_tier_3_cap", MapLayersBuilder.settlements(w, "crimson").features()!!.single().getStringProperty("icon"))
+        assertEquals("banner_crimson", MapLayersBuilder.capitalBanner(w, "crimson").features()!!.single().getStringProperty("icon"))
         // 0.12: the village is paved hexes (block size) on explored ground only; walked hexes carry their heat step.
         val half = org.locationtech.jts.geom.GeometryFactory().createPolygon(listOf(at(-500.0, -500.0), at(0.0, -500.0), at(0.0, 500.0), at(-500.0, 500.0), at(-500.0, -500.0))
             .map { org.locationtech.jts.geom.Coordinate(it.lng, it.lat) }.toTypedArray())

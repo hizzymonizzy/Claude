@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import world.wander.app.data.Repository
 import world.wander.app.geo.Overpass
 import world.wander.engine.LatLng
+import world.wander.engine.Geo
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -117,6 +118,7 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
     val world by repo.world.collectAsState()
     val layers by repo.layers.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
+    var sortBy by rememberSaveable { mutableStateOf("Nearest") }
     val w = world
     fun go(p: LatLng) { repo.focus.value = p; onShowOnMap() }
 
@@ -170,104 +172,62 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
             return@LazyColumn
         }
 
-        val regionOrder = w?.regions.orEmpty().sortedWith(compareByDescending<RegionState> { it.isHome }.thenBy { it.dormant }.thenByDescending { it.lastPresenceDay })
-        val list = w?.settlements.orEmpty().sortedWith(
-            compareBy<SettlementState> { s -> regionOrder.indexOfFirst { it.id == s.regionId }.let { if (it < 0) 99 else it } }
-                .thenByDescending { it.isCapital }.thenByDescending { it.tier.ordinal },
-        )
+        // 0.13: settlements only, for wayfinding: distance and direction from you, Go, and areas you could camp in.
+        val me = repo.lastLocation.value ?: repo.prefs.homeLat?.let { la -> repo.prefs.homeLng?.let { LatLng(la, it) } }
+        fun dist(p: LatLng) = me?.let { Geo.distanceM(it, p) } ?: 0.0
+        fun where(p: LatLng): String = me?.let { m ->
+            val d = Geo.distanceM(m, p)
+            val bearing = (Math.toDegrees(Math.atan2(p.lng - m.lng, p.lat - m.lat)) + 360) % 360
+            val arrow = listOf("↑", "↗", "→", "↘", "↓", "↙", "←", "↖")[((bearing + 22.5) / 45).toInt() % 8]
+            "$arrow " + if (d < 1000) "%.0f m".format(d) else "%.1f km".format(d / 1000)
+        } ?: ""
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (o in listOf("Nearest", "Recent", "Needs a visit")) {
+                    androidx.compose.material3.FilterChip(selected = sortBy == o, onClick = { sortBy = o }, label = { Text(o) })
+                }
+            }
+        }
+        val list = w?.settlements.orEmpty().let { all ->
+            when (sortBy) {
+                "Recent" -> all.sortedByDescending { it.lastAreaDay }
+                "Needs a visit" -> all.sortedBy { it.lastAreaDay }
+                else -> all.sortedBy { dist(it.position) }
+            }
+        }
         item { SectionTitle("Settlements") }
         if (list.isEmpty()) item {
-            Text(
-                "No settlements yet. Walk somewhere on three different days within a month and a camp will appear.",
-                style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic,
-            )
+            Text("No settlements yet. Spend a night somewhere new and a camp will appear.", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic)
         }
         items(list, key = { it.areaId }) { s ->
-            val first = list.first { it.regionId == s.regionId } === s
-            if (first && (w?.regions?.size ?: 0) > 1) {
-                val r = w!!.regions.first { it.id == s.regionId }
-                Text(
-                    (if (r.isHome) "Home · " else "") + r.name + if (r.dormant) " · dormant (resting while you're away)" else "",
-                    style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-                )
-            }
             Card(onClick = { go(s.position) }, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            ImageBitmap.imageResource(TIER_SPRITES[s.tier.ordinal]), contentDescription = s.tier.label,
-                            filterQuality = FilterQuality.Medium, modifier = Modifier.size(52.dp),
-                        )
-                        Spacer(Modifier.width(12.dp))
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Image(ImageBitmap.imageResource(TIER_SPRITES[s.tier.ordinal]), contentDescription = s.tier.label,
+                        filterQuality = FilterQuality.Medium, modifier = Modifier.size(52.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
                         Text((if (s.isCapital) "★ " else "") + s.name, style = MaterialTheme.typography.titleMedium)
+                        val next = Tier.entries.getOrNull(s.tier.ordinal + 1)?.takeIf { it != Tier.METROPOLIS || s.isCapital }
+                        Text(s.tier.label + (next?.let { " · %.0f / %.0f to %s".format(s.development, WorldParams().tierThresholds[it.ordinal], it.label) } ?: ""),
+                            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+                        if (next != null) LinearProgressIndicator(progress = { (s.development / WorldParams().tierThresholds[next.ordinal]).toFloat().coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))
+                        if (s.projects.isNotEmpty()) Text("Built: " + Projects.shown(s.projects).mapNotNull { Projects.byId(it)?.name }.joinToString(),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
-                    val peak = if (s.peakTier != s.tier) " (once a ${s.peakTier.label})" else ""
-                    Text(s.tier.label + peak, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-                    Spacer(Modifier.height(6.dp))
-                    val next = Tier.entries.getOrNull(s.tier.ordinal + 1)
-                    if (next != null && !(next == Tier.METROPOLIS && !s.isCapital)) {
-                        val need = WorldParams().tierThresholds[next.ordinal]
-                        LinearProgressIndicator(progress = { (s.development / need).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-                        Text("%.0f / %.0f toward %s".format(s.development, need, next.label), style = MaterialTheme.typography.labelSmall)
-                    }
-                    Text("Founded ${dayLabel(s.foundedDay)} · ${s.areaDays} visit-days · ${s.exploredCells} blocks explored", style = MaterialTheme.typography.bodySmall)
-                    Text("Liveliness %.0f%% · last visit ${dayLabel(s.lastAreaDay)}".format(s.liveliness * 100), style = MaterialTheme.typography.bodySmall)
-                    if (s.projects.isNotEmpty()) {
-                        Text(
-                            "Built: " + s.projects.mapNotNull { Projects.byId(it)?.name }.joinToString() + " · Prosperity ${s.prosperity}",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
-                        )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(where(s.position), style = MaterialTheme.typography.titleSmall)
+                        Text("last ${dayLabel(s.lastAreaDay)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                     }
                 }
             }
         }
-
-        val monuments = w?.monuments.orEmpty()
-        if (monuments.isNotEmpty()) {
-            item { SectionTitle("Monuments at your capital") }
-            items(monuments, key = { "mo-" + it.id }) { m ->
-                val capital = w?.settlements?.firstOrNull { it.isCapital }
-                HitRow(m.name, "${m.description} · ${dayLabel(m.day)}", R.drawable.oad_medal_monument) { capital?.let { go(it.position) } }
-            }
-        }
-
-        val waypoints = w?.exploredAreas.orEmpty().filter { !it.settled }.sortedByDescending { it.lastVisitDay }
-        if (waypoints.isNotEmpty()) {
-            item { SectionTitle("Waypoints") }
-            items(waypoints, key = { "wp-" + it.id }) { a ->
-                HitRow(a.name, "${a.cells} block${if (a.cells == 1) "" else "s"} · last ${dayLabel(a.lastVisitDay)}", R.drawable.oad_medal_waypoint) { go(a.center) }
-            }
-        }
-
-        val stones = w?.waystones.orEmpty().sortedByDescending { it.foundDay }
-        if (stones.isNotEmpty()) {
-            item { SectionTitle("Waystones") }
-            items(stones, key = { "ws-" + it.id }) { st ->
-                val kind = if (st.great) "Great waystone" else "Waystone"
-                HitRow(
-                    "$kind · ${w!!.regionName(st.regionId)}",
-                    "Found ${dayLabel(st.foundDay)} · ${st.trips} arrival${if (st.trips == 1) "" else "s"}", if (st.great) R.drawable.medal_waystone_great else R.drawable.medal_waystone,
-                ) { go(st.center) }
-            }
-            val links = w!!.portals
-            if (links.isNotEmpty()) item {
-                links.forEach { l ->
-                    Text("Portal: ${w.regionName(l.regionA)} ↔ ${w.regionName(l.regionB)} · ${l.trips} trip${if (l.trips == 1) "" else "s"}", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
-
-        val places = w?.landmarks.orEmpty().sortedByDescending { it.visitDays }
-        if (places.isNotEmpty()) {
-            item { SectionTitle("Places discovered") }
-            items(places, key = { "lm-" + it.id }) { l ->
-                val hit = index.firstOrNull { it.kind == "Place" && it.name == l.name }
-                HitRow(
-                    l.name, "${l.kind.replace('_', ' ')} · ${l.visitDays} visit-day${if (l.visitDays == 1) "" else "s"} · since ${dayLabel(l.discoveredDay)}" +
-                        (w?.abundance?.get(l.id)?.let { " · " + abundanceLabel(it) } ?: ""),
-                    MapIcons.drawable(MapIcons.placeIcon(l.kind)),
-                ) { hit?.let { go(it.where) } }
+        val campable = w?.exploredAreas.orEmpty().filter { !it.settled }.sortedBy { dist(it.center) }.take(5)
+        if (campable.isNotEmpty()) {
+            item { SectionTitle("Places you could camp") }
+            item { Text("Spend a night in one of these and a camp is founded there.", style = MaterialTheme.typography.bodySmall) }
+            items(campable, key = { "camp-" + it.id }) { a ->
+                HitRow(a.name, where(a.center) + " · last walked ${dayLabel(a.lastVisitDay)}", R.drawable.oad_medal_waypoint) { go(a.center) }
             }
         }
         item { Spacer(Modifier.height(24.dp)) }

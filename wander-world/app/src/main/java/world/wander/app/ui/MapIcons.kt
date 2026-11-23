@@ -55,10 +55,26 @@ object MapIcons {
         "bldg_lighthouse" to R.drawable.oad_medal_bldg_lighthouse, "bldg_walls" to R.drawable.oad_medal_bldg_walls,
         "bldg_great_hall" to R.drawable.oad_medal_bldg_great_hall,
         "ground_farm" to R.drawable.oad_ground_farm,
+        // 0.13 rare looks (encounters and feats)
+        "banner_ironbound" to R.drawable.banner_ironbound, "banner_spring" to R.drawable.banner_spring,
+        "banner_summer" to R.drawable.banner_summer, "banner_harvest" to R.drawable.banner_harvest,
+        "banner_winter" to R.drawable.banner_winter, "banner_tidewalker" to R.drawable.banner_tidewalker,
+        "banner_evergreen" to R.drawable.banner_evergreen, "banner_wonder_1" to R.drawable.banner_wonder_1,
+        "banner_wonder_2" to R.drawable.banner_wonder_2, "banner_wonder_3" to R.drawable.banner_wonder_3,
+        "banner_wonder_4" to R.drawable.banner_wonder_4,
+        "wanderer_patchwork" to R.drawable.sprite_wanderer_patchwork, "wanderer_paddle_patchwork" to R.drawable.sprite_wanderer_paddle_patchwork,
+        "wanderer_pathfinder" to R.drawable.sprite_wanderer_pathfinder, "wanderer_paddle_pathfinder" to R.drawable.sprite_wanderer_paddle_pathfinder,
+        "wanderer_wayfarer" to R.drawable.sprite_wanderer_wayfarer, "wanderer_paddle_wayfarer" to R.drawable.sprite_wanderer_paddle_wayfarer,
+        "wanderer_laurel" to R.drawable.sprite_wanderer_laurel, "wanderer_paddle_laurel" to R.drawable.sprite_wanderer_paddle_laurel,
+        "wanderer_cartographer" to R.drawable.sprite_wanderer_cartographer, "wanderer_paddle_cartographer" to R.drawable.sprite_wanderer_paddle_cartographer,
     )
 
-    val BANNERS = listOf("crimson", "royal", "forest", "gold", "violet")
-    val OUTFITS = listOf("crimson", "navy", "ochre", "hat")
+    /** The figure standing on the map for each kind of encounter (0.13; reusing the wanderer and trader art). */
+    val ENCOUNTER_ICONS = mapOf("bard" to "wanderer_hat", "courier" to "wanderer_navy", "lost_pet" to "wanderer_wayfarer",
+        "peddler" to "wanderer_patchwork", "collector" to "trader", "festival" to "trader")
+
+    val BANNERS = listOf("crimson", "royal", "forest", "gold", "violet") + world.wander.engine.Story.RARE_BANNERS
+    val OUTFITS = listOf("crimson", "navy", "ochre", "hat") + world.wander.engine.Story.RARE_OUTFITS
 
     val WOODED = setOf("wood", "forest", "nature_reserve", "wetland", "heath")
     val GREEN = setOf("park", "garden", "common", "recreation_ground", "village_green", "meadow", "grassland",

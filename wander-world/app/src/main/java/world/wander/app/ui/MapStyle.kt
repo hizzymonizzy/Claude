@@ -47,6 +47,7 @@ import org.maplibre.android.style.layers.PropertyFactory.linePattern
 import org.maplibre.android.style.layers.PropertyFactory.fillColor
 import org.maplibre.android.style.layers.PropertyFactory.fillOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
+import org.maplibre.android.style.layers.PropertyFactory.iconOffset
 import org.maplibre.android.style.layers.PropertyFactory.fillOutlineColor
 import org.maplibre.android.style.layers.PropertyFactory.lineColor
 import org.maplibre.android.style.layers.PropertyFactory.lineDasharray
@@ -88,13 +89,13 @@ internal val OUR_LAYERS = listOf(
     "sand-places", "water-route", "water-light",
     "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
     "resource-rings", "resource-icons", "me",
-    "heat-hood", "heat-block", "heat-county", "region-links", "region-nodes", "buildings", "trader",
+    "heat-hood", "heat-block", "heat-county", "region-links", "region-nodes", "buildings", "trader", "encounters", "capital-banner",
 )
 
 internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     val empty = FeatureCollection.fromFeatures(emptyList())
     for (id in listOf("explored", "green-places", "sand-places", "shore", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "resources", "me",
-        "heat-block", "heat-hood", "heat-county", "region-nodes", "region-links", "buildings", "trader")) s.addSource(GeoJsonSource(id, empty))
+        "heat-block", "heat-hood", "heat-county", "region-nodes", "region-links", "buildings", "trader", "encounters", "capital-banner")) s.addSource(GeoJsonSource(id, empty))
 
     // Explored ground: real terrain texture (0 A.D. grass / forest floor) laid OVER the base map's streets and
     // buildings, so inside explored land every street is drawn by its status (walked: trail…avenue; unwalked:
@@ -346,6 +347,20 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.2f)), textAllowOverlap(true),
         ).apply { maxZoom = 8.5f },
     ) }
+    guard(problems, "capital-banner") { s.addLayer(
+        SymbolLayer("capital-banner", "capital-banner").withProperties(
+            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            iconOffset(arrayOf(-60f, 40f)), iconSize(interpolate(linear(), zoom(), stop(8, 0.45f), stop(15, 0.7f), stop(17, 0.9f))),
+        ).apply { minZoom = 8.5f },
+    ) }
+    guard(problems, "encounters") { s.addLayer(
+        SymbolLayer("encounters", "encounters").withProperties(
+            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+            iconSize(interpolate(linear(), zoom(), stop(10, 0.3f), stop(16, 0.5f), stop(18, 0.65f))),
+            textField(get("label")), textFont(FONT), textSize(12f), textColor("#6B4A1F"), textHaloColor("#F4ECD8"), textHaloWidth(1.5f),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.3f)), textAllowOverlap(true), textOptional(true),
+        ),
+    ) }
     // Resource nodes: fixed spots on places and streets, drawn in the map so they stay pinned to the ground.
     // Ring: gold = fresh, bright gold + thicker = the one the arrow points to, green = you're in its zone,
     // grey-green with a tick = gathered today, faded = thinned.
@@ -406,12 +421,7 @@ internal fun addSprites(s: Style, context: Context) {
         val medal = loaded["medal_tier_$tier"] ?: continue
         s.addImage("medal_tier_${tier}_cap", capitalMedal(medal, star, null))
         if (monument != null) s.addImage("medal_tier_${tier}_capmon", capitalMedal(medal, star, monument))
-        // The capital with a banner you've bought flying from it.
-        for (b in MapIcons.BANNERS) {
-            val flag = loaded["banner_$b"] ?: continue
-            s.addImage("medal_tier_${tier}_cap_b$b", capitalMedal(medal, star, null, flag))
-            if (monument != null) s.addImage("medal_tier_${tier}_capmon_b$b", capitalMedal(medal, star, monument, flag))
-        }
+        // 0.13: the worn banner is its own symbol beside the capital (layer "capital-banner"), not baked in per tier.
     }
 }
 
