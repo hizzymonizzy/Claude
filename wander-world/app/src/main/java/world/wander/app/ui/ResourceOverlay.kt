@@ -122,7 +122,7 @@ fun ResourcePointers(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(Modifier.size(52.dp, 34.dp), contentAlignment = Alignment.Center) {
-                    Surface(shape = CircleShape, color = Color(0xE6F4ECD8), border = BorderStroke(2.dp, Color(0xFF8A6A3A))) {
+                    Surface(shape = HexShape, color = Color(0xE6F4ECD8), border = BorderStroke(3.dp, Color(0xFFD9A520))) {
                         Image(ImageBitmap.imageResource(icon), contentDescription = t.resource, filterQuality = FilterQuality.Medium, modifier = Modifier.padding(3.dp).size(22.dp))
                     }
                     Text(
@@ -178,4 +178,15 @@ fun NodeDetailsCard(n: ResourceTarget, onGo: () -> Unit, onClose: () -> Unit) {
             }
         }
     }
+}
+
+/** A pointy-top hexagon, the shape of every map badge since 0.13. */
+internal val HexShape = androidx.compose.foundation.shape.GenericShape { size, _ ->
+    val cx = size.width / 2; val cy = size.height / 2; val r = minOf(size.width, size.height) / 2
+    for (i in 0 until 6) {
+        val a = Math.toRadians(60.0 * i - 90.0)
+        val x = cx + r * Math.cos(a).toFloat(); val y = cy + r * Math.sin(a).toFloat()
+        if (i == 0) moveTo(x, y) else lineTo(x, y)
+    }
+    close()
 }

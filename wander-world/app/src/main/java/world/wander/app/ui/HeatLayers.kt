@@ -101,7 +101,7 @@ object HeatLayers {
             val at = best?.position ?: r.center
             Feature.fromGeometry(Point.fromLngLat(at.lng, at.lat)).apply {
                 val tier = best?.tier?.ordinal ?: 0
-                addStringProperty("icon", "medal_tier_$tier" + if (best?.isCapital == true) "_cap" else "")
+                addStringProperty("icon", "hex_tier_$tier" + if (best?.isCapital == true) "_cap" else "")
                 addNumberProperty("tier", tier)
                 addStringProperty("label", r.name + "\n" + (best?.tier?.label ?: "Waypoints"))
             }

@@ -90,12 +90,12 @@ class MapLayersBuilderTest {
     @Test
     fun theCapitalGetsOneMedallionWithItsBadgesBakedIn() {
         fun icon(w: WorldState) = MapLayersBuilder.settlements(w).features()!!.single().getStringProperty("icon")
-        assertEquals("medal_tier_2", icon(world(listOf(settlement(capital = false)))))
-        assertEquals("medal_tier_2_cap", icon(world(listOf(settlement(capital = true)))))
+        assertEquals("hex_tier_2", icon(world(listOf(settlement(capital = false)))))
+        assertEquals("hex_tier_2_cap", icon(world(listOf(settlement(capital = true)))))
         val withMonument = world(listOf(settlement(capital = true)), monuments = listOf(MonumentState("day_5k", "x", "y", 0)))
-        assertEquals("medal_tier_2_capmon", icon(withMonument))
+        assertEquals("hex_tier_2_capmon", icon(withMonument))
         // Every icon the map asks for exists (base images, plus the capital variants made at load time).
-        for (t in 0..6) assertTrue(MapIcons.images.containsKey("medal_tier_$t"))
+        for (t in 0..6) for (v in listOf("", "_cap", "_capmon")) assertTrue(MapIcons.images.containsKey("hex_tier_$t$v"))
     }
 
     @Test
@@ -141,10 +141,10 @@ class MapLayersBuilderTest {
         val w = world(listOf(town))
         val bldgs = MapLayersBuilder.villageBuildings(w).features()!!
         val icons = bldgs.map { it.getStringProperty("icon") }.toSet()
-        assertEquals(setOf("bldg_meeting_hall", "bldg_well", "bldg_market"), icons)
+        assertEquals(setOf("bldg_hex_meeting_hall", "bldg_hex_well", "bldg_hex_market"), icons)
         icons.forEach { assertTrue(it, MapIcons.images.containsKey(it)) }
-        assertEquals("market:a", bldgs.single { it.getStringProperty("icon") == "bldg_market" }.getStringProperty("id"))
-        assertEquals("medal_tier_3_cap", MapLayersBuilder.settlements(w, "crimson").features()!!.single().getStringProperty("icon"))
+        assertEquals("market:a", bldgs.single { it.getStringProperty("icon") == "bldg_hex_market" }.getStringProperty("id"))
+        assertEquals("hex_tier_3_cap", MapLayersBuilder.settlements(w, "crimson").features()!!.single().getStringProperty("icon"))
         assertEquals("banner_crimson", MapLayersBuilder.capitalBanner(w, "crimson").features()!!.single().getStringProperty("icon"))
         // 0.12: the village is paved hexes (block size) on explored ground only; walked hexes carry their heat step.
         val half = org.locationtech.jts.geom.GeometryFactory().createPolygon(listOf(at(-500.0, -500.0), at(0.0, -500.0), at(0.0, 500.0), at(-500.0, 500.0), at(-500.0, -500.0))

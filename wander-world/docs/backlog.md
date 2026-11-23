@@ -69,39 +69,39 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 ## Hex icons and developed cells (player, 2026-11-23; held for more feedback)
 | Item | Why | Status |
 |---|---|---|
-| Icons about 2× (buildings, banner, trader, resources), still easing down when zoomed out | Fire, banner and icons read at about half the size they should | agreed |
-| Buildings claim a block hex around their settlement and draw it as a developed cell (own ground + building art; upgrades change it) — at close zoom only, badges further out | "Unique cell development" | agreed |
-| Settlement medallions become hex-shaped | Consistent with the hex map | agreed |
-| Resource nodes and edge arrows as hex badges (ring colours become hex outlines) | Consistent with the hex map | agreed |
+| Icons about 2× (buildings, banner, trader, resources), still easing down when zoomed out | Fire, banner and icons read at about half the size they should | shipped 0.13.0 |
+| Buildings claim a block hex around their settlement and draw it as a developed cell (own ground + building art; upgrades change it) — at close zoom only, badges further out | "Unique cell development" | shipped 0.13.0 |
+| Settlement medallions become hex-shaped | Consistent with the hex map | shipped 0.13.0 |
+| Resource nodes and edge arrows as hex badges (ring colours become hex outlines) | Consistent with the hex map | shipped 0.13.0 |
 
 ## Shop, JRPG-style (player, 2026-11-23; held for more feedback; mockup docs/art/mockup_shop.png)
 | Item | Why | Status |
 |---|---|---|
-| ✕ close top right; Wares / Looks tabs; framed parchment windows with a ▶ cursor on the selected row | JRPG menu feel; close at the bottom was awkward | agreed |
-| No rules text: prices, totals and greyed buttons show the mechanics (2×, market hall, weekly climb) | Brown mechanics text was overkill | agreed |
-| Quantity: − / + stepper, tap the number to type it (pad with Max), total in gold, Buy | Buy any amount, not just 1 or 5 | agreed |
-| One-line flavour text for each item (MMORPG-tooltip tone); none elsewhere for now | Charm; future NPC talk may use the same voice | agreed |
-| Merchant greeting (one or two lines) | Life in the shop | agreed |
-| Greeting mentions today's weather | Fun; needs a weather source (see question) | open: needs a new host or an offline stand-in |
-| Occasional trade request ("Wanted: 3 stone → a metal ingot") | Gives spare resources a use | proposed: rules to agree |
+| ✕ close top right; Wares / Looks tabs; framed parchment windows with a ▶ cursor on the selected row | JRPG menu feel; close at the bottom was awkward | shipped 0.13.0 |
+| No rules text: prices, totals and greyed buttons show the mechanics (2×, market hall, weekly climb) | Brown mechanics text was overkill | shipped 0.13.0 |
+| Quantity: − / + stepper, tap the number to type it (pad with Max), total in gold, Buy | Buy any amount, not just 1 or 5 | shipped 0.13.0 |
+| One-line flavour text for each item (MMORPG-tooltip tone); none elsewhere for now | Charm; future NPC talk may use the same voice | shipped 0.13.0 |
+| Merchant greeting (one or two lines) | Life in the shop | shipped 0.13.0 |
+| Greeting mentions today's weather | Fun; needs a weather source (see question) | shipped 0.13.0 |
+| Occasional trade request ("Wanted: 3 stone → a metal ingot") | Gives spare resources a use | shipped 0.13.0 |
 
 ## Development story, encounters, Atlas (player, 2026-11-23; held; docs/development-story.md, mockup_atlas.png)
 | Item | Why | Status |
 |---|---|---|
-| Something to build at every tier (3–5 projects each, a Wonder at the capital), each a developed hex with a small perk | Requests stopped after the campfire: a Camp had only one project | agreed (design for review) |
-| Random encounters anywhere after walks (~1 a week, more with new ground; never a penalty) | Life and surprises | agreed |
-| Two look pools: shop (bought) and rare (encounters and feats only, never sold) | Rare things should feel earned | agreed |
-| Atlas: settlements only for now; capital card with next step; distance, direction, Go; sort chips; "becoming a settlement" | Wayfinding; long lists weren't useful | agreed |
-| Merge a new waystone into an existing one within ~1 km (count arrivals); merge existing duplicates | Five separate waystones in one area | agreed |
+| Something to build at every tier (3–5 projects each, a Wonder at the capital), each a developed hex with a small perk | Requests stopped after the campfire: a Camp had only one project | shipped 0.13.0 |
+| Random encounters anywhere after walks (~1 a week, more with new ground; never a penalty) | Life and surprises | shipped 0.13.0 |
+| Two look pools: shop (bought) and rare (encounters and feats only, never sold) | Rare things should feel earned | shipped 0.13.0 |
+| Atlas: settlements only for now; capital card with next step; distance, direction, Go; sort chips; "becoming a settlement" | Wayfinding; long lists weren't useful | shipped 0.13.0 |
+| Merge a new waystone into an existing one within ~1 km (count arrivals); merge existing duplicates | Five separate waystones in one area | shipped 0.13.0 |
 
 ## Camps, character sheet, achievements, settings (player, 2026-11-23; held)
 | Item | Why | Status |
 |---|---|---|
-| Camps founded only by staying overnight (a 3 am location check in the area, away from home); maybe a voluntary "Pitch camp here" | "I actually camp there then"; 3 walking days was too automatic | agreed in principle; overnight-only vs + pitch camp open |
-| Goal screen as a character sheet: wanderer, title and level, this week's quest, stats, week history | Feels like a game, not a chart | proposed |
-| Target goal developed: named bands (Stroller 150 … Pathfinder 300), what moves it next, maybe choose your band | Goal felt opaque | proposed; auto vs chosen open |
-| Achievements (ladders: km, places, roads, hexes, settlements, waystones, paddling, streaks) separate from quests; some give rare looks; monuments fold in | Long-term goals | proposed |
-| Settings paginated with tabs (Tracking, Health, Map, Data & privacy, Credits) | Long page; credits deserve their own tab | agreed |
-| Bug: Goal screen shows pre-0.12 rules text and a rolling-7-day total that disagrees with the map card | Outdated since ADR 0008/0009 | to fix |
-| Check: the home region is now named after a waypoint area instead of the capital's area | Diagnostics 2026-11-23 | to investigate |
+| Camps founded only by staying overnight (a 3 am location check in the area, away from home); maybe a voluntary "Pitch camp here" | "I actually camp there then"; 3 walking days was too automatic | shipped 0.13.0 |
+| Goal screen as a character sheet: wanderer, title and level, this week's quest, stats, week history | Feels like a game, not a chart | shipped 0.13.0 |
+| Target goal developed: named bands (Stroller 150 … Pathfinder 300), what moves it next, maybe choose your band | Goal felt opaque | shipped 0.13.0 |
+| Achievements (ladders: km, places, roads, hexes, settlements, waystones, paddling, streaks) separate from quests; some give rare looks; monuments fold in | Long-term goals | shipped 0.13.0 |
+| Settings paginated with tabs (Tracking, Health, Map, Data & privacy, Credits) | Long page; credits deserve their own tab | shipped 0.13.0 |
+| Bug: Goal screen shows pre-0.12 rules text and a rolling-7-day total that disagrees with the map card | Outdated since ADR 0008/0009 | shipped 0.13.0 |
+| Check: the home region is now named after a waypoint area instead of the capital's area | Diagnostics 2026-11-23 | shipped 0.13.0 |
 

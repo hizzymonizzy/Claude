@@ -216,6 +216,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             "places" to update("landmarks") { MapLayersBuilder.landmarkLabels(layers, kinds) },
             "settlements" to update("settlements") { MapLayersBuilder.settlements(world, wornBanner) },
             "buildings" to update("buildings") { MapLayersBuilder.villageBuildings(world) },
+            "cells" to update("building-cells") { MapLayersBuilder.buildingCellPolygons(world) },
             "trader" to update("trader") { MapLayersBuilder.trader(world) },
             "encounters" to update("encounters") { MapLayersBuilder.encounters(world) },
             "banner" to update("capital-banner") { MapLayersBuilder.capitalBanner(world, wornBanner) },

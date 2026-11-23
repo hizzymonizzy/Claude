@@ -64,8 +64,9 @@ choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/p
     `Snapshot.kt` builds the immutable `WorldState`.
   - `TrackProcessor` (GPS filtering, pottering, water detection), `MapMatcher` (HMM map matching),
     `Economy.kt` (yields, projects, monuments, harvest thinning), `Resources.kt` (resource nodes and pointers),
-    `Dispatch.kt` (daily text). `GatheringSimulationTest` walks through nodes end to end; extend it when gathering
-    or pointers change.
+    `Dispatch.kt` (daily text), `Story.kt` + `sim/Story.kt` (encounters, trader requests, rare looks, achievements).
+    `GatheringSimulationTest`, `CoolingSimulationTest` and `StorySimulationTest` simulate end to end; extend them when
+    gathering, cooling or the story change.
   - Tunable numbers live in `WorldParams` / `HarvestParams`.
 - `app/` (`world.wander.app`): Android (Compose, MapLibre, Room, WorkManager, Health Connect, H3).
   - `data/Repository.kt` is the hub (map data, processing, rebuild); `Diagnostics.kt` and `ResourceSearch.kt` hold
@@ -77,12 +78,15 @@ choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/p
     - `ui/MapStyle.kt` defines every source, layer and sprite.
     - `ui/MapLayersBuilder.kt` turns the world into GeoJSON; `ui/HeatLayers.kt` builds the heat hexes and region nodes.
     - `ui/MapIcons.kt` is the single registry of images.
+  - Screens: `ui/Shop.kt` (shop and encounter cards), `ui/CharacterScreen.kt` (the "You" tab), `ui/Screens.kt` (Dispatch,
+    Atlas), `ui/SettingsScreen.kt` (tabs). Workers: `work/DailyWorker.kt`, `ProcessWorker.kt`, `NightWorker.kt` (3 am camp check).
   - `ui/Legend.kt` is generated.
 - `tools/`:
   - `check.sh`: the gate.
   - `policy/`: allowed permissions, exported components and hosts.
   - `security_scan.sh`: full third-party inventory.
-  - `asset_intake.py`, `build_0ad_assets.py`, `gen_sprites.py`, `gen_legend.py`.
+  - `asset_intake.py`, `build_0ad_assets.py`, `gen_sprites.py`, `gen_hex_icons.py`, `gen_legend.py`; design mockups in
+    `tools/mockups/`.
 
 ## Commands (from `wander-world/`)
 ```

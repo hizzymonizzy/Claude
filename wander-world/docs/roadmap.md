@@ -71,7 +71,7 @@ outline; rebuild time on a year of synthetic walks; map frame time on the Fold a
 **Order of work** (each step passes `tools/check.sh`): B (cooling, engine and simulation), A, C, then the remaining D
 items. One APK at the end. Settlement cooling confirmed by the player (2026-11-21).
 
-## 0.13 Villages with a story (agreed 2026-11-23, building)
+## 0.13 Villages with a story (shipped 0.13.0)
 Everything held since 0.12.2 (backlog sections of 2026-11-23), in this order, one APK at the end:
 1. **Health goal** (research report `docs/research/reports/`): the 150-minute guideline decides cooling (<75 ¼ step,
    75–119 ⅛, 120–149 1/40, 150+ holds); the adaptive goal only decides warming (at or over it: +¼ step). Goal moves in

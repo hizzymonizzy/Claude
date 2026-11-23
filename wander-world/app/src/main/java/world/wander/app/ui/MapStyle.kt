@@ -5,12 +5,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.RectF
 import androidx.compose.foundation.layout.height
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression.get
 import org.maplibre.android.style.expressions.Expression.interpolate
 import org.maplibre.android.style.expressions.Expression.linear
+import org.maplibre.android.style.expressions.Expression.exponential
 import org.maplibre.android.style.expressions.Expression.literal
 import org.maplibre.android.style.expressions.Expression.match
 import org.maplibre.android.style.expressions.Expression.stop
@@ -89,13 +89,13 @@ internal val OUR_LAYERS = listOf(
     "sand-places", "water-route", "water-light",
     "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
     "resource-rings", "resource-icons", "me",
-    "heat-hood", "heat-block", "heat-county", "region-links", "region-nodes", "buildings", "trader", "encounters", "capital-banner",
+    "heat-hood", "heat-block", "heat-county", "region-links", "region-nodes", "buildings", "trader", "encounters", "capital-banner", "building-cells", "building-art",
 )
 
 internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     val empty = FeatureCollection.fromFeatures(emptyList())
     for (id in listOf("explored", "green-places", "sand-places", "shore", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "resources", "me",
-        "heat-block", "heat-hood", "heat-county", "region-nodes", "region-links", "buildings", "trader", "encounters", "capital-banner")) s.addSource(GeoJsonSource(id, empty))
+        "heat-block", "heat-hood", "heat-county", "region-nodes", "region-links", "buildings", "trader", "encounters", "capital-banner", "building-cells")) s.addSource(GeoJsonSource(id, empty))
 
     // Explored ground: real terrain texture (0 A.D. grass / forest floor) laid OVER the base map's streets and
     // buildings, so inside explored land every street is drawn by its status (walked: trail…avenue; unwalked:
@@ -311,7 +311,8 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     s.addLayer(
         SymbolLayer("settlements", "settlements").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(false), iconPadding(6f),
-            iconSize(interpolate(linear(), zoom(), stop(8, 0.34f), stop(12, 0.42f), stop(15, 0.5f), stop(17, 0.62f))),
+            // 0.13: hex settlements (tools/gen_hex_icons.py), about twice the old size.
+            iconSize(interpolate(linear(), zoom(), stop(8, 0.55f), stop(12, 0.75f), stop(15, 0.95f), stop(17, 1.2f))),
             iconAnchor(Property.ICON_ANCHOR_CENTER),
         ).apply { minZoom = 8.5f },
     )
@@ -319,21 +320,31 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
         SymbolLayer("settlement-labels", "settlements").withProperties(
             textField(get("label")), textFont(FONT), textSize(interpolate(linear(), zoom(), stop(10, 11f), stop(16, 15f))),
             textColor(INK), textHaloColor("#F4ECD8"), textHaloWidth(2f), textAllowOverlap(true), textIgnorePlacement(false),
-            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.4f)),
+            textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 3.4f)),
         ).apply { minZoom = 8.5f },
     ) }
     // Buildings at each settlement (latest of each upgrade chain); a market opens the shop when tapped.
+    // 0.13: framed hex badges further out; up close each building is its own developed hex on the ground, drawn to
+    // the hex's real size (art grows ×2 per zoom level, like the map).
     guard(problems, "buildings") { s.addLayer(
         SymbolLayer("buildings", "buildings").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
-            iconSize(interpolate(linear(), zoom(), stop(12, 0.0f), stop(13, 0.22f), stop(15, 0.34f), stop(17, 0.5f))),
-        ),
+            iconSize(interpolate(linear(), zoom(), stop(12, 0.0f), stop(13, 0.45f), stop(15, 0.65f), stop(16.5f, 0.8f))),
+        ).apply { maxZoom = 16.5f },
     ) }
+    guard(problems, "building-cells") {
+        s.addLayer(FillLayer("building-cells", "building-cells").withProperties(fillPattern(get("pattern")), fillOpacity(1f))
+            .apply { minZoom = 16.5f })
+        s.addLayer(SymbolLayer("building-art", "buildings").withProperties(
+            iconImage(get("art")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
+            iconSize(interpolate(exponential(2f), zoom(), stop(16.5f, 0.26f), stop(20, 2.9f))),
+        ).apply { minZoom = 16.5f })
+    }
     // The travelling trader, by the village you visited last. Tap to trade.
     guard(problems, "trader") { s.addLayer(
         SymbolLayer("trader", "trader").withProperties(
             iconImage("trader"), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
-            iconSize(interpolate(linear(), zoom(), stop(10, 0.3f), stop(16, 0.45f), stop(18, 0.6f))),
+            iconSize(interpolate(linear(), zoom(), stop(10, 0.55f), stop(16, 0.9f), stop(18, 1.2f))),
             textField("Trader"), textFont(FONT), textSize(11f), textColor("#6B4A1F"), textHaloColor("#F4ECD8"), textHaloWidth(1.5f),
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.3f)), textAllowOverlap(true),
             textOptional(true),
@@ -350,13 +361,13 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     guard(problems, "capital-banner") { s.addLayer(
         SymbolLayer("capital-banner", "capital-banner").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
-            iconOffset(arrayOf(-60f, 40f)), iconSize(interpolate(linear(), zoom(), stop(8, 0.45f), stop(15, 0.7f), stop(17, 0.9f))),
+            iconOffset(arrayOf(-60f, 40f)), iconSize(interpolate(linear(), zoom(), stop(8, 0.8f), stop(15, 1.3f), stop(17, 1.7f))),
         ).apply { minZoom = 8.5f },
     ) }
     guard(problems, "encounters") { s.addLayer(
         SymbolLayer("encounters", "encounters").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
-            iconSize(interpolate(linear(), zoom(), stop(10, 0.3f), stop(16, 0.5f), stop(18, 0.65f))),
+            iconSize(interpolate(linear(), zoom(), stop(10, 0.55f), stop(16, 0.9f), stop(18, 1.2f))),
             textField(get("label")), textFont(FONT), textSize(12f), textColor("#6B4A1F"), textHaloColor("#F4ECD8"), textHaloWidth(1.5f),
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 0.3f)), textAllowOverlap(true), textOptional(true),
         ),
@@ -364,35 +375,28 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     // Resource nodes: fixed spots on places and streets, drawn in the map so they stay pinned to the ground.
     // Ring: gold = fresh, bright gold + thicker = the one the arrow points to, green = you're in its zone,
     // grey-green with a tick = gathered today, faded = thinned.
+    // 0.13: a hex frame whose colour is the state (gold best, green in its zone, tan new, pale gathered/thinned).
     guard(problems, "resource-rings") { s.addLayer(
-        CircleLayer("resource-rings", "resources").withProperties(
-            circleColor(match(get("state"), literal("#F4ECD8"), stop("gathered", "#DCE8D2"))),
-            circleOpacity(match(get("state"), literal(0.9f), stop("thinned", 0.5f))),
-            circleStrokeColor(switchCase(
-                eq(get("near"), literal(true)), literal("#3F9D4A"),
-                eq(get("state"), literal("gathered")), literal("#6E8F68"),
-                eq(get("best"), literal(true)), literal("#D9A520"),
-                literal("#B89A5A"),
-            )),
-            circleStrokeWidth(switchCase(eq(get("near"), literal(true)), literal(4f), eq(get("best"), literal(true)), literal(3f), literal(2f))),
-            circleRadius(interpolate(linear(), zoom(), stop(10, 16f), stop(16, 26f))),
+        SymbolLayer("resource-rings", "resources").withProperties(
+            iconImage(get("frame")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
+            iconSize(interpolate(linear(), zoom(), stop(10, 0.75f), stop(16, 1.25f))),
         ),
     ) }
     guard(problems, "resource-icons") { s.addLayer(
         SymbolLayer("resource-icons", "resources").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
-            iconSize(interpolate(linear(), zoom(), stop(10, 0.5f), stop(16, 0.75f))),
+            iconSize(interpolate(linear(), zoom(), stop(10, 0.7f), stop(16, 1.15f))),
             iconOpacity(match(get("state"), literal(1f), stop("gathered", 0.55f), stop("thinned", 0.5f))),
             // State always; the node's name too once you're zoomed in close enough to read it.
             textField(step(zoom(), match(get("state"), literal(""), stop("gathered", "✓"), stop("new", "new")),
                 stop(15, concat(get("name"), literal("\n"), match(get("state"), literal(""), stop("gathered", "✓ gathered"), stop("new", "new"), stop("thinned", "thinned")))))),
-            textFont(FONT), textSize(12f), textOffset(arrayOf(0f, 1.6f)), textColor("#3F6B3A"), textHaloColor("#F4ECD8"), textHaloWidth(1.5f),
+            textFont(FONT), textSize(13f), textOffset(arrayOf(0f, 2.6f)), textColor("#3F6B3A"), textHaloColor("#F4ECD8"), textHaloWidth(1.5f),
             textAnchor(Property.TEXT_ANCHOR_TOP), textAllowOverlap(true),
         ),
     ) }
     s.addLayer(
         SymbolLayer("me", "me").withProperties(
-            iconImage("wanderer"), iconSize(interpolate(linear(), zoom(), stop(10, 0.3f), stop(16, 0.45f), stop(18, 0.6f))),
+            iconImage("wanderer"), iconSize(interpolate(linear(), zoom(), stop(10, 0.45f), stop(16, 0.7f), stop(18, 0.9f))),
             iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
         ),
     )
@@ -414,32 +418,8 @@ internal fun addSprites(s: Style, context: Context) {
         val base = loaded[tex] ?: continue
         for (step in 0..5) s.addImage("heat_${ground}_$step", heatTint(base, step))
     }
-    // Capital medallions with the star (and monument, once raised) baked in, one image per tier.
-    val star = loaded["badge_capital"] ?: return
-    val monument = loaded["medal_monument"]
-    for (tier in 0..6) {
-        val medal = loaded["medal_tier_$tier"] ?: continue
-        s.addImage("medal_tier_${tier}_cap", capitalMedal(medal, star, null))
-        if (monument != null) s.addImage("medal_tier_${tier}_capmon", capitalMedal(medal, star, monument))
-        // 0.13: the worn banner is its own symbol beside the capital (layer "capital-banner"), not baked in per tier.
-    }
-}
-
-/** A settlement medallion with the capital star at its upper right and, if given, a small monument at its upper left. */
-private fun capitalMedal(medal: Bitmap, star: Bitmap, monument: Bitmap?, banner: Bitmap? = null): Bitmap {
-    val pad = 26
-    val out = Bitmap.createBitmap(medal.width + 2 * pad, medal.height + 2 * pad, Bitmap.Config.ARGB_8888)
-    val c = Canvas(out)
-    val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
-    c.drawBitmap(medal, pad.toFloat(), pad.toFloat(), paint)
-    val sz = (medal.width * 0.42f)
-    if (monument != null) c.drawBitmap(monument, null, RectF(2f, 2f, 2f + sz, 2f + sz * monument.height / monument.width), paint)
-    c.drawBitmap(star, null, RectF(out.width - sz - 2f, 2f, out.width - 2f, 2f + sz), paint)
-    if (banner != null) {
-        val bh = medal.height * 0.5f; val bw = bh * banner.width / banner.height
-        c.drawBitmap(banner, null, RectF(2f, out.height - bh - 2f, 2f + bw, out.height - 2f), paint)
-    }
-    return out
+    // 0.13: settlements are pre-made hex images (hex_tier_N[_cap|_capmon], tools/gen_hex_icons.py); the worn banner
+    // is its own symbol beside the capital.
 }
 
 /** The base map's own font stack; text in any other font fails to load and hides the whole layer. */

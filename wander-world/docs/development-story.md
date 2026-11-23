@@ -1,6 +1,13 @@
-# Development story (design for review, 2026-11-23)
+# Development story (built in alpha 0.13.0)
 
-Held with the next package; nothing here is built. Costs are first drafts to tune by simulation.
+Designed 2026-11-23 and built in 0.13.0 with these differences from the draft below:
+- Camps are founded only by spending a night in an area (player's choice), not by 3 walking days.
+- Perks as built: town hall +3 food a walked day (no weekly town request yet); meeting hall +2 food (no second
+  request choice yet); great hall +1 wood and +2 food; signpost shows the way (text only for now); mill boosts shore
+  and field food; water buildings boost paddling food (bridge/lighthouse +25%, pier +50%, harbour ×2).
+- Lantern outfit (walk before sunrise) is replaced by the Wayfarer coat (find 5 waystones): the engine has no time of day.
+- New projects without their own art yet reuse the nearest existing picture.
+- Simulation (StorySimulationTest): 12 encounters in 90 days of walking 5 days a week.
 
 ## 1. How settlements are made and grow
 - **Founding:** an area (a neighbourhood the map names, e.g. "Elm Hollow") becomes a **Camp** once you've spent at

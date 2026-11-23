@@ -145,17 +145,39 @@ object MapLayersBuilder {
 
     /** Buildings at each settlement (the latest of each upgrade chain), around its medallion; markets are tappable. */
     fun villageBuildings(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
-        state?.settlements.orEmpty().flatMap { s ->
-            val shown = world.wander.engine.Projects.shown(s.projects)
-            val r = PLAZA_M[s.tier.ordinal] + 26.0
-            shown.mapIndexed { i, id ->
-                Feature.fromGeometry(around(s.position, 210.0 + i * 360.0 / maxOf(shown.size, 5), r).let { Point.fromLngLat(it.lng, it.lat) }).apply {
-                    addStringProperty("icon", "bldg_$id")
-                    addStringProperty("id", if (id == "market" || id == "market_hall") "market:${s.areaId}" else "bldg:$id")
-                }
+        buildingCells(state).map { (cell, id, areaId) ->
+            val c = Cells.center(cell)
+            Feature.fromGeometry(Point.fromLngLat(c.lng, c.lat)).apply {
+                addStringProperty("icon", "bldg_hex_$id")
+                addStringProperty("art", "cellart_$id")
+                addStringProperty("id", if (id == "market" || id == "market_hall") "market:$areaId" else "bldg:$id")
             }
         },
     )
+
+    /**
+     * Developed hexes (0.13): each building claims a block hex in the second ring around its settlement, spread evenly,
+     * and draws its ground there (packed earth, cobbles or field rows) at close zoom.
+     */
+    fun buildingCellPolygons(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
+        buildingCells(state).map { (cell, id, _) ->
+            val b = Cells.boundary(cell)
+            Feature.fromGeometry(GeoPolygon.fromLngLats(listOf((b + b.first()).map { Point.fromLngLat(it.lng, it.lat) }))).apply {
+                addStringProperty("pattern", when (id) {
+                    "vegetable_patch", "mill" -> "ground_farm"
+                    "campfire", "signpost", "forager_cache", "lean_to", "meeting_hall", "woodshed" -> "road_dirt"
+                    else -> "road_cobble"
+                })
+            }
+        },
+    )
+
+    private fun buildingCells(state: WorldState?): List<Triple<String, String, String>> = state?.settlements.orEmpty().flatMap { s ->
+        val shown = world.wander.engine.Projects.shown(s.projects)
+        if (shown.isEmpty()) return@flatMap emptyList()
+        val ring = Cells.rings(Cells.cellAt(s.position.lat, s.position.lng, Cells.HEAT_RES), 2)[2]
+        shown.mapIndexed { i, id -> Triple(ring[(i * ring.size / maxOf(shown.size, 6)) % ring.size], id, s.areaId) }
+    }
 
     /** The banner you wear, planted beside your capital (0.13). */
     fun capitalBanner(state: WorldState?, banner: String?): FeatureCollection = FeatureCollection.fromFeatures(
@@ -188,6 +210,11 @@ object MapLayersBuilder {
         targets.map { t ->
             Feature.fromGeometry(Point.fromLngLat(t.point.lng, t.point.lat)).apply {
                 addStringProperty("icon", "res_${t.resource}")
+                // 0.13: the ring is a hex frame; its colour is the node's state.
+                addStringProperty("frame", "hexframe_" + when {
+                    t.distanceM <= GATHER_M -> "near"; t.note == "gathered" -> "gathered"; t.best -> "best"
+                    t.note == "thinned" -> "thinned"; t.note == "new" -> "new"; else -> "plain"
+                })
                 addStringProperty("name", t.name)
                 addBooleanProperty("near", t.distanceM <= GATHER_M)
                 addStringProperty("state", t.note)
@@ -215,7 +242,7 @@ object MapLayersBuilder {
                     state?.monuments?.isNotEmpty() == true -> "_capmon"
                     else -> "_cap"
                 }
-                addStringProperty("icon", "medal_tier_${s.tier.ordinal}$badge")
+                addStringProperty("icon", "hex_tier_${s.tier.ordinal}$badge")
                 addNumberProperty("liveliness", s.liveliness)
             }
         },
