@@ -105,3 +105,13 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Bug: Goal screen shows pre-0.12 rules text and a rolling-7-day total that disagrees with the map card | Outdated since ADR 0008/0009 | shipped 0.13.0 |
 | Check: the home region is now named after a waypoint area instead of the capital's area | Diagnostics 2026-11-23 | shipped 0.13.0 |
 
+## Placement and path normalization (player, 2026-11-24; held for more feedback)
+| Item | Why | Status |
+|---|---|---|
+| Worn banner drawn onto the capital hex (one composite for the worn banner, rebuilt when it changes) | Banner drifted away from the capital when zoomed in (fixed screen offset) | agreed |
+| Buildings take hexes touching the settlement's hex (or its outer paved ring), skipping hexes a road crosses; one ring further out only if all six are crossed | Upgrades sat two hexes out, detached from the capital | agreed |
+| Snap to the road: an unmatched stretch that starts and ends on matched roads and stays within 35 m of the street between them credits the street | A connector between two worn roads stayed dashed (GPS drift recorded it as an own path) | agreed (35 m) |
+| Merge own paths: a new stretch within ~20 m of an existing one, same direction, wears it; on beaches limited by depth (narrow < 40 m: one path; deep: within a third of the depth); never beyond ~40 m | Parallel beach paths from different days | agreed |
+| Pointer labels at the screen edge stack instead of overlapping | "530 m · new m · new" overlap | agreed |
+| Diagnostics: per walk, unmatched stretches (count, longest, farthest from a road) | Old logs only give totals (e.g. 43 of 82 points matched), not where | proposed |
+
