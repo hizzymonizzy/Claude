@@ -126,4 +126,5 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Atlas: remove "Places you could camp"; camps appear once you've slept there; a camp's history lists its nights | The list was odd | agreed |
 | Request card: drop the trader line; show the building's perk instead of "+1 prosperity" | Trader line unnecessary; prosperity meaningless | agreed |
 | Atlas uses hex settlement art; settlement row layout fixed (distance and last visit no longer overlap the bar); capital card as in the mockup | Screenshot 2026-11-25 | proposed |
+| Night check at 3 am **local to the zone you're in**: schedule each check one night at a time for the next local 3 am; reschedule when the phone's time zone changes; credit the stay to the local evening before; log time and zone | International travel: today's 24-hour repeat stays on home time | agreed |
 
