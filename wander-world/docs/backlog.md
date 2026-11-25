@@ -115,3 +115,15 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Pointer labels at the screen edge stack instead of overlapping | "530 m · new m · new" overlap | agreed |
 | Diagnostics: per walk, unmatched stretches (count, longest, farthest from a road) | Old logs only give totals (e.g. 43 of 82 points matched), not where | proposed |
 
+## Camps by nights, Atlas tidy-up (player, 2026-11-25; held for more feedback)
+| Item | Why | Status |
+|---|---|---|
+| A camp is pitched where you spend a night (not one per area): a night within ~300 m of a camp counts toward it; two spots in one area make two camps | "A camp would be anywhere I have spent an evening" | agreed |
+| Camps grow by nights stayed, like roads by walked days: 1 Camp, 3 Hamlet, 10 Village, 30 Town, 100 City (Metropolis capital only); weekly cooling and floors as now | "Staying nights should grow camps like walking grows roads" | agreed (open: should walking nearby also count, e.g. half a night?) |
+| Camps never merge; each asks for and builds its own projects | Areas develop differently | agreed |
+| The capital keeps growing from walking days at home (nights at home don't count) | Otherwise sleeping at home would grow it | proposed |
+| Camp names from the nearest named place ("Camp at Oakdale Park"), else area name + number | Several camps per area need names | proposed |
+| Atlas: remove "Places you could camp"; camps appear once you've slept there; a camp's history lists its nights | The list was odd | agreed |
+| Request card: drop the trader line; show the building's perk instead of "+1 prosperity" | Trader line unnecessary; prosperity meaningless | agreed |
+| Atlas uses hex settlement art; settlement row layout fixed (distance and last visit no longer overlap the bar); capital card as in the mockup | Screenshot 2026-11-25 | proposed |
+
