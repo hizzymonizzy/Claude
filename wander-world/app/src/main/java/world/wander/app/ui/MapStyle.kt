@@ -41,6 +41,8 @@ import org.maplibre.android.style.expressions.Expression.switchCase
 import org.maplibre.android.style.expressions.Expression.concat
 import org.maplibre.android.style.expressions.Expression.step
 import org.maplibre.android.style.layers.PropertyFactory.lineBlur
+import org.maplibre.android.style.layers.PropertyFactory.symbolSpacing
+import org.maplibre.android.style.layers.PropertyFactory.iconRotationAlignment
 import org.maplibre.android.style.layers.PropertyFactory.visibility
 import org.maplibre.android.style.layers.PropertyFactory.textOptional
 import org.maplibre.android.style.layers.PropertyFactory.linePattern
@@ -84,9 +86,9 @@ internal const val INK = "#5B4636"
 internal fun Style.source(id: String): GeoJsonSource? = getSourceAs(id)
 
 internal val OUR_LAYERS = listOf(
-    "explored", "green-places", "shore", "water-over", "fog", "fog-edge", "peek-edge", "peek", "roads-edge", "roads-trail-edge", "roads-trail", "roads-dirt", "roads-cobble",
-    "roads-trees-l", "roads-trees-r", "wild-1", "wild-2", "wild-3", "wild-gravel", "wild-cairns-l", "wild-cairns-r",
-    "sand-places", "water-route", "water-light",
+    "explored", "green-places", "shore", "water-over", "fog", "fog-edge", "peek-edge", "peek", "roads-trail-edge", "roads-trail", "roads-dirt",
+    "roads-lane-edge", "roads-rut-l", "roads-cobble-4", "roads-cobble-5", "roads-trees", "wild-1", "wild-2", "wild-3", "wild-gravel", "wild-cairns",
+    "sand-places", "water-route-3", "water-light-1", "water-buoys",
     "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
     "resource-rings", "resource-icons", "me",
     "heat-hood", "heat-block", "heat-county", "region-links", "region-nodes", "buildings", "trader", "encounters", "building-cells", "building-art",
@@ -151,129 +153,85 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
         // 0.12: light dashes with a dark edge so they read on grass (the old muted brown disappeared on it).
         // Dash lengths scale with line width, so the top dashes are lengthened to line up with the edge's.
         LineLayer("peek-edge", "peek").withProperties(
-            lineColor("#4A3A28"), lineOpacity(0.7f), lineWidth(4.5f), lineDasharray(arrayOf(2f, 2f)),
+            lineColor("#4A3A28"), lineOpacity(0.6f), lineDasharray(arrayOf(2f, 2f)),
+            lineWidth(interpolate(exponential(2f), zoom(), stop(12, 3.5f), stop(17, 9f), stop(22, 9f * 32))),
         ),
     )
     s.addLayer(
         LineLayer("peek", "peek").withProperties(
-            lineColor("#F2E6C8"), lineOpacity(0.95f), lineWidth(2.5f), lineDasharray(arrayOf(3.6f, 3.6f)),
+            lineColor("#F2E6C8"), lineOpacity(0.9f), lineDasharray(arrayOf(3.2f, 3.2f)),
+            lineWidth(interpolate(exponential(2f), zoom(), stop(12, 2f), stop(17, 5.6f), stop(22, 5.6f * 32))),
         ),
     )
-    // Charted roads, five stages by distinct days walked (see the Legend):
-    // 1 Trail (solid sand path with a soft edge) · 2 Footpath (dirt) · 3 Lane (dirt + edge) · 4 Cobbled road · 5 Avenue (cobbles, tree-lined).
+    // 0.14.2: roads, your own paths and water routes are drawn at their real width: widths double with each zoom level
+    // (like the ground), with a floor further out so they never vanish. Each stage is its own material and shape
+    // (see docs/art/mockup_roads.png and the Legend). Widths below are at zoom 17 (street level), in dp.
+    fun grow(at17: Float, min: Float): Expression =
+        interpolate(exponential(2f), zoom(), stop(12, min), stop(17, at17), stop(22, at17 * 32))
+    fun line(id: String, src: String, filter: Expression, vararg props: org.maplibre.android.style.layers.PropertyValue<*>) =
+        guard(problems, id) { s.addLayer(LineLayer(id, src).withProperties(lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND), *props).also { it.setFilter(filter) }) }
+    /** Roadside pairs (trees, cairns, buoys) along a line, scaled with it; [across] is the road's width plus margin, in dp at z17. */
+    fun roadside(id: String, src: String, filter: Expression, icon: String, across: Float, every: Float, fromZoom: Float) =
+        guard(problems, id) { s.addLayer(SymbolLayer(id, src).withProperties(
+            symbolPlacement(Property.SYMBOL_PLACEMENT_LINE), iconImage(icon), iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+            iconAllowOverlap(true), iconIgnorePlacement(true),
+            // The pair's centres are 144 px apart in the image; scale so they sit just outside the road.
+            iconSize(interpolate(exponential(2f), zoom(), stop(fromZoom, across / 144f / Math.pow(2.0, (17 - fromZoom).toDouble()).toFloat()), stop(17, across / 144f), stop(22, across / 144f * 32))),
+            symbolSpacing(interpolate(exponential(2f), zoom(), stop(fromZoom, every / Math.pow(2.0, (17 - fromZoom).toDouble()).toFloat().coerceAtLeast(1f)), stop(17, every), stop(22, every * 32))),
+        ).also { it.setFilter(filter); it.minZoom = fromZoom }) }
     fun level(n: Int) = eq(get("level"), literal(n))
-    guard(problems, "roads-edge") {
-        s.addLayer(
-            LineLayer("roads-edge", "roads").withProperties(
-                lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND),
-                lineColor(match(get("level"), literal("#5E5A52"), stop(3, "#4A3A28"))), lineOpacity(0.75f),
-                lineWidth(match(get("level"), literal(11f), stop(3, 7.5f), stop(4, 9.5f))),
-            ).also { it.setFilter(gte(get("level"), literal(3))) },
-        )
-    }
-    guard(problems, "roads-trail-edge") {
-        s.addLayer(
-            LineLayer("roads-trail-edge", "roads").withProperties(
-                lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND), lineColor("#9C8458"), lineOpacity(0.55f),
-                lineWidth(6f), lineBlur(1.5f),
-            ).also { it.setFilter(level(1)) },
-        )
-    }
-    guard(problems, "roads-trail") {
-        s.addLayer(
-            LineLayer("roads-trail", "roads").withProperties(
-                lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND), lineColor("#E8D4A6"), lineWidth(3.5f),
-            ).also { it.setFilter(level(1)) },
-        )
-    }
-    guard(problems, "roads-dirt") {
-        s.addLayer(
-            LineLayer("roads-dirt", "roads").withProperties(
-                lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND),
-                lineColor("#D2B88A"), linePattern("road_dirt"), lineWidth(match(get("level"), literal(5f), stop(2, 3.5f))),
-            ).also { it.setFilter(all(gte(get("level"), literal(2)), lt(get("level"), literal(4)))) },
-        )
-    }
-    guard(problems, "roads-cobble") {
-        s.addLayer(
-            LineLayer("roads-cobble", "roads").withProperties(
-                lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND),
-                lineColor("#8E8A80"), linePattern("road_cobble"), lineWidth(match(get("level"), literal(8.5f), stop(4, 6.5f))),
-            ).also { it.setFilter(gte(get("level"), literal(4))) },
-        )
-    }
-    for ((id, offset) in listOf("roads-trees-l" to -9f, "roads-trees-r" to 9f)) guard(problems, id) {
-        s.addLayer(
-            LineLayer(id, "roads").withProperties(
-                lineCap(Property.LINE_CAP_ROUND), lineColor("#3A6832"), lineWidth(6f), lineOffset(offset),
-                lineDasharray(arrayOf(0.01f, 3.2f)),
-            ).also { it.setFilter(level(5)) },
-        )
-    }
-    // Your own paths, five stages: 1 faint track · 2 trodden path · 3 dirt track · 4 gravel trail · 5 ranger trail.
-    fun wildLevel(n: Int) = eq(get("level"), literal(n))
-    guard(problems, "wild-edge") {
-        s.addLayer(LineLayer("wild-edge", "wild").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineColor("#6E5638"), lineOpacity(0.6f), lineWidth(match(get("level"), literal(6f), stop(4, 5.5f))),
-        ).also { it.setFilter(gte(get("level"), literal(4))) })
-    }
-    guard(problems, "wild-1") {
-        s.addLayer(LineLayer("wild-1", "wild").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineColor("#F2E8CC"), lineWidth(1.6f), lineDasharray(arrayOf(0.4f, 1.8f)),
-        ).also { it.setFilter(wildLevel(1)) })
-    }
-    guard(problems, "wild-2") {
-        s.addLayer(LineLayer("wild-2", "wild").withProperties(
-            lineCap(Property.LINE_CAP_BUTT), lineColor("#E6D3A8"), lineWidth(2.4f), lineDasharray(arrayOf(1.4f, 1.0f)),
-        ).also { it.setFilter(wildLevel(2)) })
-    }
-    guard(problems, "wild-3") {
-        s.addLayer(LineLayer("wild-3", "wild").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineColor("#C8AC7E"), linePattern("road_dirt"), lineWidth(3f),
-        ).also { it.setFilter(wildLevel(3)) })
-    }
-    guard(problems, "wild-gravel") {
-        s.addLayer(LineLayer("wild-gravel", "wild").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineColor("#D8C9A6"), linePattern("ground_sand"), lineWidth(match(get("level"), literal(4f), stop(4, 3.5f))),
-        ).also { it.setFilter(gte(get("level"), literal(4))) })
-    }
-    for ((id, offset) in listOf("wild-cairns-l" to -6f, "wild-cairns-r" to 6f)) guard(problems, id) {
-        s.addLayer(LineLayer(id, "wild").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineColor("#8D8A84"), lineWidth(4f), lineOffset(offset), lineDasharray(arrayOf(0.01f, 5f)),
-        ).also { it.setFilter(wildLevel(5)) })
-    }
 
-    // Water routes you paddle, five stages: 1 wake · 2 paddle line · 3 paddle route · 4 marked route (buoys) · 5 waterway.
-    guard(problems, "water-edge") {
-        s.addLayer(LineLayer("water-edge", "water").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineColor("#3E7FA3"), lineOpacity(0.7f), lineWidth(match(get("level"), literal(7f), stop(3, 4.5f), stop(4, 5.5f))),
-        ).also { it.setFilter(gte(get("level"), literal(3))) })
+    // Charted roads, five stages by distinct days walked: 1 Trail (trodden earth) · 2 Footpath (packed dirt) ·
+    // 3 Lane (dirt, verges, wheel ruts) · 4 Cobbled road (cobbles between stone kerbs) · 5 Avenue (wide, kerbs, trees).
+    val roadW = floatArrayOf(0f, 6f, 8f, 12f, 16f, 20f)
+    val roadMin = floatArrayOf(0f, 1.5f, 2f, 2.5f, 3f, 3.5f)
+    fun rw(n: Int, k: Float = 1f) = grow(roadW[n] * k, roadMin[n] * k)
+    line("roads-trail-edge", "roads", level(1), lineColor("#8E6F48"), lineOpacity(0.5f), lineWidth(rw(1, 2f)), lineBlur(rw(1, 0.7f)))
+    line("roads-trail", "roads", level(1), lineColor("#CDB088"), linePattern("road_dirt"), lineWidth(rw(1)), lineBlur(rw(1, 0.15f)))
+    line("roads-path-edge", "roads", level(2), lineColor("#6E5A37"), lineOpacity(0.55f), lineWidth(rw(2, 1.6f)), lineBlur(rw(2, 0.35f)))
+    line("roads-lane-edge", "roads", level(3), lineColor("#5E4E2E"), lineOpacity(0.8f), lineWidth(rw(3, 1.3f)), lineBlur(rw(3, 0.12f)))
+    line("roads-dirt", "roads", all(gte(get("level"), literal(2)), lt(get("level"), literal(4))),
+        lineColor("#D2B88A"), linePattern("road_dirt"), lineWidth(interpolate(exponential(2f), zoom(),
+            stop(12, match(get("level"), literal(roadMin[3]), stop(2, roadMin[2]))),
+            stop(17, match(get("level"), literal(roadW[3]), stop(2, roadW[2]))),
+            stop(22, match(get("level"), literal(roadW[3] * 32), stop(2, roadW[2] * 32))))))
+    for ((id, k) in listOf("roads-rut-l" to -0.22f, "roads-rut-r" to 0.22f)) {
+        line(id, "roads", level(3), lineColor("#5A4428"), lineOpacity(0.6f), lineWidth(rw(3, 0.11f)), lineOffset(rw(3, k)))
     }
-    guard(problems, "water-route") {
-        s.addLayer(LineLayer("water-route", "water").withProperties(
-            lineCap(Property.LINE_CAP_ROUND),
-            lineColor(match(get("level"), literal("#A6D3E8"), stop(1, "#E4F3F9"), stop(2, "#CBE6F2"))),
-            lineWidth(match(get("level"), literal(4.5f), stop(1, 1.6f), stop(2, 2f), stop(3, 2.5f), stop(4, 3.2f))),
-        ).also { it.setFilter(gte(get("level"), literal(3))) })
+    for (n in 4..5) {
+        line("roads-kerb-$n", "roads", level(n), lineColor("#463F3A"), lineWidth(rw(n, 1.16f)))
+        line("roads-kerbstone-$n", "roads", level(n), lineColor("#C9C3B4"), lineWidth(rw(n, 1.08f)))
+        line("roads-cobble-$n", "roads", level(n), lineColor("#8E8A80"), linePattern("road_cobble"), lineWidth(rw(n, 0.88f)))
     }
-    guard(problems, "water-light") {
-        s.addLayer(LineLayer("water-light", "water").withProperties(
-            lineCap(Property.LINE_CAP_BUTT),
-            lineColor(match(get("level"), literal("#CBE6F2"), stop(1, "#E4F3F9"))),
-            lineWidth(match(get("level"), literal(2f), stop(1, 1.6f))),
-            lineDasharray(arrayOf(1f, 1.6f)),
-        ).also { it.setFilter(lt(get("level"), literal(3))) })
+    roadside("roads-trees", "roads", level(5), "roadside_trees", roadW[5] + 22f, 28f, 14f)
+
+    // Your own paths: narrower and rougher than roads. 1 Faint track (scuffed grass) · 2 Trodden path ·
+    // 3 Dirt track · 4 Gravel trail · 5 Ranger trail (gravel, cairns either side).
+    val wildW = floatArrayOf(0f, 4f, 5f, 6f, 7f, 8f)
+    val wildMin = floatArrayOf(0f, 1.2f, 1.5f, 2f, 2.5f, 3f)
+    fun ww(n: Int, k: Float = 1f) = grow(wildW[n] * k, wildMin[n] * k)
+    line("wild-1", "wild", level(1), lineColor("#B9A577"), lineOpacity(0.7f), lineWidth(ww(1)), lineBlur(ww(1, 0.6f)), lineDasharray(arrayOf(1.2f, 0.8f)))
+    line("wild-2-edge", "wild", level(2), lineColor("#7E6644"), lineOpacity(0.45f), lineWidth(ww(2, 1.6f)), lineBlur(ww(2, 0.5f)))
+    line("wild-2", "wild", level(2), lineColor("#C8AE82"), lineWidth(ww(2)), lineBlur(ww(2, 0.2f)))
+    line("wild-3", "wild", level(3), lineColor("#C8AC7E"), linePattern("road_dirt"), lineWidth(ww(3)), lineBlur(ww(3, 0.1f)))
+    line("wild-edge", "wild", gte(get("level"), literal(4)), lineColor("#6E5638"), lineOpacity(0.6f),
+        lineWidth(interpolate(exponential(2f), zoom(), stop(12, wildMin[4] * 1.3f), stop(17, match(get("level"), literal(wildW[5] * 1.3f), stop(4, wildW[4] * 1.3f))), stop(22, wildW[5] * 1.3f * 32))))
+    line("wild-gravel", "wild", gte(get("level"), literal(4)), lineColor("#D8C9A6"), linePattern("ground_sand"),
+        lineWidth(interpolate(exponential(2f), zoom(), stop(12, wildMin[4]), stop(17, match(get("level"), literal(wildW[5]), stop(4, wildW[4]))), stop(22, wildW[5] * 32))))
+    roadside("wild-cairns", "wild", level(5), "roadside_cairns", wildW[5] + 10f, 40f, 14.5f)
+
+    // Water routes you paddle: 1 wake · 2 paddle line · 3 paddle route · 4 marked route (buoys) · 5 waterway.
+    val waterW = floatArrayOf(0f, 4f, 5f, 7f, 9f, 12f)
+    val waterMin = floatArrayOf(0f, 1.2f, 1.5f, 2f, 2.5f, 3f)
+    fun aw(n: Int, k: Float = 1f) = grow(waterW[n] * k, waterMin[n] * k)
+    for (n in 1..2) line("water-light-$n", "water", level(n), lineColor(if (n == 1) "#E4F3F9" else "#CBE6F2"), lineOpacity(0.85f),
+        lineWidth(aw(n)), lineBlur(aw(n, 0.4f)), lineDasharray(arrayOf(1f, 1.4f)))
+    for (n in 3..5) {
+        line("water-edge-$n", "water", level(n), lineColor("#3E7FA3"), lineOpacity(0.55f), lineWidth(aw(n, 1.4f)), lineBlur(aw(n, 0.25f)))
+        line("water-route-$n", "water", level(n), lineColor(if (n == 3) "#CBE6F2" else "#A6D3E8"), lineWidth(aw(n)), lineBlur(aw(n, 0.08f)))
     }
-    guard(problems, "water-buoys-r") {
-        s.addLayer(LineLayer("water-buoys-r", "water").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineColor("#E8833A"), lineWidth(5f), lineOffset(8f), lineDasharray(arrayOf(0.01f, 6f)),
-        ).also { it.setFilter(gte(get("level"), literal(4))) })
-    }
-    guard(problems, "water-buoys-l") {
-        s.addLayer(LineLayer("water-buoys-l", "water").withProperties(
-            lineCap(Property.LINE_CAP_ROUND), lineColor("#E8833A"), lineWidth(5f), lineOffset(-8f), lineDasharray(arrayOf(0.01f, 6f)),
-        ).also { it.setFilter(wildLevel(5)) })
-    }
+    roadside("water-buoys", "water", gte(get("level"), literal(4)), "roadside_buoys", waterW[5] + 14f, 60f, 14f)
+
     s.addLayer(LineLayer("track", "track").withProperties(lineColor("#C0392B"), lineWidth(3f), lineOpacity(0.8f)))
     guard(problems, "road-names") { s.addLayer(
         SymbolLayer("road-names", "roads").withProperties(

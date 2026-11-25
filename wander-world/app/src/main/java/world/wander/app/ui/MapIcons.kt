@@ -32,6 +32,9 @@ object MapIcons {
         "ground_sand" to R.drawable.oad_ground_sand, "water_ripple" to R.drawable.water_ripple,
         "water_sea" to R.drawable.oad_water_sea, "ground_sand_wet" to R.drawable.oad_ground_sand_wet,
         "road_dirt" to R.drawable.oad_road_dirt, "road_cobble" to R.drawable.oad_road_cobble,
+        // Roadside details (0.14.2, original): pairs placed along the line, either side of it.
+        "roadside_trees" to R.drawable.roadside_trees, "roadside_cairns" to R.drawable.roadside_cairns,
+        "roadside_buoys" to R.drawable.roadside_buoys,
         "fog_parchment" to R.drawable.fog_parchment,
         // Economy
         "medal_gold" to R.drawable.oad_medal_gold, "medal_monument" to R.drawable.oad_medal_monument,

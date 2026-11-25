@@ -11,5 +11,5 @@ Base map tiles from OpenFreeMap.
 **Libraries.** MapLibre Native (BSD-2), H3 by Uber (Apache-2.0), JTS Topology Suite (EPL-2.0/EDL-1.0),
 AndroidX / Jetpack Compose / Room / WorkManager / Health Connect client (Apache-2.0), Google Play services location.
 
-**Original art.** The wanderer and waystone sprites and the parchment fog are original to Wander World
+**Original art.** The roadside trees, cairns and buoys (tools/gen_road_sprites.py), the wanderer and waystone sprites and the parchment fog are original to Wander World
 (`tools/gen_sprites.py`).

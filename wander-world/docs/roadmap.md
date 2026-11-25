@@ -103,6 +103,9 @@ Agreed 2026-11-25: improve the walks the player does now, near home; camps wait 
 Field bug: Approve did nothing after a trade the same day. A day's purchases, trades and approvals now replay in the
 order you tapped them, after the day's walking; every tap says what happened. Tap a building to see what it does.
 
+## 0.14.2 Roads you can see (shipped 0.14.2)
+Roads, own paths and water routes drawn at real width with a material per stage (mockup `docs/art/mockup_roads.png`).
+
 ## 0.15 Camps by stays (proposed, before mid-December)
 The player starts camping mid-December and crosses a time zone, so this must be on the phone before they leave.
 Camps per spot, grown by stays (1/3/10/30/100), reach by tier (2–6 neighbourhood hexes), merging within reach; the

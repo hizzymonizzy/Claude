@@ -46,19 +46,16 @@ def roads():
     cobble = tile("oad_road_cobble", (W, H))
     grass = lambda: tile("oad_ground_grass", (W, H))
     y = H // 2
-    out = {
-        "oad_legend_road_1": textured_line(grass(), (232, 212, 166), 7, y, edge=(156, 132, 88), edge_extra=6),
-        "oad_legend_road_2": textured_line(grass(), dirt, 7, y),
-        "oad_legend_road_3": textured_line(grass(), dirt, 11, y, edge=(74, 58, 40), edge_extra=5),
-        "oad_legend_road_4": textured_line(grass(), cobble, 13, y, edge=(94, 90, 82), edge_extra=6),
-    }
-    av = textured_line(grass(), cobble, 17, y, edge=(94, 90, 82), edge_extra=6)
-    d = ImageDraw.Draw(av)
-    for x in range(20, W - 14, 22):        # tree-lined avenue
-        for yy in (y - 19, y + 19):
-            d.ellipse([x - 6, yy - 6, x + 6, yy + 6], fill=(58, 104, 50), outline=(36, 66, 30), width=2)
-            d.ellipse([x - 3, yy - 4, x + 1, yy], fill=(96, 146, 70))
-    out["oad_legend_road_5"] = av
+    # 0.14.2: road stages drawn as the map now draws them (tools/mockups/roads.py: real width, material, details).
+    import sys
+    sys.path.insert(0, str(ROOT / "tools/mockups"))
+    import roads as R  # noqa: E402
+    out = {}
+    names = ["oad_legend_road_1", "oad_legend_road_2", "oad_legend_road_3", "oad_legend_road_4", "oad_legend_road_5"]
+    for n, name in enumerate(names):
+        big = R.tex("oad_ground_grass", (W * 2, H * 2))
+        R.proposed(big, n, [(x, H) for x in range(24, W * 2 - 24, 6)])
+        out[name] = big.convert("RGB").resize((W, H), Image.LANCZOS)
     # Your own paths, five stages.
     sandtex = tile("oad_ground_sand", (W, H))
     out["legend_wild_1"] = textured_line(grass(), (242, 232, 204), 3, y, dash=3)
