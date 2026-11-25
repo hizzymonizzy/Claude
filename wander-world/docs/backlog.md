@@ -118,9 +118,9 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 ## Camps by nights, Atlas tidy-up (player, 2026-11-25; held for more feedback)
 | Item | Why | Status |
 |---|---|---|
-| A camp is pitched where you spend a night (not one per area): a night within ~300 m of a camp counts toward it; two spots in one area make two camps | "A camp would be anywhere I have spent an evening" | agreed |
-| Camps grow by nights stayed, like roads by walked days: 1 Camp, 3 Hamlet, 10 Village, 30 Town, 100 City (Metropolis capital only); weekly cooling and floors as now | "Staying nights should grow camps like walking grows roads" | agreed (open: should walking nearby also count, e.g. half a night?) |
-| Camps never merge; each asks for and builds its own projects | Areas develop differently | agreed |
+| A camp is pitched where you spend a night (not one per area): a night within a camp's reach counts toward it; two spots further apart in one area make two camps | "A camp would be anywhere I have spent an evening" | agreed |
+| Camps grow by nights stayed only (walking doesn't count), like roads by walked days: 1 Camp, 3 Hamlet, 10 Village, 30 Town, 100 City (Metropolis capital only); weekly cooling and floors as now | "Staying nights should grow camps like walking grows roads" | agreed |
+| Camps have a reach in neighbourhood hexes (~130 m), ~2 hexes for a new camp; camps within each other's reach merge and share their night count (the one with more nights keeps name, spot, buildings); separate camps elsewhere in an area stay separate and develop differently | "Multiple camps within say two hex merge and share day count" | agreed (open: reach grows with tier, or fixed at 2 hexes?) |
 | The capital keeps growing from walking days at home (nights at home don't count) | Otherwise sleeping at home would grow it | proposed |
 | Camp names from the nearest named place ("Camp at Oakdale Park"), else area name + number | Several camps per area need names | proposed |
 | Atlas: remove "Places you could camp"; camps appear once you've slept there; a camp's history lists its nights | The list was odd | agreed |
