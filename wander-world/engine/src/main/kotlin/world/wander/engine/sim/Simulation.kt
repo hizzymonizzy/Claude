@@ -146,9 +146,8 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
             cooling(day)           // 5b. Tuesday: last week scored; places fade or recover (ADR 0008)
             weeklyGoal(day)        // 6. Tuesday: goal adjustment from last week
             economy(day)           // 7. earnings, monuments, next proposal
-            purchases(day)         // 7b. what you bought from the trader or a market
-            decisions(day)         // 8. your answers to proposals (after today's proposal)
-            story(day)             // 9. encounters, the trader's request, looks, achievements (0.13)
+            story(day)             // 8. encounters, the trader's request, looks, achievements (0.13)
+            actions(day)           // 9. what you did today, in the order you did it: purchases, trades, answers (0.14.1)
             summarize(day)
         }
         return snapshot()

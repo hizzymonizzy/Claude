@@ -105,6 +105,13 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Bug: Goal screen shows pre-0.12 rules text and a rolling-7-day total that disagrees with the map card | Outdated since ADR 0008/0009 | shipped 0.13.0 |
 | Check: the home region is now named after a waypoint area instead of the capital's area | Diagnostics 2026-11-23 | shipped 0.13.0 |
 
+## Field feedback (2026-11-24, after 0.14.0)
+| Item | Why | Status |
+|---|---|---|
+| Approve did nothing (6 taps; stock on screen covered the cost) | Same-day trades were credited after purchases and approvals; the request trade was also misreported as failed | shipped 0.14.1 |
+| Tapping a building should say what it does | Badges in the Atlas did nothing | shipped 0.14.1 |
+| Walking inside big stores is recorded as your own paths | `[paths]` lines for store visits: "joined an own path" | proposed |
+
 ## Placement and path normalization (player, 2026-11-24; shipped 0.14.0)
 | Item | Why | Status |
 |---|---|---|

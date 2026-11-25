@@ -87,6 +87,8 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
     val shopSeller = remember { mutableStateOf<String?>(null) }
     // The encounter whose card is open (0.13).
     val encounterOpen = remember { mutableStateOf<Int?>(null) }
+    /** A building tapped on the map (0.14.1): area and project, for its card. */
+    val buildingOpen = remember { mutableStateOf<Pair<String, String>?>(null) }
     // Equipped looks (outfit, banner); only ones you own are worn.
     var looks by remember { mutableStateOf(repo.prefs.outfit to repo.prefs.banner) }
     var centered by remember { mutableStateOf(false) }
@@ -109,8 +111,14 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
                     val encHit = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "encounters")
                         .firstNotNullOfOrNull { f -> if (f.hasProperty("id")) f.getStringProperty("id") else null }
                     if (encHit != null) { encounterOpen.value = encHit.removePrefix("enc:").toIntOrNull(); return@addOnMapClickListener true }
-                    val shopHit = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "trader", "buildings")
+                    val tapped = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "trader", "buildings", "building-art")
                         .firstNotNullOfOrNull { f -> if (f.hasProperty("id")) f.getStringProperty("id") else null }
+                    if (tapped != null && tapped.startsWith("bldg:")) {
+                        val (pid, area) = tapped.removePrefix("bldg:").split('@', limit = 2).let { it[0] to it.getOrElse(1) { "" } }
+                        buildingOpen.value = area to pid; selectedNode.value = null
+                        return@addOnMapClickListener true
+                    }
+                    val shopHit = tapped
                         ?.let { if (it == "trader") it else it.removePrefix("market:").takeIf { _ -> it.startsWith("market:") } }
                     if (shopHit != null) { shopSeller.value = shopHit; selectedNode.value = null; return@addOnMapClickListener true }
                     val hit = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "resource-icons", "resource-rings")
@@ -375,6 +383,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
                 EncounterSheet(repo, world!!, e, onClose = { encounterOpen.value = null })
             }
         }
+        buildingOpen.value?.let { (area, id) -> world?.let { BuildingDialog(it, area, id) { buildingOpen.value = null } } }
         var showLegend by remember { mutableStateOf(false) }
         if (showLegend) LegendDialog(onDismiss = { showLegend = false })
         SmallFloatingActionButton(

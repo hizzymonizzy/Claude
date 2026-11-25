@@ -98,7 +98,8 @@ object Projects {
 }
 
 /** A choice you made about a proposal. Player decisions are inputs, replayed like walks. */
-data class ProjectDecision(val day: Int, val areaId: String, val projectId: String, val approve: Boolean)
+/** [atMs]: when you tapped it (0.14.1: a day's purchases, trades and answers are replayed in the order you made them). */
+data class ProjectDecision(val day: Int, val areaId: String, val projectId: String, val approve: Boolean, val atMs: Long = 0)
 
 data class Proposal(val day: Int, val areaId: String, val projectId: String)
 
@@ -273,4 +274,4 @@ object Shop {
 }
 
 /** Something you bought: a resource (item = "wood", qty units) or a cosmetic (item = its id, qty 1). */
-data class Purchase(val day: Int, val seller: String, val item: String, val qty: Int = 1)
+data class Purchase(val day: Int, val seller: String, val item: String, val qty: Int = 1, val atMs: Long = 0)

@@ -140,4 +140,43 @@ class EconomyTest {
         for (h in listOf(plain, boosted)) { h.take("l:p", 0, 1.0); for (d in 1..10) h.take("l:p", d, 1.0) }
         assertTrue(boosted.abundance("l:p", 15) > plain.abundance("l:p", 15))
     }
+
+    @Test
+    fun todaysTapsRunInTheOrderYouMadeThemAndEachSeesTheOneBefore() {
+        // 0.14.1 (field bug 2026-11-24): an approval tapped after buying what it needs must build, on the same day.
+        val base = input(6, 60.0, 4.0)
+        val today = start + 5
+        val w0 = WorldEngine().build(base, today)
+        val p = w0.proposal!!
+        assertEquals("campfire", p.projectId)
+        assertTrue(w0.treasury.wood < 5 && w0.treasury.gold > 150)
+        val buyThenApprove = base.copy(
+            purchases = listOf(Purchase(today, Shop.TRADER, "wood", 5, atMs = 1)),
+            decisions = listOf(ProjectDecision(today, p.areaId, p.projectId, true, atMs = 2)),
+        )
+        val w1 = WorldEngine().build(buyThenApprove, today)
+        val results = w1.eventsOn(today).filterIsInstance<WorldEvent.ActionResult>()
+        println("buy then approve: " + results.map { "${it.atMs}: ${it.ok} ${it.message}" })
+        assertEquals(listOf(true, true), results.map { it.ok })
+        assertTrue(w1.settlements.single().projects.contains("campfire"))
+        // Tapped the other way round, the approval comes first and says what's missing.
+        val approveThenBuy = buyThenApprove.copy(decisions = listOf(ProjectDecision(today, p.areaId, p.projectId, true, atMs = 0)))
+        val w2 = WorldEngine().build(approveThenBuy, today)
+        val first = w2.eventsOn(today).filterIsInstance<WorldEvent.ActionResult>().first()
+        println("approve first: ${first.message}")
+        assertTrue(!first.ok && first.message.contains("wood 0 of 5"))
+        assertTrue(w2.settlements.single().projects.isEmpty())
+    }
+
+    @Test
+    fun theTradersRequestCountsAsDoneAndItsRewardIsThereForTheNextTap() {
+        val park = LandmarkInfo("park", "Oakdale Park", "park", 50_000.0)
+        val base = input(8, 30.0, 3.0).copy(landmarks = mapOf("park" to park), landmarkVisits = (0 until 8).map { LandmarkVisit("park", start + it, 600.0) })
+        val today = start + 7
+        val r = WorldEngine().build(base, today).request!!
+        val w = WorldEngine().build(base.copy(purchases = listOf(Purchase(today, "request", "request", 1, atMs = 5))), today)
+        val res = w.eventsOn(today).filterIsInstance<WorldEvent.ActionResult>().single()
+        println("request ${r.qty} ${r.resource} -> ${r.rewardQty} ${r.rewardResource}: ${res.ok} ${res.message}")
+        assertEquals(res.ok, w.request!!.done)
+    }
 }

@@ -124,8 +124,7 @@ fun ShopSheet(repo: Repository, w: WorldState, seller: String, looks: Pair<Strin
         else -> return
     }
     fun buy(item: String, n: Int, sellerId: String = seller) = scope.launch {
-        val ok = repo.buy(sellerId, item, n)
-        message = if (ok) "Purchased ${if (n > 1) "$n " else ""}${Story.LOOK_NAMES[item] ?: item.substringAfter('_')}." else "Not quite enough for that."
+        message = repo.buy(sellerId, item, n).message + "."
     }
     Window(if (trader) "Travelling trader" else "${market?.name} market", w.treasury.gold.toInt(), onClose) {
         Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
@@ -147,7 +146,7 @@ fun ShopSheet(repo: Repository, w: WorldState, seller: String, looks: Pair<Strin
                             Text("“I'll give you ${r.rewardQty} ${r.rewardResource} for them.”", style = MaterialTheme.typography.bodySmall, color = SOFT)
                         }
                         GoldButton("Trade", enabled = resourceOf(w, r.resource) >= r.qty) {
-                            scope.launch { message = if (repo.buy("request", "request", 1)) "A fair trade." else "Not quite enough for that." }
+                            scope.launch { message = repo.buy("request", "request", 1).message + "." }
                         }
                     }
                 }
@@ -251,7 +250,7 @@ fun EncounterSheet(repo: Repository, w: WorldState, e: EncounterState, onClose: 
         e.cost?.let { cost ->
             Spacer(Modifier.height(8.dp))
             GoldButton("Trade", enabled = cost.affordable(w.treasury)) {
-                scope.launch { message = if (repo.buy("encounter", "enc:${e.id}", 1)) "A fair trade." else "Not quite enough for that." }
+                scope.launch { message = repo.buy("encounter", "enc:${e.id}", 1).message + "." }
             }
         }
         message?.let { Text(it, color = GREEN, style = MaterialTheme.typography.labelMedium) }

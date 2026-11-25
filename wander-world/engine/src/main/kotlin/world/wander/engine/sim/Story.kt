@@ -42,25 +42,7 @@ internal fun Simulation.story(d: Simulation.Day) {
         }
     }
 
-    // 2. Trades you chose (replayed like purchases): an encounter's ask, or the trader's request.
-    for (pu in purchasesByDay[day].orEmpty()) {
-        when (pu.seller) {
-            "encounter" -> {
-                val e = activeEncounters.firstOrNull { "enc:${it.id}" == pu.item } ?: continue
-                val cost = e.cost ?: continue
-                if (!cost.affordable(treasury)) { events += WorldEvent.PurchaseRefused(day, pu.item); continue }
-                treasury = treasury.spend(cost)
-                completeEncounter(e, day)
-            }
-            "request" -> {
-                val r = request ?: continue
-                if (r.done || r.week != Shop.week(day) || resourceOf(treasury, r.resource) < r.qty) { events += WorldEvent.PurchaseRefused(day, "request"); continue }
-                treasury = treasury.spend(costOf(r.resource, r.qty)) + gainOf(r.rewardResource, r.rewardQty)
-                request = r.copy(done = true)
-                events += WorldEvent.RequestFulfilled(day, request!!)
-            }
-        }
-    }
+    // 2. Trades you chose are replayed with your other actions, in the order you made them (actions, 0.14.1).
 
     // 3. The trader's request for this week (made on the first day of each week you play).
     val week = Shop.week(day)
@@ -96,6 +78,52 @@ internal fun Simulation.story(d: Simulation.Day) {
         if (tier > before) achievementTiers[s.id] = tier
         if (s.reward != null && tier >= s.rewardAt && s.reward !in owned) earnLook(day, s.reward, s.name)
     }
+    for ((areaId, list) in built) if (settlements[areaId]?.capital == true) {
+        for (k in 1..4) if ("wonder_$k" in list && "banner_wonder_$k" !in owned) earnLook(day, "banner_wonder_$k", "the Wonder")
+    }
+}
+
+/**
+ * A trade you chose (0.14.1, from [actions]): an encounter's ask, or the trader's weekly request. Returns whether it
+ * went through and a line saying what happened.
+ */
+internal fun Simulation.tradeOne(day: Int, pu: world.wander.engine.Purchase): Pair<Boolean, String> = when (pu.seller) {
+    "encounter" -> {
+        val e = activeEncounters.firstOrNull { "enc:${it.id}" == pu.item }
+        val cost = e?.cost
+        when {
+            e == null || cost == null -> false to "They've moved on"
+            !cost.affordable(treasury) -> { events += WorldEvent.PurchaseRefused(day, pu.item); false to "Not enough: ${shortfall(cost)}" }
+            else -> { treasury = treasury.spend(cost); completeEncounter(e, day); true to "A fair trade" }
+        }
+    }
+    else -> {
+        val r = request
+        when {
+            r == null || r.week != Shop.week(day) -> false to "The trader has no request this week"
+            r.done -> false to "Already done this week"
+            resourceOf(treasury, r.resource) < r.qty -> {
+                events += WorldEvent.PurchaseRefused(day, "request")
+                false to "Needs ${r.qty} ${r.resource} (you have ${resourceOf(treasury, r.resource).toInt()})"
+            }
+            else -> {
+                treasury = treasury.spend(costOf(r.resource, r.qty)) + gainOf(r.rewardResource, r.rewardQty)
+                request = r.copy(done = true)
+                events += WorldEvent.RequestFulfilled(day, request!!)
+                true to "Traded ${r.qty} ${r.resource} for ${r.rewardQty} ${r.rewardResource}"
+            }
+        }
+    }
+}
+
+/** What's missing for [cost], e.g. "wood 2 of 3, food 1 of 2". */
+internal fun Simulation.shortfall(cost: Cost): String = listOf(
+    "gold" to (treasury.gold to cost.gold), "wood" to (treasury.wood to cost.wood), "food" to (treasury.food to cost.food),
+    "stone" to (treasury.stone to cost.stone), "metal" to (treasury.metal to cost.metal),
+).filter { (_, v) -> v.first < v.second }.joinToString(", ") { (r, v) -> "$r ${v.first.toInt()} of ${v.second}" }
+
+/** The Wonder's stages each give a banner, the day they're built. */
+internal fun Simulation.wonderLooks(day: Int) {
     for ((areaId, list) in built) if (settlements[areaId]?.capital == true) {
         for (k in 1..4) if ("wonder_$k" in list && "banner_wonder_$k" !in owned) earnLook(day, "banner_wonder_$k", "the Wonder")
     }

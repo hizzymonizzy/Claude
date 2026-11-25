@@ -60,25 +60,42 @@ internal fun Simulation.economy(d: Simulation.Day) {
     if (pending == null) pending = propose(day)?.also { events += WorldEvent.ProjectProposed(day, it.areaId, it.projectId) }
 }
 
-/** 8. Your decisions on project proposals (after today's proposal, so you can answer it the same day). */
-internal fun Simulation.decisions(d: Simulation.Day) {
+/**
+ * 9. What you did today (0.14.1), in the order you did it: purchases from the trader or a market, trades (an
+ * encounter's ask, the trader's request) and answers to proposals. It runs after the day's walking, gathering and
+ * story, so whatever the screen showed when you tapped is what you have here, and each tap sees the one before.
+ * Every action leaves an [WorldEvent.ActionResult] saying what happened.
+ */
+internal fun Simulation.actions(d: Simulation.Day) {
     val day = d.day
-    decisionsByDay[day]?.forEach { dcs ->
-        val pr = pending ?: return@forEach
-        if (pr.areaId != dcs.areaId || pr.projectId != dcs.projectId) return@forEach
-        val def = Projects.byId(dcs.projectId) ?: return@forEach
-        if (dcs.approve) {
-            if (def.cost.affordable(treasury)) {
-                treasury = treasury.spend(def.cost)
-                built.getOrPut(dcs.areaId) { mutableListOf() } += def.id
-                events += WorldEvent.ProjectBuilt(day, dcs.areaId, def.id)
-                pending = null
-            }
-        } else {
-            declinedOn[dcs.areaId to def.id] = day
-            pending = null
+    val todays = purchasesByDay[day].orEmpty().map { it.atMs to (it as Any) } + decisionsByDay[day].orEmpty().map { it.atMs to (it as Any) }
+    for ((at, a) in todays.sortedBy { it.first }) {
+        val (ok, message) = when (a) {
+            is world.wander.engine.Purchase -> if (a.seller == "encounter" || a.seller == "request") tradeOne(day, a) else buyOne(day, a)
+            is world.wander.engine.ProjectDecision -> decideOne(day, a)
+            else -> continue
         }
+        events += WorldEvent.ActionResult(day, at, ok, message)
     }
+    wonderLooks(day)
+}
+
+/** An answer to the waiting proposal: approve builds it if you can afford it; decline sets it aside for 14 days. */
+private fun Simulation.decideOne(day: Int, dcs: world.wander.engine.ProjectDecision): Pair<Boolean, String> {
+    val pr = pending
+    val def = Projects.byId(dcs.projectId) ?: return false to "Unknown building"
+    if (pr == null || pr.areaId != dcs.areaId || pr.projectId != dcs.projectId) return false to "That request has already been answered"
+    if (!dcs.approve) {
+        declinedOn[dcs.areaId to def.id] = day
+        pending = null
+        return true to "Declined the ${def.name.lowercase()}; it may ask again in 14 days"
+    }
+    if (!def.cost.affordable(treasury)) return false to "Not enough yet: ${shortfall(def.cost)}"
+    treasury = treasury.spend(def.cost)
+    built.getOrPut(dcs.areaId) { mutableListOf() } += def.id
+    events += WorldEvent.ProjectBuilt(day, dcs.areaId, def.id)
+    pending = null
+    return true to "Built the ${def.name.lowercase()}"
 }
 
 /**
@@ -110,40 +127,42 @@ private fun Simulation.propose(day: Int): Proposal? {
 }
 
 /**
- * 7b. Purchases: from the travelling trader (always, double price) or a settlement's market (once built; a market hall
+ * A purchase: from the travelling trader (always, double price) or a settlement's market (once built; a market hall
  * is 10% cheaper). Resource prices climb 10% per unit bought in a week. A purchase you can't afford is refused.
  */
-internal fun Simulation.purchases(d: Simulation.Day) {
-    val day = d.day
+private fun Simulation.buyOne(day: Int, pu: world.wander.engine.Purchase): Pair<Boolean, String> {
     val week = world.wander.engine.Shop.week(day)
-    for (pu in purchasesByDay[day].orEmpty()) {
-        if (pu.seller == "encounter" || pu.seller == "request") continue   // trades: see story()
-        val shop = world.wander.engine.Shop
-        if (pu.item in shop.COSMETICS) {
-            val price = shop.COSMETICS.getValue(pu.item)
-            if (pu.item in owned || treasury.gold < price) { events += WorldEvent.PurchaseRefused(day, pu.item); continue }
-            treasury = treasury.copy(gold = treasury.gold - price)
-            owned += pu.item
-            events += WorldEvent.Purchased(day, pu.item, 1, price, pu.seller)
-            continue
-        }
-        val multiplier = when {
-            pu.seller == shop.TRADER -> shop.TRADER_MULTIPLIER
-            Projects.hasChain(built[pu.seller].orEmpty(), "market_hall") && "guildhall" in built[pu.seller].orEmpty() -> shop.MARKET_HALL_MULTIPLIER - 0.1
-            Projects.hasChain(built[pu.seller].orEmpty(), "market_hall") -> shop.MARKET_HALL_MULTIPLIER
-            Projects.hasChain(built[pu.seller].orEmpty(), "market") -> 1.0
-            else -> { events += WorldEvent.PurchaseRefused(day, pu.item); continue }   // no market there (yet)
-        }
-        val n = bought[week to pu.item] ?: 0
-        val price = shop.price(pu.item, multiplier, n, pu.qty)
-        if (pu.qty <= 0 || treasury.gold < price) { events += WorldEvent.PurchaseRefused(day, pu.item); continue }
-        treasury = treasury.copy(gold = treasury.gold - price) + when (pu.item) {
-            "wood" -> Treasury(wood = pu.qty.toDouble()); "food" -> Treasury(food = pu.qty.toDouble())
-            "stone" -> Treasury(stone = pu.qty.toDouble()); else -> Treasury(metal = pu.qty.toDouble())
-        }
-        bought[week to pu.item] = n + pu.qty
-        events += WorldEvent.Purchased(day, pu.item, pu.qty, price, pu.seller)
+    val shop = world.wander.engine.Shop
+    if (pu.item in shop.COSMETICS) {
+        val price = shop.COSMETICS.getValue(pu.item)
+        val name = world.wander.engine.Story.LOOK_NAMES[pu.item] ?: pu.item
+        if (pu.item in owned) { events += WorldEvent.PurchaseRefused(day, pu.item); return false to "You already own the $name" }
+        if (treasury.gold < price) { events += WorldEvent.PurchaseRefused(day, pu.item); return false to "Needs $price gold (you have ${treasury.gold.toInt()})" }
+        treasury = treasury.copy(gold = treasury.gold - price)
+        owned += pu.item
+        events += WorldEvent.Purchased(day, pu.item, 1, price, pu.seller)
+        return true to "Bought the $name for $price gold"
     }
+    val multiplier = when {
+        pu.seller == shop.TRADER -> shop.TRADER_MULTIPLIER
+        Projects.hasChain(built[pu.seller].orEmpty(), "market_hall") && "guildhall" in built[pu.seller].orEmpty() -> shop.MARKET_HALL_MULTIPLIER - 0.1
+        Projects.hasChain(built[pu.seller].orEmpty(), "market_hall") -> shop.MARKET_HALL_MULTIPLIER
+        Projects.hasChain(built[pu.seller].orEmpty(), "market") -> 1.0
+        else -> { events += WorldEvent.PurchaseRefused(day, pu.item); return false to "There's no market there yet" }
+    }
+    val n = bought[week to pu.item] ?: 0
+    val price = shop.price(pu.item, multiplier, n, pu.qty)
+    if (pu.qty <= 0 || treasury.gold < price) {
+        events += WorldEvent.PurchaseRefused(day, pu.item)
+        return false to "Needs $price gold (you have ${treasury.gold.toInt()})"
+    }
+    treasury = treasury.copy(gold = treasury.gold - price) + when (pu.item) {
+        "wood" -> Treasury(wood = pu.qty.toDouble()); "food" -> Treasury(food = pu.qty.toDouble())
+        "stone" -> Treasury(stone = pu.qty.toDouble()); else -> Treasury(metal = pu.qty.toDouble())
+    }
+    bought[week to pu.item] = n + pu.qty
+    events += WorldEvent.Purchased(day, pu.item, pu.qty, price, pu.seller)
+    return true to "Bought ${pu.qty} ${pu.item} for $price gold"
 }
 
 /**

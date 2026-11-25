@@ -151,7 +151,7 @@ object MapLayersBuilder {
             Feature.fromGeometry(Point.fromLngLat(c.lng, c.lat)).apply {
                 addStringProperty("icon", "bldg_hex_$id")
                 addStringProperty("art", "cellart_$id")
-                addStringProperty("id", if (id == "market" || id == "market_hall") "market:$areaId" else "bldg:$id")
+                addStringProperty("id", if (id == "market" || id == "market_hall") "market:$areaId" else "bldg:$id@$areaId")
             }
         },
     )

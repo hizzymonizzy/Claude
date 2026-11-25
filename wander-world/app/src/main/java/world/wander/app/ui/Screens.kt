@@ -1,6 +1,7 @@
 package world.wander.app.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -82,6 +83,7 @@ fun DispatchScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
     val archive by repo.dao.dispatches().collectAsState(initial = emptyList())
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Spacer(Modifier.height(12.dp)) }
+        item { NoticeLine(repo) }
         world?.let { w -> if (w.proposal != null) item { ProposalCard(repo, w, onShowOnMap) } }
         world?.let { w ->
             item {
@@ -124,7 +126,9 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
     val layers by repo.layers.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
     var sortBy by rememberSaveable { mutableStateOf("Nearest") }
+    var building by remember { mutableStateOf<Pair<String, String>?>(null) }
     val w = world
+    building?.let { (area, id) -> if (w != null) BuildingDialog(w, area, id) { building = null } }
     fun go(p: LatLng) { repo.focus.value = p; onShowOnMap() }
 
     // Everything searchable: settlements, waypoints, places and charted streets.
@@ -193,7 +197,8 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
         }
         // 0.14 (mockup_atlas.png): the capital on its own card with its buildings, then the current request.
         val capital = w?.settlements?.firstOrNull { it.isCapital }
-        if (capital != null) item { CapitalCard(capital, where(capital.position)) { go(capital.position) } }
+        if (capital != null) item { CapitalCard(capital, where(capital.position), onBuilding = { building = capital.areaId to it }) { go(capital.position) } }
+        item { NoticeLine(repo) }
         if (w?.proposal != null) item { ProposalCard(repo, w, onShowOnMap) }
         val list = w?.settlements.orEmpty().filter { !it.isCapital }.let { all ->
             when (sortBy) {
@@ -215,8 +220,13 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
                     Column(Modifier.weight(1f)) {
                         Text(s.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         TierProgress(s)
-                        if (s.projects.isNotEmpty()) Text("Built: " + Projects.shown(s.projects).mapNotNull { Projects.byId(it)?.name }.joinToString(),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        // Buildings as small hexes; tap one to see what it does (0.14.1).
+                        if (s.projects.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            for (id in Projects.shown(s.projects)) MapIcons.images["bldg_hex_$id"]?.let { res ->
+                                Image(ImageBitmap.imageResource(res), Projects.byId(id)?.name, filterQuality = FilterQuality.Medium,
+                                    modifier = Modifier.size(30.dp).clickable { building = s.areaId to id })
+                            }
+                        }
                     }
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.width(76.dp), horizontalAlignment = Alignment.End) {
@@ -227,6 +237,48 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
             }
         }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/**
+ * What a building does (0.14.1): its picture, name, perk, the building it grew from and what it can become, and when
+ * it was built. Opened by tapping a building in the Atlas or on the map.
+ */
+@Composable
+fun BuildingDialog(w: WorldState, areaId: String, projectId: String, onClose: () -> Unit) {
+    val def = Projects.byId(projectId) ?: return onClose()
+    val builtDay = w.events.lastOrNull { it is world.wander.engine.WorldEvent.ProjectBuilt && it.areaId == areaId && it.projectId == projectId }?.day
+    val from = def.upgrades?.let { Projects.byId(it) }
+    val next = Projects.ALL.firstOrNull { it.upgrades == projectId }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onClose) { Text("Close") } },
+        icon = { MapIcons.images["bldg_hex_$projectId"]?.let { Image(ImageBitmap.imageResource(it), null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(64.dp)) } },
+        title = { Text(def.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(def.perk.ifBlank { "No special effect" }, style = MaterialTheme.typography.titleSmall, color = Color(0xFF3F7D3A))
+                Text(def.description, style = MaterialTheme.typography.bodyMedium)
+                from?.let { Text("Grew from the ${it.name.lowercase()}" + (it.perk.takeIf { p -> p.isNotBlank() }?.let { p -> " (was: ${p.replaceFirstChar { c -> c.lowercase() }})" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary) }
+                next?.let { Text("Can become a ${it.name.lowercase()} at ${it.minTier.label}: ${it.perk.replaceFirstChar { c -> c.lowercase() }}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary) }
+                Text((w.areaNames[areaId] ?: "") + (builtDay?.let { " · built ${dayLabel(it)}" } ?: ""), style = MaterialTheme.typography.labelSmall)
+            }
+        },
+    )
+}
+
+/** What just got built or declined, until tapped away (0.14.1). */
+@Composable
+private fun NoticeLine(repo: Repository) {
+    val notice by repo.notice.collectAsState()
+    val n = notice ?: return
+    Card(onClick = { repo.notice.value = null }, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(n, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF3F7D3A), modifier = Modifier.weight(1f))
+            Text("✕", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+        }
     }
 }
 
@@ -249,7 +301,7 @@ private fun TierProgress(s: SettlementState) {
 
 /** The capital's card (0.14, mockup_atlas.png): its hex, progress to the next tier, and its buildings as hex badges. */
 @Composable
-private fun CapitalCard(s: SettlementState, where: String, onGo: () -> Unit) {
+private fun CapitalCard(s: SettlementState, where: String, onBuilding: (String) -> Unit, onGo: () -> Unit) {
     Card(onClick = onGo, modifier = Modifier.fillMaxWidth(), border = BorderStroke(2.dp, Color(0xFF4A3622))) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -266,7 +318,7 @@ private fun CapitalCard(s: SettlementState, where: String, onGo: () -> Unit) {
             if (built.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    for (id in built) Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(60.dp)) {
+                    for (id in built) Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(60.dp).clickable { onBuilding(id) }) {
                         MapIcons.images["bldg_hex_$id"]?.let { Image(ImageBitmap.imageResource(it), null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(44.dp)) }
                         Text(Projects.byId(id)?.name ?: id, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center)
@@ -303,6 +355,8 @@ fun ProposalCard(repo: Repository, w: WorldState, onShowOnMap: () -> Unit = {}) 
     val stock = w.treasury
     val canAfford = def.cost.affordable(stock)
     val nodes by repo.resourceNodes.collectAsState()
+    var msg by remember(p) { mutableStateOf<String?>(null) }
+    var busy by remember(p) { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Proposal from ${w.areaNames[p.areaId] ?: "a settlement"}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
@@ -338,9 +392,11 @@ fun ProposalCard(repo: Repository, w: WorldState, onShowOnMap: () -> Unit = {}) 
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = canAfford, onClick = { scope.launch { repo.decide(p, true) } }) { Text("Approve") }
-                OutlinedButton(onClick = { scope.launch { repo.decide(p, false) } }) { Text("Decline") }
+                Button(enabled = canAfford && !busy, onClick = { busy = true; scope.launch { msg = repo.decide(p, true).message; busy = false } }) { Text("Approve") }
+                OutlinedButton(enabled = !busy, onClick = { busy = true; scope.launch { msg = repo.decide(p, false).message; busy = false } }) { Text("Decline") }
             }
+            // 0.14.1: never silent. If it couldn't be built, say why (a success closes the card; NoticeLine says so).
+            msg?.let { Text(it + ".", style = MaterialTheme.typography.labelMedium, color = Color(0xFF9A3B2A), modifier = Modifier.padding(top = 6.dp)) }
         }
     }
 }

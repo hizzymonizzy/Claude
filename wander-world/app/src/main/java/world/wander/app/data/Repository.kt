@@ -513,8 +513,8 @@ class Repository(context: Context) {
                     center = ring?.let { r -> LatLng(r.sumOf { it.lat } / r.size, r.sumOf { it.lng } / r.size) },
                 )
             } + waterInfos,
-            decisions = dao.allDecisions().map { ProjectDecision(it.day, it.areaId, it.projectId, it.approve) },
-            purchases = dao.allPurchases().map { Purchase(it.day, it.seller, it.item, it.qty) },
+            decisions = dao.allDecisions().map { ProjectDecision(it.day, it.areaId, it.projectId, it.approve, it.madeMs) },
+            purchases = dao.allPurchases().map { Purchase(it.day, it.seller, it.item, it.qty, it.madeMs) },
             landmarkVisits = visits.map { LandmarkVisit(it.landmarkId, it.day, it.seconds) } + liveVisits,
             trodden = dao.allTrodden().map { TroddenCell(it.cell, it.day) } + lw?.trodden.orEmpty(),
             arrivals = dao.allArrivals().map { Arrival(it.day, it.lat, it.lng) },
@@ -623,25 +623,38 @@ class Repository(context: Context) {
 
     fun dispatchFor(state: WorldState, day: Int): Dispatch = DispatchWriter.write(state, day)
 
+    /** What came of something you tapped: whether it went through, and a line saying what happened (0.14.1). */
+    data class Outcome(val ok: Boolean, val message: String)
+
+    /** The world's verdict on the action tapped at [atMs] (found by its time; see WorldEvent.ActionResult). */
+    private fun outcomeOf(w: WorldState, atMs: Long): Outcome =
+        w.events.lastOrNull { it is WorldEvent.ActionResult && it.atMs == atMs }?.let { Outcome((it as WorldEvent.ActionResult).ok, it.message) }
+            ?: Outcome(false, "Not recorded yet, try again in a moment")
+
+    /** The last thing that got built (or declined), shown once on the Atlas and Dispatch until tapped away. */
+    val notice = MutableStateFlow<String?>(null)
+
     /** Approve or decline the current project proposal. Recorded as a player decision and replayed. */
-    suspend fun decide(proposal: Proposal, approve: Boolean) = withContext(Dispatchers.IO) {
-        dao.insertDecision(ProjectDecisionEntity(day = today(), areaId = proposal.areaId, projectId = proposal.projectId, approve = approve, madeMs = System.currentTimeMillis()))
-        log("economy", "${if (approve) "Approved" else "Declined"} ${proposal.projectId} for ${proposal.areaId}")
-        rebuild()
+    suspend fun decide(proposal: Proposal, approve: Boolean): Outcome = withContext(Dispatchers.IO) {
+        val at = System.currentTimeMillis()
+        dao.insertDecision(ProjectDecisionEntity(day = today(), areaId = proposal.areaId, projectId = proposal.projectId, approve = approve, madeMs = at))
+        val o = outcomeOf(rebuild(), at)
+        log("economy", "${if (approve) "Approved" else "Declined"} ${proposal.projectId} for ${proposal.areaId}: ${if (o.ok) "" else "not done, "}${o.message}")
+        if (o.ok) notice.value = o.message + "."
+        o
     }
 
     /**
-     * Buys from the travelling trader (seller "trader") or a settlement's market (seller = its area id). Recorded as a
-     * player choice and replayed; the world decides the price and refuses it if you can't afford it.
+     * Buys from the travelling trader (seller "trader") or a settlement's market (seller = its area id), or trades
+     * (seller "request" or "encounter"). Recorded as a player choice and replayed; the world decides the price and
+     * refuses it if you can't afford it.
      */
-    suspend fun buy(seller: String, item: String, qty: Int = 1): Boolean = withContext(Dispatchers.IO) {
-        val before = _world.value?.events?.size ?: 0
-        dao.insertPurchase(PurchaseEntity(day = today(), seller = seller, item = item, qty = qty, madeMs = System.currentTimeMillis()))
-        val w = rebuild()
-        val result = w.events.drop(before).lastOrNull { it is WorldEvent.Purchased || it is WorldEvent.PurchaseRefused }
-        val ok = result is WorldEvent.Purchased
-        log("shop", if (ok) "Bought $qty $item from $seller for ${(result as WorldEvent.Purchased).price} gold" else "Couldn't buy $qty $item from $seller")
-        ok
+    suspend fun buy(seller: String, item: String, qty: Int = 1): Outcome = withContext(Dispatchers.IO) {
+        val at = System.currentTimeMillis()
+        dao.insertPurchase(PurchaseEntity(day = today(), seller = seller, item = item, qty = qty, madeMs = at))
+        val o = outcomeOf(rebuild(), at)
+        log("shop", "${if (o.ok) "Done" else "Not done"}: $qty $item from $seller: ${o.message}")
+        o
     }
 
     /** The daily routine: sync health, process captures, rebuild, and write yesterday's dispatch. */

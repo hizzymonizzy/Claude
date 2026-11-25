@@ -228,6 +228,8 @@ sealed class WorldEvent {
     data class LookEarned(override val day: Int, val item: String, val how: String) : WorldEvent()
     data class AchievementEarned(override val day: Int, val id: String, val name: String, val tier: Int) : WorldEvent()
     data class RequestFulfilled(override val day: Int, val request: TraderRequest) : WorldEvent()
+    /** What came of something you tapped (0.14.1): a purchase, trade or answer, found by [atMs]; [message] says why. */
+    data class ActionResult(override val day: Int, val atMs: Long, val ok: Boolean, val message: String) : WorldEvent()
     data class GoalChanged(override val day: Int, val from: Int, val to: Int) : WorldEvent()
     /** Tuesday: last Monday-to-Sunday week scored against the goal; places faded or recovered a step. */
     data class WeekScored(
