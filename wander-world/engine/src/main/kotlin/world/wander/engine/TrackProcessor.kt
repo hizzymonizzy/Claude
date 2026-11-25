@@ -38,6 +38,13 @@ data class TrackResult(
     val keptPoints: Int,
     val droppedPoints: Int,
     val matchedPoints: Int,
+    /** Road snap (0.14): lengths of gaps credited to the street they drifted beside. */
+    val snappedM: List<Double> = emptyList(),
+    /** Gaps left unmatched: length, and how far they got from the streets either side (NaN: didn't start and end on one). */
+    val unmatched: List<Pair<Double, Double>> = emptyList(),
+    /** Own-path merge (0.14): stretches that joined a path you already had, and their length. */
+    val mergedStretches: Int = 0,
+    val mergedM: Double = 0.0,
 )
 
 /**
@@ -145,6 +152,10 @@ class TrackProcessor(
         coast: List<List<LatLng>> = emptyList(),
         /** Field, orchard and allotment edges: food lines inland, gathered the same way as shores. */
         fields: List<List<LatLng>> = emptyList(),
+        /** Your own paths from earlier walks (0.14): new stretches alongside them merge onto them. */
+        ownPaths: List<List<LatLng>> = emptyList(),
+        /** Road snap distance (0.14). */
+        snapM: Double = 35.0,
     ): TrackResult {
         val shoreline = Shores(coast + fields + water.flatMap { it.rings } + landmarks.filter { it.kind == "beach" }.flatMap { it.rings },
             landmarks.filter { it.kind == "beach" })
@@ -168,6 +179,11 @@ class TrackProcessor(
         val wake = HashSet<TroddenCell>()
         val shore = HashSet<TroddenCell>()
         val heat = HashSet<TroddenCell>()
+        val own = OwnPaths(ownPaths, landmarks.filter { it.kind == "beach" })
+        val snapped = mutableListOf<Double>()
+        val unmatched = mutableListOf<Pair<Double, Double>>()
+        var mergedStretches = 0
+        var mergedM = 0.0
 
         for (run in runs) {
             kept += run.size
@@ -203,7 +219,8 @@ class TrackProcessor(
                 m[if (mode == Mode.FOOT) 0 else 1] += Geo.distanceM(a.lat, a.lng, b.lat, b.lng)
             }
             if (matcher != null) {
-                val m = matcher.match(run.map { LatLng(it.lat, it.lng) })
+                val (m, gaps) = matcher.snapGaps(line, matcher.match(line), snapM)
+                snapped += gaps.snapped; unmatched += gaps.unmatched
                 matched += m.count { it != null }
                 // Off-network stretches: consecutive fixes with no mapped path nearby.
                 var k = 0
@@ -216,8 +233,12 @@ class TrackProcessor(
                     val pts = run.subList(from, to + 1).map { LatLng(it.lat, it.lng) }
                     if (pts.size >= 3 && Geo.lengthM(pts) >= 30) {
                         val day = dayOf(run[k].timeMs)
-                        wild += Trail(day, simplify(pts, 4.0))
-                        sample(pts, 10.0).forEach { trodden += TroddenCell(Cells.cellAt(it.lat, it.lng, Cells.TRODDEN_RES), day) }
+                        val (onto, n) = own.snap(sample(pts, 10.0))
+                        if (n > 0) { mergedStretches++; mergedM += n * 10.0 }
+                        val path = simplify(onto, 4.0)
+                        wild += Trail(day, path)
+                        own.add(path)
+                        onto.forEach { trodden += TroddenCell(Cells.cellAt(it.lat, it.lng, Cells.TRODDEN_RES), day) }
                     }
                     k = e + 1
                 }
@@ -243,6 +264,10 @@ class TrackProcessor(
             keptPoints = kept,
             droppedPoints = dropped,
             matchedPoints = matched,
+            snappedM = snapped,
+            unmatched = unmatched,
+            mergedStretches = mergedStretches,
+            mergedM = mergedM,
         )
     }
 

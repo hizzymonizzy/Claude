@@ -190,6 +190,12 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             fc.features()?.size ?: 0
         } catch (e: CancellationException) { throw e } catch (e: Exception) { errors += "$id: ${e.javaClass.simpleName} ${e.message}"; -1 }
         val kinds = world?.landmarks.orEmpty().associate { it.name to it.kind }
+        // 0.14: the worn banner is drawn onto the capital's hex; make sure that picture exists before the settlements use it.
+        world?.settlements?.firstOrNull { it.isCapital }?.let { cap ->
+            if (wornBanner != null) try {
+                capitalComposite(s, context, "hex_tier_${cap.tier.ordinal}" + if (world?.monuments?.isNotEmpty() == true) "_capmon" else "_cap", wornBanner)
+            } catch (e: Exception) { errors += "banner: ${e.javaClass.simpleName}" }
+        }
         // The heat map at three hex sizes (built off the main thread: thousands of hexes for a year of walking).
         val heatCounts = try {
             val (block, hood, county) = withContext(Dispatchers.Default) {
@@ -215,11 +221,10 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             "wild" to update("wild") { MapLayersBuilder.wild(layers) },
             "places" to update("landmarks") { MapLayersBuilder.landmarkLabels(layers, kinds) },
             "settlements" to update("settlements") { MapLayersBuilder.settlements(world, wornBanner) },
-            "buildings" to update("buildings") { MapLayersBuilder.villageBuildings(world) },
-            "cells" to update("building-cells") { MapLayersBuilder.buildingCellPolygons(world) },
+            "buildings" to update("buildings") { MapLayersBuilder.villageBuildings(world, layers) },
+            "cells" to update("building-cells") { MapLayersBuilder.buildingCellPolygons(world, layers) },
             "trader" to update("trader") { MapLayersBuilder.trader(world) },
             "encounters" to update("encounters") { MapLayersBuilder.encounters(world) },
-            "banner" to update("capital-banner") { MapLayersBuilder.capitalBanner(world, wornBanner) },
             "waypoints" to update("waypoints") { MapLayersBuilder.waypoints(world) },
             "waystones" to update("waystones") { MapLayersBuilder.waystones(world) },
             "regions" to update("region-nodes") { HeatLayers.regionNodes(world) }.also { update("region-links") { HeatLayers.regionLinks(world) } },

@@ -280,6 +280,7 @@ interface WanderDao {
     // Segments and points
     @Insert fun insertSegment(s: SegmentEntity): Long
     @Query("UPDATE segment SET endMs = :endMs WHERE id = :id") fun endSegment(id: Long, endMs: Long)
+    @Query("SELECT * FROM segment WHERE id = :id") fun segment(id: Long): SegmentEntity?
     @Query("UPDATE segment SET processed = :processed, note = :note WHERE id = :id") fun markProcessed(id: Long, processed: Boolean, note: String?)
     @Query("SELECT * FROM segment WHERE processed = 0 AND endMs IS NOT NULL ORDER BY startMs") fun pendingSegments(): List<SegmentEntity>
     @Query("SELECT * FROM segment WHERE endMs IS NULL") fun openSegments(): List<SegmentEntity>
@@ -320,6 +321,8 @@ interface WanderDao {
     @Insert fun insertWild(t: List<WildTrailEntity>)
     @Query("DELETE FROM wild_trail WHERE segmentId = :segmentId") fun deleteWild(segmentId: Long)
     @Query("SELECT * FROM wild_trail") fun allWild(): List<WildTrailEntity>
+    /** Own paths from walks that started before [startMs] (0.14: a new walk merges onto them). */
+    @Query("SELECT w.* FROM wild_trail w JOIN segment s ON s.id = w.segmentId WHERE s.startMs < :startMs") fun wildBefore(startMs: Long): List<WildTrailEntity>
     @Insert fun insertTrodden(t: List<TroddenEntity>)
     @Query("DELETE FROM trodden WHERE segmentId = :segmentId") fun deleteTrodden(segmentId: Long)
     @Query("SELECT * FROM trodden") fun allTrodden(): List<TroddenEntity>

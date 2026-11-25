@@ -144,8 +144,9 @@ class MapLayersBuilderTest {
         assertEquals(setOf("bldg_hex_meeting_hall", "bldg_hex_well", "bldg_hex_market"), icons)
         icons.forEach { assertTrue(it, MapIcons.images.containsKey(it)) }
         assertEquals("market:a", bldgs.single { it.getStringProperty("icon") == "bldg_hex_market" }.getStringProperty("id"))
-        assertEquals("hex_tier_3_cap", MapLayersBuilder.settlements(w, "crimson").features()!!.single().getStringProperty("icon"))
-        assertEquals("banner_crimson", MapLayersBuilder.capitalBanner(w, "crimson").features()!!.single().getStringProperty("icon"))
+        assertEquals("hex_tier_3_cap", MapLayersBuilder.settlements(w, null).features()!!.single().getStringProperty("icon"))
+        // 0.14: the worn banner is part of the capital's hex picture, so it can't drift away from it.
+        assertEquals("capb_hex_tier_3_cap_crimson", MapLayersBuilder.settlements(w, "crimson").features()!!.single().getStringProperty("icon"))
         // 0.12: the village is paved hexes (block size) on explored ground only; walked hexes carry their heat step.
         val half = org.locationtech.jts.geom.GeometryFactory().createPolygon(listOf(at(-500.0, -500.0), at(0.0, -500.0), at(0.0, 500.0), at(-500.0, 500.0), at(-500.0, -500.0))
             .map { org.locationtech.jts.geom.Coordinate(it.lng, it.lat) }.toTypedArray())
@@ -218,5 +219,24 @@ class MapLayersBuilderTest {
         val hood = world.wander.engine.HeatSpread.aggregate(cov, Cells.HOOD_RES, 49)
         println("year spread: ${heat.size} walked → ${cov.size} covered hexes in ${(t1 - t0) / 1_000_000} ms; hex fog in ${(t2 - t1) / 1_000_000} ms; ${hood.size} hood hexes")
         assertTrue(explored != null)
+    }
+
+    @Test
+    fun buildingsTouchTheirSettlementButNeverStandOnAStreet() {
+        // 0.14: a camp (no paved rings) with three buildings and a street running north-south 12 m east of it.
+        val camp = settlement(capital = false, tier = Tier.CAMP).copy(projects = listOf("campfire", "signpost", "forager_cache"))
+        val street = edge("elm", at(12.0, -300.0), at(12.0, 300.0))
+        val layers = MapLayers(discovered = emptyList(), peek = listOf(street))
+        val cells = MapLayersBuilder.buildingCells(world(listOf(camp)), layers)
+        val center = Cells.cellAt(origin.lat, origin.lng, Cells.HEAT_RES)
+        val touching = Cells.rings(center, 1)[1].toSet()
+        val crossed = (0..200).map { at(12.0, -300.0 + it * 3.0) }.map { Cells.cellAt(it.lat, it.lng, Cells.HEAT_RES) }.toSet()
+        assertEquals(3, cells.size)
+        cells.forEach { (cell, id, _) ->
+            assertTrue("$id touches the camp", cell in touching)
+            assertFalse("$id is off the street", cell in crossed)
+        }
+        // Without the street they still touch it.
+        assertTrue(MapLayersBuilder.buildingCells(world(listOf(camp)), null).all { it.first in touching })
     }
 }

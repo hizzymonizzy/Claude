@@ -55,6 +55,11 @@ import world.wander.engine.RegionState
 import world.wander.engine.Tier
 import world.wander.engine.WorldParams
 import java.time.LocalDate
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import java.time.format.DateTimeFormatter
 
 private val TIER_SPRITES = listOf(
@@ -150,17 +155,15 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            if (w != null) {
-                Spacer(Modifier.height(8.dp))
-                TreasuryRow(w.treasury)
-                Spacer(Modifier.height(8.dp))
-                ProposalCard(repo, w, onShowOnMap)
-            }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
-                placeholder = { Text("Search towns, places, streets") }, modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search settlements, places, streets") }, modifier = Modifier.fillMaxWidth(),
             )
+            if (w != null) {
+                Spacer(Modifier.height(8.dp))
+                TreasuryRow(w.treasury)
+            }
         }
 
         if (query.isNotBlank()) {
@@ -188,49 +191,89 @@ fun AtlasScreen(repo: Repository, onShowOnMap: () -> Unit = {}) {
                 }
             }
         }
-        val list = w?.settlements.orEmpty().let { all ->
+        // 0.14 (mockup_atlas.png): the capital on its own card with its buildings, then the current request.
+        val capital = w?.settlements?.firstOrNull { it.isCapital }
+        if (capital != null) item { CapitalCard(capital, where(capital.position)) { go(capital.position) } }
+        if (w?.proposal != null) item { ProposalCard(repo, w, onShowOnMap) }
+        val list = w?.settlements.orEmpty().filter { !it.isCapital }.let { all ->
             when (sortBy) {
                 "Recent" -> all.sortedByDescending { it.lastAreaDay }
                 "Needs a visit" -> all.sortedBy { it.lastAreaDay }
                 else -> all.sortedBy { dist(it.position) }
             }
         }
-        item { SectionTitle("Settlements") }
-        if (list.isEmpty()) item {
+        if (list.isNotEmpty() || capital == null) item { SectionTitle("Settlements") }
+        if (list.isEmpty() && capital == null) item {
             Text("No settlements yet. Spend a night somewhere new and a camp will appear.", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic)
         }
         items(list, key = { it.areaId }) { s ->
             Card(onClick = { go(s.position) }, modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Image(ImageBitmap.imageResource(TIER_SPRITES[s.tier.ordinal]), contentDescription = s.tier.label,
-                        filterQuality = FilterQuality.Medium, modifier = Modifier.size(52.dp))
-                    Spacer(Modifier.width(12.dp))
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    HexArt(s.tier.ordinal, false, 56)
+                    Spacer(Modifier.width(10.dp))
+                    // The text takes what's left; the distance column has a fixed width, so nothing overlaps (0.14).
                     Column(Modifier.weight(1f)) {
-                        Text((if (s.isCapital) "★ " else "") + s.name, style = MaterialTheme.typography.titleMedium)
-                        val next = Tier.entries.getOrNull(s.tier.ordinal + 1)?.takeIf { it != Tier.METROPOLIS || s.isCapital }
-                        Text(s.tier.label + (next?.let { " · %.0f / %.0f to %s".format(s.development, WorldParams().tierThresholds[it.ordinal], it.label) } ?: ""),
-                            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-                        if (next != null) LinearProgressIndicator(progress = { (s.development / WorldParams().tierThresholds[next.ordinal]).toFloat().coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))
+                        Text(s.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        TierProgress(s)
                         if (s.projects.isNotEmpty()) Text("Built: " + Projects.shown(s.projects).mapNotNull { Projects.byId(it)?.name }.joinToString(),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(where(s.position), style = MaterialTheme.typography.titleSmall)
-                        Text("last ${dayLabel(s.lastAreaDay)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.width(76.dp), horizontalAlignment = Alignment.End) {
+                        Text(where(s.position), style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                        Text(dayLabel(s.lastAreaDay), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, maxLines = 1)
                     }
                 }
             }
         }
-        val campable = w?.exploredAreas.orEmpty().filter { !it.settled }.sortedBy { dist(it.center) }.take(5)
-        if (campable.isNotEmpty()) {
-            item { SectionTitle("Places you could camp") }
-            item { Text("Spend a night in one of these and a camp is founded there.", style = MaterialTheme.typography.bodySmall) }
-            items(campable, key = { "camp-" + it.id }) { a ->
-                HitRow(a.name, where(a.center) + " · last walked ${dayLabel(a.lastVisitDay)}", R.drawable.oad_medal_waypoint) { go(a.center) }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** A settlement's hex picture (the map's own, tools/gen_hex_icons.py). */
+@Composable
+private fun HexArt(tier: Int, capital: Boolean, sizeDp: Int) {
+    val res = MapIcons.images["hex_tier_$tier" + if (capital) "_cap" else ""] ?: TIER_SPRITES[tier]
+    Image(ImageBitmap.imageResource(res), contentDescription = null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(sizeDp.dp))
+}
+
+/** "Hamlet · 9 / 25 to Village" and a bar. */
+@Composable
+private fun TierProgress(s: SettlementState) {
+    val next = Tier.entries.getOrNull(s.tier.ordinal + 1)?.takeIf { it != Tier.METROPOLIS || s.isCapital }
+    Text((if (s.isCapital) "Capital · " else "") + s.tier.label + (next?.let { " · %.0f / %.0f to %s".format(s.development, WorldParams().tierThresholds[it.ordinal], it.label) } ?: ""),
+        style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    if (next != null) LinearProgressIndicator(progress = { (s.development / WorldParams().tierThresholds[next.ordinal]).toFloat().coerceIn(0f, 1f) },
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))
+}
+
+/** The capital's card (0.14, mockup_atlas.png): its hex, progress to the next tier, and its buildings as hex badges. */
+@Composable
+private fun CapitalCard(s: SettlementState, where: String, onGo: () -> Unit) {
+    Card(onClick = onGo, modifier = Modifier.fillMaxWidth(), border = BorderStroke(2.dp, Color(0xFF4A3622))) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HexArt(s.tier.ordinal, true, 72)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(s.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TierProgress(s)
+                    Text(listOf(where, dayLabel(s.lastAreaDay)).filter { it.isNotBlank() }.joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                }
+            }
+            val built = Projects.shown(s.projects)
+            if (built.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    for (id in built) Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(60.dp)) {
+                        MapIcons.images["bldg_hex_$id"]?.let { Image(ImageBitmap.imageResource(it), null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(44.dp)) }
+                        Text(Projects.byId(id)?.name ?: id, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    }
+                }
             }
         }
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
@@ -264,7 +307,8 @@ fun ProposalCard(repo: Repository, w: WorldState, onShowOnMap: () -> Unit = {}) 
         Column(Modifier.padding(16.dp)) {
             Text("Proposal from ${w.areaNames[p.areaId] ?: "a settlement"}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
             Text(def.name, style = MaterialTheme.typography.titleMedium)
-            Text(def.description + " · +${def.prosperity} prosperity", style = MaterialTheme.typography.bodySmall)
+            // 0.14: what it does for you (its perk), not an abstract prosperity number.
+            Text(def.perk.ifBlank { def.description }, style = MaterialTheme.typography.bodySmall, color = Color(0xFF3F7D3A))
             Spacer(Modifier.height(6.dp))
             Text("Costs ${def.cost}", style = MaterialTheme.typography.bodyMedium)
             if (!canAfford) {
@@ -291,8 +335,6 @@ fun ProposalCard(repo: Repository, w: WorldState, onShowOnMap: () -> Unit = {}) 
                         }
                     }
                 }
-                Text("Or buy what's missing from the travelling trader on the map.",
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -14,6 +14,7 @@ import world.wander.app.data.MapLayers
 import world.wander.app.geo.Overpass
 import world.wander.engine.GATHER_M
 import world.wander.engine.Cells
+import world.wander.engine.Geo
 import world.wander.engine.LatLng
 import world.wander.engine.LocalProjection
 import world.wander.engine.WorldState
@@ -144,8 +145,8 @@ object MapLayersBuilder {
     }
 
     /** Buildings at each settlement (the latest of each upgrade chain), around its medallion; markets are tappable. */
-    fun villageBuildings(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
-        buildingCells(state).map { (cell, id, areaId) ->
+    fun villageBuildings(state: WorldState?, layers: MapLayers? = null): FeatureCollection = FeatureCollection.fromFeatures(
+        buildingCells(state, layers).map { (cell, id, areaId) ->
             val c = Cells.center(cell)
             Feature.fromGeometry(Point.fromLngLat(c.lng, c.lat)).apply {
                 addStringProperty("icon", "bldg_hex_$id")
@@ -156,11 +157,11 @@ object MapLayersBuilder {
     )
 
     /**
-     * Developed hexes (0.13): each building claims a block hex in the second ring around its settlement, spread evenly,
-     * and draws its ground there (packed earth, cobbles or field rows) at close zoom.
+     * Developed hexes (0.13): each building claims a block hex beside its settlement and draws its ground there (packed
+     * earth, cobbles or field rows) at close zoom.
      */
-    fun buildingCellPolygons(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
-        buildingCells(state).map { (cell, id, _) ->
+    fun buildingCellPolygons(state: WorldState?, layers: MapLayers? = null): FeatureCollection = FeatureCollection.fromFeatures(
+        buildingCells(state, layers).map { (cell, id, _) ->
             val b = Cells.boundary(cell)
             Feature.fromGeometry(GeoPolygon.fromLngLats(listOf((b + b.first()).map { Point.fromLngLat(it.lng, it.lat) }))).apply {
                 addStringProperty("pattern", when (id) {
@@ -172,19 +173,47 @@ object MapLayersBuilder {
         },
     )
 
-    private fun buildingCells(state: WorldState?): List<Triple<String, String, String>> = state?.settlements.orEmpty().flatMap { s ->
-        val shown = world.wander.engine.Projects.shown(s.projects)
-        if (shown.isEmpty()) return@flatMap emptyList()
-        val ring = Cells.rings(Cells.cellAt(s.position.lat, s.position.lng, Cells.HEAT_RES), 2)[2]
-        shown.mapIndexed { i, id -> Triple(ring[(i * ring.size / maxOf(shown.size, 6)) % ring.size], id, s.areaId) }
+    /**
+     * Where each building stands (0.14): the upgrades belong to the settlement, so they take the hexes touching it (the
+     * ring just outside its paved hexes), in the order they were built, skipping any hex a street crosses. Only when a
+     * ring has no room left do they go one ring further out; if streets cross everything nearby, they sit on the
+     * nearest hexes anyway.
+     */
+    internal fun buildingCells(state: WorldState?, layers: MapLayers?): List<Triple<String, String, String>> {
+        val settlements = state?.settlements.orEmpty()
+        val roads = roadCells(layers, settlements.filter { world.wander.engine.Projects.shown(it.projects).isNotEmpty() }.map { it.position })
+        val taken = HashSet<String>()
+        return settlements.flatMap { s ->
+            val shown = world.wander.engine.Projects.shown(s.projects)
+            if (shown.isEmpty()) return@flatMap emptyList()
+            val center = Cells.cellAt(s.position.lat, s.position.lng, Cells.HEAT_RES)
+            val paved = HeatLayers.pavedRings(s.tier.ordinal).coerceAtLeast(0)
+            val rings = Cells.rings(center, paved + 4)
+            val free = (paved + 1..paved + 4).flatMap { rings[it] }.filter { it !in roads && it !in taken }
+            val fallback = (paved + 1..paved + 4).flatMap { rings[it] }.filter { it !in taken }
+            shown.mapIndexedNotNull { i, id ->
+                val cell = free.getOrNull(i) ?: fallback.firstOrNull { it !in taken } ?: return@mapIndexedNotNull null
+                taken += cell
+                Triple(cell, id, s.areaId)
+            }
+        }
     }
 
-    /** The banner you wear, planted beside your capital (0.13). */
-    fun capitalBanner(state: WorldState?, banner: String?): FeatureCollection = FeatureCollection.fromFeatures(
-        listOfNotNull(banner?.let { b -> state?.settlements?.firstOrNull { it.isCapital }?.let { c ->
-            Feature.fromGeometry(Point.fromLngLat(c.position.lng, c.position.lat)).apply { addStringProperty("icon", "banner_$b") }
-        } }),
-    )
+    /** Block hexes crossed by a street (walked or not) within ~400 m of these points. */
+    private fun roadCells(layers: MapLayers?, near: List<LatLng>): Set<String> {
+        if (layers == null || near.isEmpty()) return emptySet()
+        val out = HashSet<String>()
+        for (e in layers.discovered.map { it.first } + layers.peek) {
+            val pts = try { Overpass.decode(e.geometry) } catch (_: Exception) { continue }
+            if (pts.none { p -> near.any { Geo.distanceM(it, p) < 400 + e.lengthM } }) continue
+            for (k in 1 until pts.size) {
+                val a = pts[k - 1]; val b = pts[k]
+                val n = (Geo.distanceM(a, b) / 3).toInt().coerceAtLeast(1)
+                for (t in 0..n) out += Cells.cellAt(a.lat + (b.lat - a.lat) * t / n, a.lng + (b.lng - a.lng) * t / n, Cells.HEAT_RES)
+            }
+        }
+        return out
+    }
 
     /** People met after walks (0.13), standing where they appeared; tap to talk. */
     fun encounters(state: WorldState?): FeatureCollection = FeatureCollection.fromFeatures(
@@ -242,11 +271,16 @@ object MapLayersBuilder {
                     state?.monuments?.isNotEmpty() == true -> "_capmon"
                     else -> "_cap"
                 }
-                addStringProperty("icon", "hex_tier_${s.tier.ordinal}$badge")
+                // 0.14: the banner you wear is drawn onto the capital's hex (one image), so it stays with it at every zoom.
+                val base = "hex_tier_${s.tier.ordinal}$badge"
+                addStringProperty("icon", if (s.isCapital && banner != null) capitalIcon(base, banner) else base)
                 addNumberProperty("liveliness", s.liveliness)
             }
         },
     )
+
+    /** The capital's hex with the worn banner planted on it (built by [MapScreen] with `capitalComposite`). */
+    fun capitalIcon(base: String, banner: String) = "capb_${base}_$banner"
 
     /** The whole world in fog, and the explored ground (holes in the fog) as its own layer. */
     /** Each waystone sits in a small clearing, so it never floats in the fog. */

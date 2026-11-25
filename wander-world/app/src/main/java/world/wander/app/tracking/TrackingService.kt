@@ -60,6 +60,9 @@ class TrackingService : LifecycleService() {
     private var stillJob: Job? = null
     private var idleWatchJob: Job? = null
     private var confirmJob: Job? = null
+    private var liveJob: Job? = null
+    /** What the walk has gathered so far (0.14), e.g. "+3 wood · +2 food · 2 places". */
+    private var liveLine: String? = null
 
     private val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -170,7 +173,41 @@ class TrackingService : LifecycleService() {
         repo.captureMode.value = mode?.takeIf { it != "PROBE" } ?: "FOOT"
         repo.trackingStatus.value = if (mode == "WATER") "Paddling" else "Charting your walk"
         startIdleWatch()
+        startLiveGathering()
         updateNotification()
+    }
+
+    /** Live gathering (0.14): every 5 minutes, the walk so far is credited in memory and shown on the notification. */
+    private fun startLiveGathering() {
+        liveJob?.cancel()
+        liveLine = null
+        liveJob = lifecycleScope.launch {
+            while (isActive && capturing) {
+                delay(LIVE_EVERY_MS)
+                val id = segmentId ?: continue
+                if (!capturing || modeHint == "PROBE") continue
+                val batch = buffer.toList(); buffer.clear()
+                try {
+                    kotlinx.coroutines.withContext(Dispatchers.IO) { if (batch.isNotEmpty()) repo.dao.insertPoints(batch) }
+                    val g = repo.gatherLive(id) ?: continue
+                    if (!capturing || segmentId != id) continue
+                    liveLine = liveText(g)
+                    updateNotification()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    repo.log("live", "Live check failed: ${e.javaClass.simpleName}: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun liveText(g: Repository.LiveGather): String {
+        val t = g.gathered
+        val parts = listOf("wood" to t.wood, "food" to t.food, "stone" to t.stone, "metal" to t.metal, "gold" to t.gold)
+            .filter { it.second >= 1 }.map { "+${it.second.toInt()} ${it.first}" }
+        val places = if (g.places > 0) listOf("${g.places} place" + if (g.places > 1) "s" else "") else emptyList()
+        return (parts + places).joinToString(" · ").ifEmpty { "nothing gathered yet" }
     }
 
     private fun onFix(timeMs: Long, lat: Double, lng: Double, acc: Float) {
@@ -252,6 +289,8 @@ class TrackingService : LifecycleService() {
         if (!capturing) return
         capturing = false
         idleWatchJob?.cancel()
+        liveJob?.cancel()
+        liveLine = null
         fused.removeLocationUpdates(callback)
         flush()
         val id = segmentId
@@ -290,7 +329,8 @@ class TrackingService : LifecycleService() {
     private fun buildNotification(): Notification {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val text = when {
-            capturing -> (if (modeHint == "WATER") "Paddling" else "Charting your walk") + " · %.2f km".format(distanceM / 1000)
+            capturing -> (if (modeHint == "WATER") "Paddling" else "Charting your walk") + " · %.2f km".format(distanceM / 1000) +
+                (liveLine?.let { " · $it" } ?: "")
             allDay -> "Waiting for you to start moving"
             else -> "Ready"
         }
@@ -333,6 +373,7 @@ class TrackingService : LifecycleService() {
         private const val CONFIRM_MS = 2 * 60_000L
         private val shortCaptureEnds = mutableListOf<Long>()
         private const val VEHICLE_SPEED_MPS = 7.0
+        private const val LIVE_EVERY_MS = 5 * 60_000L
 
         fun intent(context: Context, action: String, mode: String? = null) =
             Intent(context, TrackingService::class.java).setAction(action).apply { if (mode != null) putExtra(EXTRA_MODE, mode) }

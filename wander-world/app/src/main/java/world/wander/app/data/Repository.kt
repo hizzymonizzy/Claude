@@ -35,6 +35,8 @@ import world.wander.engine.Mode
 import world.wander.engine.Place
 import world.wander.engine.TrackPoint
 import world.wander.engine.TrackProcessor
+import world.wander.engine.TrackResult
+import world.wander.engine.Treasury
 import world.wander.engine.WorldEngine
 import world.wander.engine.WorldInput
 import world.wander.engine.WorldState
@@ -300,30 +302,10 @@ class Repository(context: Context) {
                         arrivalSincePrevious(seg, pts)?.let { dao.insertArrivals(listOf(ArrivalEntity(segmentId = seg.id, day = it.day, lat = it.lat, lng = it.lng))) }
                         dao.markProcessed(seg.id, true, "no walk: moving around a building, in a vehicle, or poor GPS")
                     }
+                    clearLive(seg.id)
                     continue
                 }
-                val tiles = usable.map { Cells.tile(it.lat, it.lng) }.toSet()
-                if (!ensureTiles(tiles)) continue // map data not available yet; this walk waits, others carry on
-                val graph = dao.edgesInTiles(tiles.toList()).map {
-                    GraphEdge(it.id, it.name, it.startNode, it.endNode, Overpass.decode(it.geometry))
-                }
-                // A vehicle probe only counts if it turned out to be on the water.
-                val probe = seg.modeHint == "PROBE"
-                val hint = seg.modeHint?.takeIf { !probe }?.let { Mode.valueOf(it) }
-                val landmarks = dao.landmarksInTiles(tiles.toList()).distinctBy { it.id }.mapNotNull {
-                    try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
-                }
-                val water = dao.waterAreasInTiles(tiles.toList()).distinctBy { it.id }.mapNotNull {
-                    try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
-                }
-                val coastal = dao.waterTiles(tiles.toList()).any { it.coastal }
-                val coast = coastLines(tiles)
-                val r0 = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks, water, coastal, coast, fieldLines(tiles))
-                val r = if (!probe) r0 else r0.copy(
-                    coverage = emptyList(), presence = emptyList(), trails = emptyList(), wildTrails = emptyList(),
-                    trodden = emptyList(), arrivals = emptyList(), heat = emptyList(),
-                    movement = r0.movement.map { it.copy(footMeters = 0.0, cycleMeters = 0.0) },
-                )
+                val (r, places, tiles) = observe(seg, pts, usable) ?: continue // map data not available yet; this walk waits
                 db.runInTransaction {
                     dao.deleteCoverage(seg.id); dao.deletePresence(seg.id); dao.deleteMovement(seg.id); dao.deleteTrails(seg.id)
                     dao.deleteWild(seg.id); dao.deleteTrodden(seg.id); dao.deleteVisits(seg.id); dao.deleteArrivals(seg.id)
@@ -350,7 +332,9 @@ class Repository(context: Context) {
                     )
                 }
                 log("process", "Segment ${seg.id} (${seg.source}): ${pts.size} pts → ${r.coverage.size} road stretches, ${r.presence.size} cell visits, matched ${r.matchedPoints}/${r.keptPoints}")
-                log("gather", gatherSummary(seg.id, r, landmarks + water, tiles))
+                log("gather", gatherSummary(seg.id, r, places, tiles))
+                log("paths", pathSummary(seg.id, r))
+                clearLive(seg.id)
                 done++
             }
             if (dao.pendingSegments().isNotEmpty()) ProcessWorker.enqueue(app)
@@ -376,6 +360,86 @@ class Repository(context: Context) {
         return Arrival(TrackProcessor(zone).dayOf(first.timeMs), lat, lng)
     }
 
+    /** A walk turned into observations, with the places and map tiles it was checked against. */
+    private data class Observed(val r: TrackResult, val places: List<Landmark>, val tiles: Set<String>)
+
+    /** Processes a walk's points against the map without storing anything; null while its map data isn't available. */
+    private suspend fun observe(seg: SegmentEntity, pts: List<TrackPointEntity>, usable: List<TrackPoint>): Observed? {
+        val processor = TrackProcessor(zone)
+        val tiles = usable.map { Cells.tile(it.lat, it.lng) }.toSet()
+        if (!ensureTiles(tiles)) return null
+        val graph = dao.edgesInTiles(tiles.toList()).map {
+            GraphEdge(it.id, it.name, it.startNode, it.endNode, Overpass.decode(it.geometry))
+        }
+        // A vehicle probe only counts if it turned out to be on the water.
+        val probe = seg.modeHint == "PROBE"
+        val hint = seg.modeHint?.takeIf { !probe }?.let { Mode.valueOf(it) }
+        val landmarks = dao.landmarksInTiles(tiles.toList()).distinctBy { it.id }.mapNotNull {
+            try { Landmark(it.id, it.name, it.kind, Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
+        }
+        val water = dao.waterAreasInTiles(tiles.toList()).distinctBy { it.id }.mapNotNull {
+            try { Landmark(it.id, "", "water", Overpass.decodeRings(it.geometry)) } catch (_: Exception) { null }
+        }
+        val coastal = dao.waterTiles(tiles.toList()).any { it.coastal }
+        val coast = coastLines(tiles)
+        val r0 = processor.process(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) }, hint, graph, landmarks, water, coastal, coast, fieldLines(tiles),
+            ownPaths = ownPathsNear(seg.startMs, usable))
+        val r = if (!probe) r0 else r0.copy(
+            coverage = emptyList(), presence = emptyList(), trails = emptyList(), wildTrails = emptyList(),
+            trodden = emptyList(), arrivals = emptyList(), heat = emptyList(),
+            movement = r0.movement.map { it.copy(footMeters = 0.0, cycleMeters = 0.0) },
+        )
+        return Observed(r, landmarks + water, tiles)
+    }
+
+    // ---- Live gathering (0.14) ----
+
+    /** What the walk in progress has gathered so far: resources (gold included) and the places it paid at. */
+    data class LiveGather(val gathered: Treasury, val places: Int, val km: Double)
+
+    private data class LiveWalk(val segmentId: Long, val r: TrackResult)
+    /** The walk in progress, processed but not stored: the world counts it until the walk ends and is processed. */
+    @Volatile private var live: LiveWalk? = null
+    @Volatile private var liveBaseline: Treasury? = null
+    val liveGather = MutableStateFlow<LiveGather?>(null)
+
+    /**
+     * Live gathering (0.14): every few minutes during a walk, its points so far are processed in memory and the world
+     * rebuilt with them, so stock, requests and node ticks follow you. Nothing is stored; when the walk ends, its
+     * normal processing replaces this (and wins if they differ), so nothing is counted twice.
+     */
+    suspend fun gatherLive(segmentId: Long): LiveGather? = withContext(Dispatchers.IO) {
+        val t0 = System.currentTimeMillis()
+        val seg = dao.segment(segmentId)?.takeIf { it.endMs == null } ?: return@withContext null
+        val pts = dao.points(segmentId)
+        if (pts.size < 2) return@withContext null
+        val usable = TrackProcessor(zone).usablePoints(pts.map { TrackPoint(it.timeMs, it.lat, it.lng, it.accuracyM) })
+        if (usable.isEmpty()) return@withContext null
+        val o = processLock.withLock { observe(seg, pts, usable) } ?: run {
+            log("live", "Live check waiting for map data"); return@withContext null
+        }
+        if (liveBaseline == null || live?.segmentId != segmentId) liveBaseline = _world.value?.treasury
+        live = LiveWalk(segmentId, o.r)
+        val w = rebuild(force = true)
+        val base = liveBaseline ?: w.treasury
+        val t = w.treasury
+        val gained = Treasury(
+            (t.gold - base.gold).coerceAtLeast(0.0), (t.wood - base.wood).coerceAtLeast(0.0), (t.food - base.food).coerceAtLeast(0.0),
+            (t.stone - base.stone).coerceAtLeast(0.0), (t.metal - base.metal).coerceAtLeast(0.0),
+        )
+        val places = o.r.landmarkVisits.groupBy { it.landmarkId }.count { (_, v) -> v.sumOf { it.seconds } >= Yields.VISIT_SECONDS }
+        val km = o.r.movement.sumOf { it.footMeters + it.cycleMeters + it.waterMeters } / 1000
+        val g = LiveGather(gained, places, km)
+        liveGather.value = g
+        log("live", "Live check: %.2f km, %s, %d place(s) (%d ms)".format(km, gained.toString().ifEmpty { "nothing yet" }, places, System.currentTimeMillis() - t0))
+        g
+    }
+
+    /** The walk in progress was stored and processed (or discarded): stop counting it live. */
+    private fun clearLive(segmentId: Long) {
+        if (live?.segmentId == segmentId) { live = null; liveBaseline = null; liveGather.value = null }
+    }
+
     // ---- Building the world ----
 
     private val rebuildLock = Mutex()
@@ -386,10 +450,10 @@ class Repository(context: Context) {
      * Replays the world and publishes it. One lane (review H2): rebuilds never overlap, and requests that arrive while
      * one is running share the next run instead of each replaying the world again.
      */
-    suspend fun rebuild(): WorldState = withContext(Dispatchers.IO) {
+    suspend fun rebuild(force: Boolean = false): WorldState = withContext(Dispatchers.IO) {
         val ticket = rebuildsRequested.incrementAndGet()
         rebuildLock.withLock {
-            _world.value?.let { if (rebuildsCovered >= ticket) return@withContext it }
+            if (!force) _world.value?.let { if (rebuildsCovered >= ticket) return@withContext it }
             val covers = rebuildsRequested.get()
             val t0 = System.currentTimeMillis()
             val state = rebuildNow()
@@ -411,16 +475,18 @@ class Repository(context: Context) {
         val today = today()
         repairFallbackAreas()
         resolveHome()
+        val lw = live?.r
         val coverage = dao.allCoverage()
-        val edgeIds = coverage.map { it.edgeId }.distinct()
+        val edgeIds = (coverage.map { it.edgeId } + lw?.coverage.orEmpty().map { it.edgeId }).distinct()
         val edges = edgeIds.chunked(500).flatMap { dao.edgesById(it) }.associateBy { it.id }
         val edgeInfos = edges.mapValues { (_, e) ->
             GraphEdge(e.id, e.name, e.startNode, e.endNode, Overpass.decode(e.geometry)).toInfo().copy(trail = Yields.isTrail(e.highway))
         }
         val visits = dao.allVisits()
-        val landmarkEntities = visits.map { it.landmarkId }.distinct().chunked(500).flatMap { dao.landmarksById(it) }.associateBy { it.id }
+        val liveVisits = lw?.landmarkVisits.orEmpty()
+        val landmarkEntities = (visits.map { it.landmarkId } + liveVisits.map { it.landmarkId }).distinct().chunked(500).flatMap { dao.landmarksById(it) }.associateBy { it.id }
         // Unnamed lakes and ponds you gathered food at: sources without a name (never "discovered").
-        val waterInfos = visits.map { it.landmarkId }.distinct().filter { it !in landmarkEntities }.chunked(500)
+        val waterInfos = (visits.map { it.landmarkId } + liveVisits.map { it.landmarkId }).distinct().filter { it !in landmarkEntities }.chunked(500)
             .flatMap { dao.waterAreasById(it) }.associate { w ->
                 val ring = Overpass.decodeRings(w.geometry).maxByOrNull { it.size }
                 w.id to LandmarkInfo(w.id, "", "water", 0.0, center = ring?.let { r -> LatLng(r.sumOf { it.lat } / r.size, r.sumOf { it.lng } / r.size) })
@@ -431,10 +497,10 @@ class Repository(context: Context) {
             homeAreaId = prefs.homeAreaId,
             homePoint = prefs.homeLat?.let { lat -> prefs.homeLng?.let { LatLng(lat, it) } },
             edges = edgeInfos,
-            coverage = coverage.map { EdgeCoverage(it.edgeId, it.day, it.fromM, it.toM, Mode.valueOf(it.mode)) },
-            presence = dao.allPresence().map { CellPresence(it.cell, it.day, it.seconds, Mode.valueOf(it.mode)) },
+            coverage = coverage.map { EdgeCoverage(it.edgeId, it.day, it.fromM, it.toM, Mode.valueOf(it.mode)) } + lw?.coverage.orEmpty(),
+            presence = dao.allPresence().map { CellPresence(it.cell, it.day, it.seconds, Mode.valueOf(it.mode)) } + lw?.presence.orEmpty(),
             intensity = dao.allIntensity().map { DayIntensity(it.day, it.moderateMin, it.vigorousMin) },
-            movement = dao.allMovement().map { DayMovement(it.day, it.footMeters, it.cycleMeters, it.waterMeters) },
+            movement = dao.allMovement().map { DayMovement(it.day, it.footMeters, it.cycleMeters, it.waterMeters) } + lw?.movement.orEmpty(),
             cellArea = dao.allCellAreas().associate { it.cell to it.areaId },
             areas = dao.allAreas().associate { it.id to AreaInfo(it.id, it.name, it.placeType) },
             restPeriods = rest,
@@ -449,12 +515,12 @@ class Repository(context: Context) {
             } + waterInfos,
             decisions = dao.allDecisions().map { ProjectDecision(it.day, it.areaId, it.projectId, it.approve) },
             purchases = dao.allPurchases().map { Purchase(it.day, it.seller, it.item, it.qty) },
-            landmarkVisits = visits.map { LandmarkVisit(it.landmarkId, it.day, it.seconds) },
-            trodden = dao.allTrodden().map { TroddenCell(it.cell, it.day) },
+            landmarkVisits = visits.map { LandmarkVisit(it.landmarkId, it.day, it.seconds) } + liveVisits,
+            trodden = dao.allTrodden().map { TroddenCell(it.cell, it.day) } + lw?.trodden.orEmpty(),
             arrivals = dao.allArrivals().map { Arrival(it.day, it.lat, it.lng) },
-            wake = dao.allWake().map { TroddenCell(it.cell, it.day) },
-            shore = dao.allShore().map { TroddenCell(it.cell, it.day) },
-            heat = dao.allHeat().map { TroddenCell(it.cell, it.day) },
+            wake = dao.allWake().map { TroddenCell(it.cell, it.day) } + lw?.wake.orEmpty(),
+            shore = dao.allShore().map { TroddenCell(it.cell, it.day) } + lw?.shore.orEmpty(),
+            heat = dao.allHeat().map { TroddenCell(it.cell, it.day) } + lw?.heat.orEmpty(),
             nights = dao.allNights().map { Arrival(it.day, it.lat, it.lng) },
         )
         val state = engine.build(input, today)
@@ -497,7 +563,7 @@ class Repository(context: Context) {
      * One line per walk saying what it gathered from and why anything didn't pay, e.g.
      * "Segment 12: Oakdale Park (park) 45 s ✓ wood · Elm Woods 12 s, needs 30 s · shores/fields 14 cells (~0.6 km)".
      */
-    private fun gatherSummary(segId: Long, r: world.wander.engine.TrackResult, places: List<Landmark>, tiles: Set<String>): String {
+    private fun gatherSummary(segId: Long, r: TrackResult, places: List<Landmark>, tiles: Set<String>): String {
         val byId = places.associateBy { it.id }
         val parts = r.landmarkVisits.groupBy { it.landmarkId }.map { (id, vs) ->
             val l = byId[id]
@@ -516,6 +582,29 @@ class Repository(context: Context) {
         val missing = tiles.filter { dao.landmarkTile(it) == null }
         val note = if (missing.isNotEmpty()) " · places not downloaded yet for ${missing.size} area(s); this walk is re-checked when they arrive" else ""
         return "Segment $segId: " + (parts + lines).ifEmpty { listOf("no places or shores on this walk") }.joinToString(" · ") + note
+    }
+
+    /** Own paths from earlier walks near these fixes (within ~200 m of their bounding box). */
+    private fun ownPathsNear(startMs: Long, fixes: List<TrackPoint>): List<List<LatLng>> {
+        val pad = 0.002
+        val minLat = fixes.minOf { it.lat } - pad; val maxLat = fixes.maxOf { it.lat } + pad
+        val minLng = fixes.minOf { it.lng } - pad * 1.4; val maxLng = fixes.maxOf { it.lng } + pad * 1.4
+        return dao.wildBefore(startMs).map { Overpass.decode(it.geometry) }
+            .filter { path -> path.any { it.lat in minLat..maxLat && it.lng in minLng..maxLng } }
+    }
+
+    /**
+     * One line per walk on how it fit the map (0.14), e.g. "Segment 12: 82 of 90 fixes on streets · snapped 2 gaps
+     * (140 m) to the street · own paths: 1 gap 214 m, 50 m from the street · 1 stretch joined an own path (120 m)".
+     */
+    private fun pathSummary(segId: Long, r: TrackResult): String {
+        val parts = mutableListOf("${r.matchedPoints} of ${r.keptPoints} fixes on streets")
+        if (r.snappedM.isNotEmpty()) parts += "snapped ${r.snappedM.size} gap(s) (%.0f m) to the street".format(r.snappedM.sum())
+        if (r.unmatched.isNotEmpty()) parts += "unmatched: " + r.unmatched.sortedByDescending { it.first }.take(6).joinToString(", ") { (len, far) ->
+            "%.0f m".format(len) + if (far.isNaN()) " (not between streets)" else ", %.0f m from the street".format(far)
+        } + if (r.unmatched.size > 6) " … ${r.unmatched.size - 6} more" else ""
+        if (r.mergedStretches > 0) parts += "${r.mergedStretches} stretch(es) joined an own path (%.0f m)".format(r.mergedM)
+        return "Segment $segId: " + parts.joinToString(" · ")
     }
 
     /** Outlines of fields, orchards, allotments and community gardens in these tiles (food lines inland). */
@@ -579,8 +668,9 @@ class Repository(context: Context) {
          * v3: arrivals compare raw fixes, so short stops still mark where travel set you down.
          * v4: paddling (water routes) and wider place categories.
          * v5: paddling detected from being on water (water areas, coast).
+         * v12 (0.14): road snap (gaps within 35 m of the street between two matched stretches) and own-path merge.
          */
-        const val PROCESSING_VERSION = 11
+        const val PROCESSING_VERSION = 12
         @Volatile private var instance: Repository? = null
         fun get(context: Context): Repository =
             instance ?: synchronized(this) { instance ?: Repository(context).also { instance = it } }

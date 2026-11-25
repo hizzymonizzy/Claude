@@ -203,6 +203,69 @@ class MapMatcher(
         return path
     }
 
+    private val byNode: Map<Long, List<GraphEdge>> by lazy {
+        val m = HashMap<Long, MutableList<GraphEdge>>()
+        for (e in edges) { m.getOrPut(e.startNode) { mutableListOf() }.add(e); m.getOrPut(e.endNode) { mutableListOf() }.add(e) }
+        m
+    }
+
+    /** [p] snapped onto [edge] (nearest point on it), however far away. */
+    fun project(p: LatLng, edge: GraphEdge): Candidate {
+        val px = proj.x(p); val py = proj.y(p)
+        var best: Candidate? = null
+        for (i in 1 until edge.points.size) {
+            val ax = proj.x(edge.points[i - 1]); val ay = proj.y(edge.points[i - 1])
+            val bx = proj.x(edge.points[i]); val by = proj.y(edge.points[i])
+            val dx = bx - ax; val dy = by - ay
+            val len2 = dx * dx + dy * dy
+            val t = if (len2 == 0.0) 0.0 else (((px - ax) * dx + (py - ay) * dy) / len2).coerceIn(0.0, 1.0)
+            val d = hypot(ax + t * dx - px, ay + t * dy - py)
+            if (best == null || d < best.distM) best = Candidate(edge, edge.cumulative[i - 1] + t * (edge.cumulative[i] - edge.cumulative[i - 1]), d)
+        }
+        return best ?: Candidate(edge, 0.0, Geo.distanceM(p, edge.points.first()))
+    }
+
+    /** The streets a gap between [a] and [b] could have been on: both, and any street joining them end to end. */
+    private fun streetsBetween(a: GraphEdge, b: GraphEdge): List<GraphEdge> {
+        if (a === b) return listOf(a)
+        val aNodes = setOf(a.startNode, a.endNode); val bNodes = setOf(b.startNode, b.endNode)
+        val links = aNodes.flatMap { byNode[it].orEmpty() }
+            .filter { it !== a && it !== b && (it.startNode in bNodes || it.endNode in bNodes) }
+        return listOf(a, b) + links.distinct()
+    }
+
+    /** What [snapGaps] did with a run's gaps. */
+    data class GapReport(val snapped: List<Double>, val unmatched: List<Pair<Double, Double>>)
+
+    /**
+     * Road snap (0.14): a gap in the match that starts and ends on mapped streets, and never strays more than [maxM]
+     * from the street between them (the same street, or one joining the two), was GPS drift: it's credited to that
+     * street. Returns the new match and, for the diagnostics, the lengths snapped and the gaps left (length, how far
+     * the gap got from those streets; NaN when it didn't start and end on a street).
+     */
+    fun snapGaps(points: List<LatLng>, matched: List<Candidate?>, maxM: Double = 35.0): Pair<List<Candidate?>, GapReport> {
+        val out = matched.toMutableList()
+        val snapped = mutableListOf<Double>(); val left = mutableListOf<Pair<Double, Double>>()
+        var k = 0
+        while (k < out.size) {
+            if (out[k] != null) { k++; continue }
+            var e = k
+            while (e + 1 < out.size && out[e + 1] == null) e++
+            val before = out.getOrNull(k - 1); val after = out.getOrNull(e + 1)
+            val length = Geo.lengthM(points.subList((k - 1).coerceAtLeast(0), (e + 2).coerceAtMost(points.size)))
+            if (before == null || after == null) {
+                left += length to Double.NaN
+            } else {
+                val streets = streetsBetween(before.edge, after.edge)
+                val snaps = (k..e).map { i -> streets.map { project(points[i], it) }.minBy { it.distM } }
+                val far = snaps.maxOf { it.distM }
+                if (far <= maxM) { for (i in k..e) out[i] = snaps[i - k]; snapped += length } else left += length to far
+            }
+            k = e + 1
+        }
+        return out to GapReport(snapped, left)
+    }
+
     /** Converts consecutive matched fixes into covered stretches of road. Leg k = fixes k-1 → k. */
     fun coverage(matched: List<Candidate?>): List<EdgeInterval> {
         val out = mutableListOf<EdgeInterval>()

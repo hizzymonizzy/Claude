@@ -63,13 +63,13 @@ choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/p
   - Each step has its own file in `sim/`: `Regions`, `RoadsAndPlaces`, `Settlements`, `Cooling`, `Goal`, `Economy`.
     `Snapshot.kt` builds the immutable `WorldState`.
   - `TrackProcessor` (GPS filtering, pottering, water detection), `MapMatcher` (HMM map matching),
-    `Economy.kt` (yields, projects, monuments, harvest thinning), `Resources.kt` (resource nodes and pointers),
+    `OwnPaths` (own-path merge, 0.14), `Economy.kt` (yields, projects, monuments, harvest thinning), `Resources.kt` (resource nodes and pointers),
     `Dispatch.kt` (daily text), `Story.kt` + `sim/Story.kt` (encounters, trader requests, rare looks, achievements).
     `GatheringSimulationTest`, `CoolingSimulationTest` and `StorySimulationTest` simulate end to end; extend them when
     gathering, cooling or the story change.
   - Tunable numbers live in `WorldParams` / `HarvestParams`.
 - `app/` (`world.wander.app`): Android (Compose, MapLibre, Room, WorkManager, Health Connect, H3).
-  - `data/Repository.kt` is the hub (map data, processing, rebuild); `Diagnostics.kt` and `ResourceSearch.kt` hold
+  - `data/Repository.kt` is the hub (map data, processing, rebuild, live gathering of the walk in progress); `Diagnostics.kt` and `ResourceSearch.kt` hold
     the report and the resource search as extensions; `PointArchive.kt` packs walk points.
   - `data/Db.kt` holds entities and DAO; `data/DbMigrations.kt` holds the migration SQL.
   - `geo/Overpass.kt` fetches and parses map data.

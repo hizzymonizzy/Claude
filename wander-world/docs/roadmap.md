@@ -87,11 +87,26 @@ Everything held since 0.12.2 (backlog sections of 2026-11-23), in this order, on
    settings in tabs with Credits; Goal screen bug fixed.
 6. **Map:** icons ~2×; settlement hex medallions; resource hex badges and arrows; buildings as developed hexes at close zoom.
 
-## 0.14 Safe and sturdy (proposed)
-Encrypted export/import of your world. (Map-server retry tests and the `Repository.kt` split moved into 0.12.)
+## 0.14 On every walk (shipped 0.14.0)
+Agreed 2026-11-25: improve the walks the player does now, near home; camps wait until they start camping.
+1. **Live gathering.** Every 5 minutes during a walk, the walk so far is processed in memory and the world rebuilt with
+   it: stock, the request card and gathered nodes follow you, and the walk notification says what you've gathered
+   ("+3 wood · +2 food · 2 places"). Nothing is stored; the end-of-walk processing replaces it and wins. No watch buzz.
+2. **Road snap at 35 m** and **own-path merge** (20 m, beach-depth aware, 40 m max); every walk re-processed once
+   (PROCESSING_VERSION 12). Per-walk `[paths]` diagnostics line: fixes on streets, snapped gaps, unmatched stretches.
+3. **Map placement:** the worn banner is part of the capital's hex picture; buildings take the hexes touching the
+   settlement, skipping street hexes; edge pointers stack.
+4. **Atlas:** capital card with hex art and building badges, request card shows the perk, no trader line, no "Places
+   you could camp", settlement rows that don't overlap.
+
+## 0.15 Camps by stays (proposed, before mid-December)
+The player starts camping mid-December and crosses a time zone, so this must be on the phone before they leave.
+Camps per spot, grown by stays (1/3/10/30/100), reach by tier (2–6 neighbourhood hexes), merging within reach; the
+night check at 3 am local to the zone you're in, rescheduled on a time-zone change. Possibly regional specialties.
 
 ## Later
-Trade between networks and regions (trade posts at waystones); regional specialty goods; townspeople.
+Encrypted export/import of your world (player: low value while in alpha). Trade between networks and regions (trade
+posts at waystones); regional specialty goods; townspeople.
 
 ## Banks and connections (shipped in 0.10.0; removed in 0.11.0)
 - **Where things go.** Wood, food, stone and metal you gather go into the bank of the **area** where you gathered

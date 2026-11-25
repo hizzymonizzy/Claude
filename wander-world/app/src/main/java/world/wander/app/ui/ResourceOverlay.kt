@@ -105,17 +105,24 @@ fun ResourcePointers(
         val top = topInsetPx + chip; val bottom = h - with(density) { 150.dp.toPx() }
         if (right <= left || bottom <= top) return@BoxWithConstraints
         val cx = w / 2; val cy = (top + bottom) / 2
-        for (t in targets) {
-            val (x, y) = project(t.point) ?: continue
-            val icon = RESOURCE_ICONS[t.resource] ?: continue
-            if (x in 0f..w && y in 0f..h) continue // on screen: the map draws it
+        val pins = targets.mapNotNull { t ->
+            val (x, y) = project(t.point) ?: return@mapNotNull null
+            if (RESOURCE_ICONS[t.resource] == null) return@mapNotNull null
+            if (x in 0f..w && y in 0f..h) return@mapNotNull null // on screen: the map draws it
             // Clamp the line from the middle of the map to the target onto the safe rectangle.
             val dx = x - cx; val dy = y - cy
             val sx = if (dx == 0f) Float.MAX_VALUE else ((if (dx > 0) right else left) - cx) / dx
             val sy = if (dy == 0f) Float.MAX_VALUE else ((if (dy > 0) bottom else top) - cy) / dy
             val k = minOf(abs(sx), abs(sy))
-            val ex = cx + dx * k; val ey = cy + dy * k
-            val angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+            Triple(t, cx + dx * k to cy + dy * k, Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat())
+        }
+        // 0.14: pointers that would overlap at the edge stack beside each other instead (nearest keeps its place).
+        val order = pins.indices.sortedBy { pins[it].first.distanceM }
+        val stacked = stackPointers(order.map { pins[it].second }, with(density) { 56.dp.toPx() }, with(density) { 54.dp.toPx() }, left, top, right, bottom)
+        for ((n, i) in order.withIndex()) {
+            val (t, _, angle) = pins[i]
+            val icon = RESOURCE_ICONS.getValue(t.resource)
+            val (ex, ey) = stacked[n]
             val half = with(density) { 26.dp.toPx() }
             Column(
                 Modifier.offset { IntOffset((ex - half).roundToInt(), (ey - half).roundToInt()) }.clickable { onPick(t) },
@@ -136,6 +143,33 @@ fun ResourcePointers(
             }
         }
     }
+}
+
+/**
+ * Moves edge pointers apart so none overlap (0.14). [points] are in priority order (the first never moves); each later
+ * one that would overlap one already placed slides along its edge (down/up the sides, along the top and bottom),
+ * whichever way is free first, staying inside [left]..[right] × [top]..[bottom].
+ */
+internal fun stackPointers(
+    points: List<Pair<Float, Float>>, boxW: Float, boxH: Float, left: Float, top: Float, right: Float, bottom: Float,
+): List<Pair<Float, Float>> {
+    val placed = mutableListOf<Pair<Float, Float>>()
+    fun clear(p: Pair<Float, Float>) = placed.none { abs(it.first - p.first) < boxW && abs(it.second - p.second) < boxH }
+    for ((x, y) in points) {
+        val onSide = abs(x - left) < 1f || abs(x - right) < 1f
+        val (stepX, stepY) = if (onSide) 0f to boxH else boxW to 0f
+        var best = x to y
+        if (!clear(best)) {
+            for (n in 1..40) {
+                val a = (x + stepX * n).coerceIn(left, right) to (y + stepY * n).coerceIn(top, bottom)
+                val b = (x - stepX * n).coerceIn(left, right) to (y - stepY * n).coerceIn(top, bottom)
+                if (clear(a)) { best = a; break }
+                if (clear(b)) { best = b; break }
+            }
+        }
+        placed += best
+    }
+    return placed
 }
 
 /** What a resource node is and how to gather from it; opened by tapping the node on the map. */

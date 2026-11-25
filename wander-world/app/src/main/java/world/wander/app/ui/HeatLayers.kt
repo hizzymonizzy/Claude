@@ -32,6 +32,9 @@ object HeatLayers {
     private val TOWN_K_HOOD = intArrayOf(-1, -1, 0, 0, 1, 2, 3)
     private val TOWN_K_COUNTY = intArrayOf(-1, -1, -1, 0, 1, 2, 2)
 
+    /** How many paved rings of block hexes a settlement of this tier has (0 = just its own hex; -1 none). */
+    fun pavedRings(tier: Int): Int = TOWN_K_BLOCK.getOrElse(tier) { TOWN_K_BLOCK.last() }
+
     /** Where wooded and sandy ground is, for picking each hex's texture. */
     class Grounds(val forest: PreparedGeometry?, val sand: PreparedGeometry?)
 

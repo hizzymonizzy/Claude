@@ -89,13 +89,13 @@ internal val OUR_LAYERS = listOf(
     "sand-places", "water-route", "water-light",
     "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
     "resource-rings", "resource-icons", "me",
-    "heat-hood", "heat-block", "heat-county", "region-links", "region-nodes", "buildings", "trader", "encounters", "capital-banner", "building-cells", "building-art",
+    "heat-hood", "heat-block", "heat-county", "region-links", "region-nodes", "buildings", "trader", "encounters", "building-cells", "building-art",
 )
 
 internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     val empty = FeatureCollection.fromFeatures(emptyList())
     for (id in listOf("explored", "green-places", "sand-places", "shore", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "resources", "me",
-        "heat-block", "heat-hood", "heat-county", "region-nodes", "region-links", "buildings", "trader", "encounters", "capital-banner", "building-cells")) s.addSource(GeoJsonSource(id, empty))
+        "heat-block", "heat-hood", "heat-county", "region-nodes", "region-links", "buildings", "trader", "encounters", "building-cells")) s.addSource(GeoJsonSource(id, empty))
 
     // Explored ground: real terrain texture (0 A.D. grass / forest floor) laid OVER the base map's streets and
     // buildings, so inside explored land every street is drawn by its status (walked: trail…avenue; unwalked:
@@ -358,12 +358,6 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
             textAnchor(Property.TEXT_ANCHOR_TOP), textOffset(arrayOf(0f, 2.2f)), textAllowOverlap(true),
         ).apply { maxZoom = 8.5f },
     ) }
-    guard(problems, "capital-banner") { s.addLayer(
-        SymbolLayer("capital-banner", "capital-banner").withProperties(
-            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
-            iconOffset(arrayOf(-60f, 40f)), iconSize(interpolate(linear(), zoom(), stop(8, 0.8f), stop(15, 1.3f), stop(17, 1.7f))),
-        ).apply { minZoom = 8.5f },
-    ) }
     guard(problems, "encounters") { s.addLayer(
         SymbolLayer("encounters", "encounters").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
@@ -418,8 +412,31 @@ internal fun addSprites(s: Style, context: Context) {
         val base = loaded[tex] ?: continue
         for (step in 0..5) s.addImage("heat_${ground}_$step", heatTint(base, step))
     }
-    // 0.13: settlements are pre-made hex images (hex_tier_N[_cap|_capmon], tools/gen_hex_icons.py); the worn banner
-    // is its own symbol beside the capital.
+    // 0.13: settlements are pre-made hex images (hex_tier_N[_cap|_capmon], tools/gen_hex_icons.py); 0.14: the worn
+    // banner is composited onto the capital's hex at runtime (capitalComposite).
+}
+
+/**
+ * The capital's hex with the worn banner planted on its right shoulder (0.14), added to the style once per combination.
+ * The canvas is widened on both sides so the hex stays centred: the symbol's anchor is still the capital's position.
+ */
+internal fun capitalComposite(s: Style, context: Context, base: String, banner: String): String {
+    val id = MapLayersBuilder.capitalIcon(base, banner)
+    if (s.getImage(id) != null) return id
+    val opts = BitmapFactory.Options().apply { inScaled = false }
+    val hex = MapIcons.images[base]?.let { BitmapFactory.decodeResource(context.resources, it, opts) } ?: return id
+    val flag = MapIcons.images["banner_$banner"]?.let { BitmapFactory.decodeResource(context.resources, it, opts) } ?: return id
+    val side = hex.width * 2 / 5
+    val out = Bitmap.createBitmap(hex.width + 2 * side, hex.height, Bitmap.Config.ARGB_8888)
+    val c = Canvas(out)
+    c.drawBitmap(hex, side.toFloat(), 0f, null)
+    val fh = hex.height * 0.5f
+    val fw = fh * flag.width / flag.height
+    val left = side + hex.width * 0.88f - fw / 2
+    val top = hex.height * 0.08f
+    c.drawBitmap(flag, null, android.graphics.RectF(left, top, left + fw, top + fh), Paint().apply { isFilterBitmap = true })
+    s.addImage(id, out)
+    return id
 }
 
 /** The base map's own font stack; text in any other font fails to load and hides the whole layer. */

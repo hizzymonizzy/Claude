@@ -42,14 +42,14 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Projects you can actually afford: show what's missing and where to get it (links to nodes) | Campfire has been waiting since day one | shipped 0.11.0 |
 | Trade between settlements once two have markets | From the economy design, deferred in 0.7.0 | proposed |
 | Regional specialty goods (coast → fish, woods → timber) | Makes regions feel different | proposed |
-| Live gathering credit (count during the walk, not only at the end) | The ✓ is live, but the bar updates only when a walk ends | proposed |
+| Live gathering credit (count during the walk, not only at the end) | The ✓ is live, but the bar updates only when a walk ends | shipped 0.14.0 (every 5 min, in memory; no watch buzz: player's choice) |
 
 ## Map and art
 | Item | Why | Status |
 |---|---|---|
 | Building footprints in explored ground as 0 A.D.-style roofs by settlement tier | Explored land now hides base-map buildings | proposed |
 | Atlas: list of today's gathered nodes and where the next best ones are | Visibility of the economy | proposed |
-| Encrypted export/import of your world | No backup by design; protects against a lost phone | proposed |
+| Encrypted export/import of your world | No backup by design; protects against a lost phone | later (player 2026-11-25: low value in alpha; starting fresh is fine) |
 
 ## Tech debt
 | Item | Status |
@@ -105,17 +105,17 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Bug: Goal screen shows pre-0.12 rules text and a rolling-7-day total that disagrees with the map card | Outdated since ADR 0008/0009 | shipped 0.13.0 |
 | Check: the home region is now named after a waypoint area instead of the capital's area | Diagnostics 2026-11-23 | shipped 0.13.0 |
 
-## Placement and path normalization (player, 2026-11-24; held for more feedback)
+## Placement and path normalization (player, 2026-11-24; shipped 0.14.0)
 | Item | Why | Status |
 |---|---|---|
-| Worn banner drawn onto the capital hex (one composite for the worn banner, rebuilt when it changes) | Banner drifted away from the capital when zoomed in (fixed screen offset) | agreed |
-| Buildings take hexes touching the settlement's hex (or its outer paved ring), skipping hexes a road crosses; one ring further out only if all six are crossed | Upgrades sat two hexes out, detached from the capital | agreed |
-| Snap to the road: an unmatched stretch that starts and ends on matched roads and stays within 35 m of the street between them credits the street | A connector between two worn roads stayed dashed (GPS drift recorded it as an own path) | agreed (35 m) |
-| Merge own paths: a new stretch within ~20 m of an existing one, same direction, wears it; on beaches limited by depth (narrow < 40 m: one path; deep: within a third of the depth); never beyond ~40 m | Parallel beach paths from different days | agreed |
-| Pointer labels at the screen edge stack instead of overlapping | "530 m · new m · new" overlap | agreed |
-| Diagnostics: per walk, unmatched stretches (count, longest, farthest from a road) | Old logs only give totals (e.g. 43 of 82 points matched), not where | proposed |
+| Worn banner drawn onto the capital hex (one composite for the worn banner, rebuilt when it changes) | Banner drifted away from the capital when zoomed in (fixed screen offset) | shipped 0.14.0 |
+| Buildings take hexes touching the settlement's hex (or its outer paved ring), skipping hexes a road crosses; one ring further out only if all six are crossed | Upgrades sat two hexes out, detached from the capital | shipped 0.14.0 |
+| Snap to the road: an unmatched stretch that starts and ends on matched roads and stays within 35 m of the street between them credits the street | A connector between two worn roads stayed dashed (GPS drift recorded it as an own path) | shipped 0.14.0 |
+| Merge own paths: a new stretch within ~20 m of an existing one, same direction, wears it; on beaches limited by depth (narrow < 40 m: one path; deep: within a third of the depth); never beyond ~40 m | Parallel beach paths from different days | shipped 0.14.0 |
+| Pointer labels at the screen edge stack instead of overlapping | "530 m · new m · new" overlap | shipped 0.14.0 |
+| Diagnostics: per walk, unmatched stretches (count, longest, farthest from a road) | Old logs only give totals (e.g. 43 of 82 points matched), not where | shipped 0.14.0 |
 
-## Camps by nights, Atlas tidy-up (player, 2026-11-25; held for more feedback)
+## Camps by nights, Atlas tidy-up (player, 2026-11-25; Atlas shipped 0.14.0, camps planned for 0.15 before mid-December)
 | Item | Why | Status |
 |---|---|---|
 | A camp is pitched where you spend a night (not one per area): a night within a camp's reach counts toward it; two spots further apart in one area make two camps | "A camp would be anywhere I have spent an evening" | agreed |
@@ -123,8 +123,8 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Camp reach grows with tier in neighbourhood hexes (~130 m): Camp 2, Hamlet 3, Village 4, Town 5, City 6; a stay within reach counts toward that camp; camps whose reaches meet merge and add up their stays (more stays keeps name, spot, buildings); camps elsewhere in an area stay separate | Hex reach like roads; areas develop differently | agreed |
 | The capital keeps growing from walking days at home (nights at home don't count) | Otherwise sleeping at home would grow it | proposed |
 | Camp names from the nearest named place ("Camp at Oakdale Park"), else area name + number | Several camps per area need names | proposed |
-| Atlas: remove "Places you could camp"; camps appear once you've slept there; a camp's history lists its nights | The list was odd | agreed |
-| Request card: drop the trader line; show the building's perk instead of "+1 prosperity" | Trader line unnecessary; prosperity meaningless | agreed |
-| Atlas uses hex settlement art; settlement row layout fixed (distance and last visit no longer overlap the bar); capital card as in the mockup | Screenshot 2026-11-25 | proposed |
+| Atlas: remove "Places you could camp"; camps appear once you've slept there; a camp's history lists its nights | The list was odd | removal shipped 0.14.0; camp history with camps (0.15) |
+| Request card: drop the trader line; show the building's perk instead of "+1 prosperity" | Trader line unnecessary; prosperity meaningless | shipped 0.14.0 |
+| Atlas uses hex settlement art; settlement row layout fixed (distance and last visit no longer overlap the bar); capital card as in the mockup | Screenshot 2026-11-25 | shipped 0.14.0 |
 | Night check at 3 am **local to the zone you're in**: schedule each check one night at a time for the next local 3 am; reschedule when the phone's time zone changes; credit the stay to the local evening before; log time and zone | International travel: today's 24-hour repeat stays on home time | agreed |
 
