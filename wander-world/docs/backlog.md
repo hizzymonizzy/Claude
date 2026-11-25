@@ -119,8 +119,8 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Item | Why | Status |
 |---|---|---|
 | A camp is pitched where you spend a night (not one per area): a night within a camp's reach counts toward it; two spots further apart in one area make two camps | "A camp would be anywhere I have spent an evening" | agreed |
-| Camps grow by nights stayed only (walking doesn't count), like roads by walked days: 1 Camp, 3 Hamlet, 10 Village, 30 Town, 100 City (Metropolis capital only); weekly cooling and floors as now | "Staying nights should grow camps like walking grows roads" | agreed |
-| Camps have a reach in neighbourhood hexes (~130 m), ~2 hexes for a new camp; camps within each other's reach merge and share their night count (the one with more nights keeps name, spot, buildings); separate camps elsewhere in an area stay separate and develop differently | "Multiple camps within say two hex merge and share day count" | agreed (open: reach grows with tier, or fixed at 2 hexes?) |
+| Camps grow by **stays** (one or more nights in a row at the same spot; a week away is one stay), never by walking: 1 Camp, 3 Hamlet, 10 Village, 30 Town, 100 City (Metropolis capital only); weekly cooling and floors as now | "Stays, not nights: I'm actually camping there" | agreed |
+| Camp reach grows with tier in neighbourhood hexes (~130 m): Camp 2, Hamlet 3, Village 4, Town 5, City 6; a stay within reach counts toward that camp; camps whose reaches meet merge and add up their stays (more stays keeps name, spot, buildings); camps elsewhere in an area stay separate | Hex reach like roads; areas develop differently | agreed |
 | The capital keeps growing from walking days at home (nights at home don't count) | Otherwise sleeping at home would grow it | proposed |
 | Camp names from the nearest named place ("Camp at Oakdale Park"), else area name + number | Several camps per area need names | proposed |
 | Atlas: remove "Places you could camp"; camps appear once you've slept there; a camp's history lists its nights | The list was odd | agreed |
