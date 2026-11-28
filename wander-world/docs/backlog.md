@@ -112,6 +112,8 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Tapping a building should say what it does | Badges in the Atlas did nothing | shipped 0.14.1 |
 | Roads too thin to tell stages apart; paths should look like more than a coloured line | Screenshot 2026-11-25 | shipped 0.14.2 |
 | Richer city development, SimCity-like: as infrastructure is built, the town grows around it (blocks, houses and streets filling in around buildings and roads) | Player, 2026-11-25: avenue trees are fine "for now" | proposed (discuss after camps) |
+| Buildings rendered by us from 0 A.D.'s 3D models (concepts `docs/art/concept_growth.png`, `concept_projects.png`, `concept_closeup.png`): settlements grow building by building on their hexes; bird's-eye 35° | Player 2026-11-28: hex feel good, buildings wanting; "make them ourselves"; angle B chosen | agreed (direction); plan with city development |
+| Culture per region (Britons, Romans, Persians … 0 A.D. has a dozen), changeable at the trader | Player 2026-11-28 | agreed (direction) |
 | Walking inside big stores is recorded as your own paths | `[paths]` lines for store visits: "joined an own path" | proposed |
 
 ## Placement and path normalization (player, 2026-11-24; shipped 0.14.0)
