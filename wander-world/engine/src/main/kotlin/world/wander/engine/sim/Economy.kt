@@ -133,6 +133,13 @@ private fun Simulation.propose(day: Int): Proposal? {
 private fun Simulation.buyOne(day: Int, pu: world.wander.engine.Purchase): Pair<Boolean, String> {
     val week = world.wander.engine.Shop.week(day)
     val shop = world.wander.engine.Shop
+    if (pu.item.startsWith("culture:")) {
+        // 0.15: a region's building culture, chosen at the trader; free, and it can be changed back any time.
+        val (_, rid, culture) = pu.item.split(':', limit = 3).let { Triple(it[0], it.getOrNull(1)?.toIntOrNull(), it.getOrNull(2)) }
+        if (rid == null || culture !in world.wander.engine.Cultures.ALL || rid !in regions.indices) return false to "Unknown region or culture"
+        regionCulture[rid] = culture!!
+        return true to "This region now builds like the ${world.wander.engine.Cultures.NAMES[culture]}"
+    }
     if (pu.item in shop.COSMETICS) {
         val price = shop.COSMETICS.getValue(pu.item)
         val name = world.wander.engine.Story.LOOK_NAMES[pu.item] ?: pu.item

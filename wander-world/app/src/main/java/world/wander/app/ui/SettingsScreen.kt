@@ -250,7 +250,8 @@ fun SettingsScreen(repo: Repository) {
             SectionTitle("Credits & licenses")
             Text(
                 "Map art (terrain, settlement, place and resource images) is adapted from 0 A.D. by Wildfire Games, " +
-                    "licensed CC BY-SA 3.0. The adapted images are shared under the same license.",
+                    "licensed CC BY-SA 3.0, and the settlement buildings are our renders of 0 A.D.'s 3D models. " +
+                    "The adapted images are shared under the same license.",
                 style = MaterialTheme.typography.bodySmall,
             )
             LinkRow("0 A.D. · play0ad.com", "https://play0ad.com", ctx)

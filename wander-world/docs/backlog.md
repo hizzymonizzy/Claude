@@ -112,8 +112,8 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 | Tapping a building should say what it does | Badges in the Atlas did nothing | shipped 0.14.1 |
 | Roads too thin to tell stages apart; paths should look like more than a coloured line | Screenshot 2026-11-25 | shipped 0.14.2 |
 | Richer city development, SimCity-like: as infrastructure is built, the town grows around it (blocks, houses and streets filling in around buildings and roads) | Player, 2026-11-25: avenue trees are fine "for now" | proposed (discuss after camps) |
-| Buildings rendered by us from 0 A.D.'s 3D models (concepts `docs/art/concept_growth.png`, `concept_projects.png`, `concept_closeup.png`): settlements grow building by building on their hexes; bird's-eye 35° | Player 2026-11-28: hex feel good, buildings wanting; "make them ourselves"; angle B chosen | agreed (direction); plan with city development |
-| Culture per region (Britons, Romans, Persians … 0 A.D. has a dozen), changeable at the trader | Player 2026-11-28 | agreed (direction) |
+| Buildings rendered by us from 0 A.D.'s 3D models (concepts `docs/art/concept_growth.png`, `concept_projects.png`, `concept_closeup.png`): settlements grow building by building on their hexes; bird's-eye 35° | Player 2026-11-28: hex feel good, buildings wanting; "make them ourselves"; angle B chosen | shipped 0.15.0 |
+| Culture per region (Britons, Romans, Persians … 0 A.D. has a dozen), changeable at the trader | Player 2026-11-28 | shipped 0.15.0 |
 | Walking inside big stores is recorded as your own paths | `[paths]` lines for store visits: "joined an own path" | proposed |
 
 ## Placement and path normalization (player, 2026-11-24; shipped 0.14.0)
@@ -129,13 +129,13 @@ review of all five resources: sources, rates, how each is shown, gathered and sp
 ## Camps by nights, Atlas tidy-up (player, 2026-11-25; Atlas shipped 0.14.0, camps planned for 0.15 before mid-December)
 | Item | Why | Status |
 |---|---|---|
-| A camp is pitched where you spend a night (not one per area): a night within a camp's reach counts toward it; two spots further apart in one area make two camps | "A camp would be anywhere I have spent an evening" | agreed |
-| Camps grow by **stays** (one or more nights in a row at the same spot; a week away is one stay), never by walking: 1 Camp, 3 Hamlet, 10 Village, 30 Town, 100 City (Metropolis capital only); weekly cooling and floors as now | "Stays, not nights: I'm actually camping there" | agreed |
-| Camp reach grows with tier in neighbourhood hexes (~130 m): Camp 2, Hamlet 3, Village 4, Town 5, City 6; a stay within reach counts toward that camp; camps whose reaches meet merge and add up their stays (more stays keeps name, spot, buildings); camps elsewhere in an area stay separate | Hex reach like roads; areas develop differently | agreed |
-| The capital keeps growing from walking days at home (nights at home don't count) | Otherwise sleeping at home would grow it | proposed |
-| Camp names from the nearest named place ("Camp at Oakdale Park"), else area name + number | Several camps per area need names | proposed |
+| A camp is pitched where you spend a night (not one per area): a night within a camp's reach counts toward it; two spots further apart in one area make two camps | "A camp would be anywhere I have spent an evening" | shipped 0.15.0 |
+| Camps grow by **stays** (one or more nights in a row at the same spot; a week away is one stay), never by walking: 1 Camp, 3 Hamlet, 10 Village, 30 Town, 100 City (Metropolis capital only); weekly cooling and floors as now | "Stays, not nights: I'm actually camping there" | shipped 0.15.0 |
+| Camp reach grows with tier in neighbourhood hexes (~130 m): Camp 2, Hamlet 3, Village 4, Town 5, City 6; a stay within reach counts toward that camp; camps whose reaches meet merge and add up their stays (more stays keeps name, spot, buildings); camps elsewhere in an area stay separate | Hex reach like roads; areas develop differently | shipped 0.15.0 |
+| The capital keeps growing from walking days at home (nights at home don't count) | Otherwise sleeping at home would grow it | shipped 0.15.0 |
+| Camp names from the nearest named place ("Camp at Oakdale Park"), else area name + number | Several camps per area need names | shipped 0.15.0 ("Camp at <place>", numbered) |
 | Atlas: remove "Places you could camp"; camps appear once you've slept there; a camp's history lists its nights | The list was odd | removal shipped 0.14.0; camp history with camps (0.15) |
 | Request card: drop the trader line; show the building's perk instead of "+1 prosperity" | Trader line unnecessary; prosperity meaningless | shipped 0.14.0 |
 | Atlas uses hex settlement art; settlement row layout fixed (distance and last visit no longer overlap the bar); capital card as in the mockup | Screenshot 2026-11-25 | shipped 0.14.0 |
-| Night check at 3 am **local to the zone you're in**: schedule each check one night at a time for the next local 3 am; reschedule when the phone's time zone changes; credit the stay to the local evening before; log time and zone | International travel: today's 24-hour repeat stays on home time | agreed |
+| Night check at 3 am **local to the zone you're in**: schedule each check one night at a time for the next local 3 am; reschedule when the phone's time zone changes; credit the stay to the local evening before; log time and zone | International travel: today's 24-hour repeat stays on home time | shipped 0.15.0 |
 

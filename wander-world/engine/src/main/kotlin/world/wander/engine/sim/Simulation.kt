@@ -102,6 +102,8 @@ internal class Simulation(val input: WorldInput, val p: WorldParams, val today: 
     val built = HashMap<String, MutableList<String>>()          // areaId -> project ids
     val declinedOn = HashMap<Pair<String, String>, Int>()       // (areaId, projectId) -> day
     var pending: Proposal? = null
+    /** Cultures you chose at the trader, by region (0.15). */
+    val regionCulture = HashMap<Int, String>()
     val monuments = LinkedHashMap<String, Int>()
     var totalKm = 0.0
     var paddledKm = 0.0

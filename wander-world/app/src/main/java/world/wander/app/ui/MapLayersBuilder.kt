@@ -144,6 +144,64 @@ object MapLayersBuilder {
         return LocalProjection(c).toLatLng(m * Math.cos(a), m * Math.sin(a))
     }
 
+    /** The culture a settlement builds in: its region's (0.15). */
+    fun cultureOf(state: WorldState, s: world.wander.engine.SettlementState): String =
+        state.regions.firstOrNull { it.id == s.regionId }?.culture ?: world.wander.engine.Cultures.DEFAULT
+
+    /** The rendered picture for a project or house in a culture, if there is one (0.15). */
+    fun sprite3d(culture: String, key: String): String? {
+        val k = if (key.startsWith("wonder_")) "wonder" else key
+        return "b3d_${culture}_$k".takeIf { it in Buildings3d.images }
+    }
+
+    /** Houses a settlement shows on its paved hexes, by tier (ruins … metropolis), 0.15. */
+    private val HOUSES = intArrayOf(0, 0, 2, 6, 12, 24, 40)
+
+    /**
+     * Settlements as buildings (0.15, bird's-eye renders of 0 A.D. models): a centre building, houses filling the paved
+     * hexes as the tier grows (never on a street or a project's hex), and each project on its own hex, all in the
+     * region's culture. Drawn from street zoom; further out the hex badges stay. "k" corrects the scale for latitude;
+     * "sort" draws northern buildings first so nearer ones overlap them.
+     */
+    fun townBuildings(state: WorldState?, layers: MapLayers? = null): FeatureCollection {
+        if (state == null) return FeatureCollection.fromFeatures(emptyList())
+        val projects = buildingCells(state, layers)
+        val taken = projects.map { it.first }.toMutableSet()
+        val roads = roadCells(layers, state.settlements.map { it.position })
+        val out = ArrayList<Feature>()
+        fun add(cell: String, icon: String, id: String?) {
+            val c = Cells.center(cell)
+            out += Feature.fromGeometry(Point.fromLngLat(c.lng, c.lat)).apply {
+                addStringProperty("icon", icon)
+                addNumberProperty("k", 1.0 / Math.cos(Math.toRadians(c.lat)))
+                addNumberProperty("sort", -c.lat)
+                if (id != null) addStringProperty("id", id)
+            }
+        }
+        for (s in state.settlements) {
+            val culture = cultureOf(state, s)
+            val center = Cells.cellAt(s.position.lat, s.position.lng, Cells.HEAT_RES)
+            val centreKey = when {
+                s.tier.ordinal >= world.wander.engine.Tier.VILLAGE.ordinal -> "town_hall"
+                s.areaId.startsWith("camp:") && s.tier == world.wander.engine.Tier.CAMP -> "lean_to"
+                else -> "house_3"
+            }
+            if ("town_hall" !in s.projects) sprite3d(culture, centreKey)?.let { add(center, it, null) }
+            taken += center
+            val paved = HeatLayers.pavedRings(s.tier.ordinal).coerceAtLeast(0) + 1
+            val homes = Cells.rings(center, paved).drop(1).flatten().filter { it !in taken && it !in roads }.take(HOUSES[s.tier.ordinal])
+            homes.forEachIndexed { i, cell ->
+                taken += cell
+                sprite3d(culture, "house_${(cell.hashCode() and 0x7fffffff) % 4}")?.let { add(cell, it, null) }
+            }
+        }
+        for ((cell, id, areaId) in projects) {
+            val s = state.settlements.firstOrNull { it.areaId == areaId } ?: continue
+            sprite3d(cultureOf(state, s), id)?.let { add(cell, it, if (id == "market" || id == "market_hall") "market:$areaId" else "bldg:$id@$areaId") }
+        }
+        return FeatureCollection.fromFeatures(out)
+    }
+
     /** Buildings at each settlement (the latest of each upgrade chain), around its medallion; markets are tappable. */
     fun villageBuildings(state: WorldState?, layers: MapLayers? = null): FeatureCollection = FeatureCollection.fromFeatures(
         buildingCells(state, layers).map { (cell, id, areaId) ->
@@ -151,6 +209,9 @@ object MapLayersBuilder {
             Feature.fromGeometry(Point.fromLngLat(c.lng, c.lat)).apply {
                 addStringProperty("icon", "bldg_hex_$id")
                 addStringProperty("art", "cellart_$id")
+                // 0.15: up close, buildings with a rendered picture are drawn by townBuildings instead.
+                addBooleanProperty("has3d", state != null && state.settlements.firstOrNull { it.areaId == areaId }
+                    ?.let { s -> sprite3d(cultureOf(state, s), id) != null } == true)
                 addStringProperty("id", if (id == "market" || id == "market_hall") "market:$areaId" else "bldg:$id@$areaId")
             }
         },

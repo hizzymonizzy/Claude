@@ -239,4 +239,18 @@ class MapLayersBuilderTest {
         // Without the street they still touch it.
         assertTrue(MapLayersBuilder.buildingCells(world(listOf(camp)), null).all { it.first in touching })
     }
+
+    @Test
+    fun settlementsAreDrawnAsBuildingsInTheirRegionsCulture() {
+        // 0.15: a Village in a Roman region: a forum in the centre, houses on the paved hexes, its market on its own hex.
+        val v = settlement(capital = false, tier = Tier.VILLAGE).copy(projects = listOf("campfire", "market"))
+        val w = world(listOf(v)).copy(regions = listOf(world.wander.engine.RegionState(0, "Oakdale", origin, true, false, 0, culture = "romans")))
+        val fs = MapLayersBuilder.townBuildings(w, null).features()!!
+        val icons = fs.map { it.getStringProperty("icon") }
+        println("village buildings: $icons")
+        assertTrue(icons.all { it.startsWith("b3d_romans_") && Buildings3d.images.containsKey(it) })
+        assertTrue("b3d_romans_town_hall" in icons && "b3d_romans_market" in icons)
+        assertEquals(6, icons.count { it.startsWith("b3d_romans_house_") })
+        assertEquals(fs.size, fs.map { (it.geometry() as org.maplibre.geojson.Point).let { p -> p.latitude() to p.longitude() } }.toSet().size)   // one per hex
+    }
 }

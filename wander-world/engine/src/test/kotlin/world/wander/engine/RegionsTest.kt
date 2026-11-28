@@ -39,7 +39,8 @@ class RegionsTest {
             Arrival(start + 39, homePt.lat, homePt.lng),           // back home: known ground
         )
         // 0.13: the hotel night founds the camp there.
-        return input(presence, arrivals).copy(nights = listOf(Arrival(start + 32, honoluluPt.lat, honoluluPt.lng)))
+        // 0.15: camps grow by stays; four separate stays during the trip (nights every other day).
+        return input(presence, arrivals).copy(nights = listOf(32, 34, 36, 38).map { Arrival(start + it, honoluluPt.lat, honoluluPt.lng) })
     }
 
     @Test
@@ -64,11 +65,11 @@ class RegionsTest {
         // Since 0.13 cooling follows the 150-minute guideline: stop walking after the trip so weeks fall short of it.
         val trip = trip().let { t -> t.copy(presence = t.presence.filter { it.day < start + 39 }) }
         val s = WorldEngine().build(trip, start + 199)
-        val hnl = s.settlements.single { it.areaId == "hnl" }
+        val hnl = s.settlements.single { it.areaId.startsWith("camp:") }
         assertTrue(s.regions.single { !it.isHome }.dormant)
         assertTrue(hnl.dormant)
         // ~160 days well under the goal. Compare with the same trip if dormancy didn't exist.
-        val awake = WorldEngine(WorldParams(dormantDecay = 1.0)).build(trip, start + 199).settlements.single { it.areaId == "hnl" }
+        val awake = WorldEngine(WorldParams(dormantDecay = 1.0)).build(trip, start + 199).settlements.single { it.areaId.startsWith("camp:") }
         assertTrue("dormant D=${hnl.development} vs awake D=${awake.development}", hnl.development > awake.development * 2.5)
         // ADR 0008: two weeks at full rate before it goes dormant, then ×0.1; it keeps a real share, awake keeps nothing.
         assertTrue("dormant D=${hnl.development} peak=${hnl.peakDevelopment} awake=${awake.development}", hnl.development > hnl.peakDevelopment * 0.15)

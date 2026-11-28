@@ -56,6 +56,21 @@ taken from the same official repository clone. They passed `tools/asset_intake.p
 after IEND, re-encoded) and were resized and tinted by `tools/build_0ad_assets.py`. Provenance is in
 `docs/art/0AD_ASSETS.md`.
 
+### Assets added in alpha 0.15: settlement buildings rendered from 0 A.D. 3D models
+
+`tools/render3d/` renders 0 A.D. buildings (CC BY-SA 3.0, official mirror `github.com/0ad/0ad`) to PNG pictures that
+ship in the app (`b3d_*`, provenance in `docs/art/BUILDINGS_3D.md`). Nothing 3D ships and the phone renders nothing;
+no new library (the renderer is our own numpy + Pillow code, run only on the build machine). Intake extension,
+`tools/render3d/intake3d.py`, run in quarantine before anything is rendered:
+
+| Source | Check |
+|---|---|
+| COLLADA meshes (`.dae`, XML) | Refused if they contain `DOCTYPE` or `ENTITY` (entity expansion, external references), aren't well-formed XML with a COLLADA root, or exceed 20 MB. Parsed only by our renderer; never shipped. |
+| DDS textures | Decoded by Pillow in quarantine (format must be DDS, ≤ 2048 px), written as plain pixels, then through `tools/asset_intake.py` like any PNG. |
+| PNG textures | `tools/asset_intake.py` (PNG magic, full decode, nothing after IEND, re-encoded from pixels). |
+
+The shipped pictures are new PNGs written by our renderer from decoded pixels only.
+
 ### Test-only libraries (not in the APK)
 
 | Library | Why | Review |

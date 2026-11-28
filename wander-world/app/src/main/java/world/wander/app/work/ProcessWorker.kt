@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit
 class ProcessWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val repo = Repository.get(applicationContext)
+        NightWorker.schedule(applicationContext)   // follows a time-zone change (0.15)
         val done = repo.processPending()
         if (done > 0) repo.rebuild()
         val waiting = repo.dao.pendingSegments().size

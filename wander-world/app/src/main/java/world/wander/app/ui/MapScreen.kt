@@ -111,7 +111,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
                     val encHit = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "encounters")
                         .firstNotNullOfOrNull { f -> if (f.hasProperty("id")) f.getStringProperty("id") else null }
                     if (encHit != null) { encounterOpen.value = encHit.removePrefix("enc:").toIntOrNull(); return@addOnMapClickListener true }
-                    val tapped = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "trader", "buildings", "building-art")
+                    val tapped = m.queryRenderedFeatures(m.projection.toScreenLocation(ll), "trader", "buildings", "buildings-flat", "building-art", "town-buildings")
                         .firstNotNullOfOrNull { f -> if (f.hasProperty("id")) f.getStringProperty("id") else null }
                     if (tapped != null && tapped.startsWith("bldg:")) {
                         val (pid, area) = tapped.removePrefix("bldg:").split('@', limit = 2).let { it[0] to it.getOrElse(1) { "" } }
@@ -231,6 +231,7 @@ fun MapScreen(repo: Repository, onOpenDispatch: () -> Unit, modifier: Modifier =
             "settlements" to update("settlements") { MapLayersBuilder.settlements(world, wornBanner) },
             "buildings" to update("buildings") { MapLayersBuilder.villageBuildings(world, layers) },
             "cells" to update("building-cells") { MapLayersBuilder.buildingCellPolygons(world, layers) },
+            "town" to update("town-buildings") { MapLayersBuilder.townBuildings(world, layers) },
             "trader" to update("trader") { MapLayersBuilder.trader(world) },
             "encounters" to update("encounters") { MapLayersBuilder.encounters(world) },
             "waypoints" to update("waypoints") { MapLayersBuilder.waypoints(world) },

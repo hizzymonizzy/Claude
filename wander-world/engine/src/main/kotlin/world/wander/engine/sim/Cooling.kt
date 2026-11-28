@@ -65,11 +65,12 @@ internal fun Simulation.cooling(d: Simulation.Day) {
     }
     val dropped = mutableListOf<String>()
     val tierScale = StepScale(p.tierThresholds)
+    val campScale = StepScale(p.campStayThresholds)
     for (s in settlements.values) {
         val before = s.tier
         val dorm = (areaRegion[s.areaId]?.let { if (regions[it].dormant) p.dormantDecay else 1.0 } ?: 1.0) *
             (if ("walls" in built[s.areaId].orEmpty()) 0.5 else 1.0)   // town walls: cools half as fast
-        s.d = shift(s.d, s.peakD, tierScale, floorTier(s).ordinal.toDouble(), dorm)
+        s.d = shift(s.d, s.peakD, if (s.camp) campScale else tierScale, floorTier(s).ordinal.toDouble(), dorm)
         updateTier(day, s, areas.getValue(s.areaId))
         if (s.tier.ordinal < before.ordinal) dropped += s.areaId
     }

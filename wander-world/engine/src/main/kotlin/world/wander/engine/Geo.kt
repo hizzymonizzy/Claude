@@ -104,4 +104,6 @@ object Cells {
     fun outline(cells: Collection<String>): List<List<List<LatLng>>> =
         h3.cellAddressesToMultiPolygon(cells, false).map { poly -> poly.map { ring -> ring.map { LatLng(it.lat, it.lng) } } }
     fun children(cell: String, res: Int): List<String> = h3.cellToChildren(cell, res)
+    /** Steps between two cells of the same resolution. */
+    fun distance(a: String, b: String): Int = h3.gridDistance(a, b).toInt()
 }

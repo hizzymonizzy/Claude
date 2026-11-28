@@ -141,6 +141,10 @@ data class WorldParams(
     val waystoneMinDistanceM: Double = 2_000.0,
     /** A night spent this close to home doesn't found a camp (it's home). */
     val campMinFromHomeM: Double = 1_500.0,
+    /** Camps grow by stays (0.15): stays needed per tier (Camp 1, Hamlet 3, Village 10, Town 30, City 100), by Tier.ordinal. */
+    val campStayThresholds: List<Double> = listOf(0.0, 1.0, 3.0, 10.0, 30.0, 100.0, 300.0),
+    /** A camp's reach in neighbourhood hexes (~130 m) by tier: Camp 2, Hamlet 3, Village 4, Town 5, City 6. */
+    val campReach: List<Int> = listOf(1, 2, 3, 4, 5, 6, 6),
     /** Arriving within this distance of an existing waystone counts as a return trip. */
     /** Arriving within this of a waystone returns to it rather than founding another (0.13: was 500 m, made duplicates). */
     val waystoneReturnM: Double = 1_000.0,
@@ -222,6 +226,8 @@ sealed class WorldEvent {
     data class Purchased(override val day: Int, val item: String, val qty: Int, val price: Int, val seller: String) : WorldEvent()
     data class PurchaseRefused(override val day: Int, val item: String) : WorldEvent()
     data class CampedOvernight(override val day: Int, val areaId: String) : WorldEvent()
+    /** Two camps' reaches met (0.15): [goneId]'s stays and buildings joined [keptId]. */
+    data class CampsMerged(override val day: Int, val keptId: String, val goneId: String) : WorldEvent()
     data class EncounterAppeared(override val day: Int, val encounter: EncounterState) : WorldEvent()
     data class EncounterDone(override val day: Int, val encounter: EncounterState) : WorldEvent()
     data class EncounterGone(override val day: Int, val encounter: EncounterState) : WorldEvent()
@@ -245,7 +251,21 @@ data class RegionState(
     val isHome: Boolean,
     val dormant: Boolean,
     val lastPresenceDay: Int,
+    /** How its settlements are built (0.15): "britons", "romans" or "persians"; changeable at the trader. */
+    val culture: String = Cultures.DEFAULT,
 )
+
+/** Building cultures (0.15): each region builds in one; the home region starts as Britons, others take turns. */
+object Cultures {
+    const val DEFAULT = "britons"
+    val ALL = listOf("britons", "romans", "persians")
+    val NAMES = mapOf("britons" to "Britons", "romans" to "Romans", "persians" to "Persians")
+    val LOOKS = mapOf("britons" to "thatch and timber", "romans" to "stone and red tile", "persians" to "mud brick and courtyards")
+    /** The culture a region starts with. */
+    fun default(regionId: Int, homeRegion: Int?): String = if (regionId == (homeRegion ?: 0)) DEFAULT else ALL[1 + Math.floorMod(regionId, 2)]
+    /** The purchase item that switches region [regionId] to [culture] at the trader (free). */
+    fun item(regionId: Int, culture: String) = "culture:$regionId:$culture"
+}
 
 data class WaystoneState(val id: Int, val center: LatLng, val great: Boolean, val regionId: Int, val foundDay: Int, val trips: Int)
 

@@ -17,6 +17,7 @@ class ActivityReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val repo = Repository.get(context)
+        world.wander.app.work.NightWorker.schedule(context)   // walking after a flight: move the night check to local 3 am
         if (!ActivityTransitionResult.hasResult(intent)) return
         val result = ActivityTransitionResult.extractResult(intent) ?: return
         if (!repo.prefs.autoTrackingEnabled) return

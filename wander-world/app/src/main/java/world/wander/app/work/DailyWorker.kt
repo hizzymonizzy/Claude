@@ -26,6 +26,7 @@ class DailyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
 
     override suspend fun doWork(): Result {
         val repo = Repository.get(applicationContext)
+        NightWorker.schedule(applicationContext)   // follows a time-zone change (0.15)
         return try {
             val dispatch = repo.dailyRun()
             repo.log("daily", "Daily run done; dispatch ${if (dispatch != null) "delivered" else "skipped"}")

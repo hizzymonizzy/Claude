@@ -12,6 +12,7 @@ import org.maplibre.android.style.expressions.Expression.interpolate
 import org.maplibre.android.style.expressions.Expression.linear
 import org.maplibre.android.style.expressions.Expression.exponential
 import org.maplibre.android.style.expressions.Expression.literal
+import org.maplibre.android.style.expressions.Expression.product
 import org.maplibre.android.style.expressions.Expression.match
 import org.maplibre.android.style.expressions.Expression.stop
 import org.maplibre.android.style.expressions.Expression.zoom
@@ -91,13 +92,13 @@ internal val OUR_LAYERS = listOf(
     "sand-places", "water-route-3", "water-light-1", "water-buoys",
     "road-names", "track", "waypoints", "landmark-icons", "waystones", "settlements", "settlement-labels",
     "resource-rings", "resource-icons", "me",
-    "heat-hood", "heat-block", "heat-county", "region-links", "region-nodes", "buildings", "trader", "encounters", "building-cells", "building-art",
+    "heat-hood", "heat-block", "heat-county", "region-links", "region-nodes", "buildings", "trader", "encounters", "building-cells", "building-art", "town-buildings",
 )
 
 internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
     val empty = FeatureCollection.fromFeatures(emptyList())
     for (id in listOf("explored", "green-places", "sand-places", "shore", "water", "fog", "peek", "wild", "roads", "landmarks", "track", "waypoints", "waystones", "settlements", "resources", "me",
-        "heat-block", "heat-hood", "heat-county", "region-nodes", "region-links", "buildings", "trader", "encounters", "building-cells")) s.addSource(GeoJsonSource(id, empty))
+        "heat-block", "heat-hood", "heat-county", "region-nodes", "region-links", "buildings", "trader", "encounters", "building-cells", "town-buildings")) s.addSource(GeoJsonSource(id, empty))
 
     // Explored ground: real terrain texture (0 A.D. grass / forest floor) laid OVER the base map's streets and
     // buildings, so inside explored land every street is drawn by its status (walked: trail…avenue; unwalked:
@@ -272,8 +273,20 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
             // 0.13: hex settlements (tools/gen_hex_icons.py), about twice the old size.
             iconSize(interpolate(linear(), zoom(), stop(8, 0.55f), stop(12, 0.75f), stop(15, 0.95f), stop(17, 1.2f))),
             iconAnchor(Property.ICON_ANCHOR_CENTER),
-        ).apply { minZoom = 8.5f },
+        ).apply { minZoom = 8.5f; maxZoom = 16f },
     )
+    // 0.15: from street zoom, settlements are their buildings (renders of 0 A.D. models at Buildings3d.PX_PER_M), scaled to
+    // the ground: dp per metre at zoom z is 2^z·512 / (earth circumference · cos lat); "k" carries the 1/cos lat.
+    guard(problems, "town-buildings") {
+        val perZoom0 = 512.0 / (40_075_016.0 * Buildings3d.PX_PER_M)
+        s.addLayer(SymbolLayer("town-buildings", "town-buildings").withProperties(
+            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
+            symbolSortKey(get("sort")),
+            iconSize(interpolate(exponential(2f), zoom(),
+                stop(15, product(literal(perZoom0 * Math.pow(2.0, 15.0)), get("k"))),
+                stop(22, product(literal(perZoom0 * Math.pow(2.0, 22.0)), get("k"))))),
+        ).apply { minZoom = 15.5f })
+    }
     guard(problems, "settlement-labels") { s.addLayer(
         SymbolLayer("settlement-labels", "settlements").withProperties(
             textField(get("label")), textFont(FONT), textSize(interpolate(linear(), zoom(), stop(10, 11f), stop(16, 15f))),
@@ -288,7 +301,13 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
         SymbolLayer("buildings", "buildings").withProperties(
             iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
             iconSize(interpolate(linear(), zoom(), stop(12, 0.0f), stop(13, 0.45f), stop(15, 0.65f), stop(16.5f, 0.8f))),
-        ).apply { maxZoom = 16.5f },
+        ).apply { maxZoom = 15.5f; setFilter(eq(get("has3d"), literal(true))) },   // 0.15: rendered buildings take over up close
+    ) }
+    guard(problems, "buildings-flat") { s.addLayer(
+        SymbolLayer("buildings-flat", "buildings").withProperties(
+            iconImage(get("icon")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
+            iconSize(interpolate(linear(), zoom(), stop(12, 0.0f), stop(13, 0.45f), stop(15, 0.65f), stop(16.5f, 0.8f))),
+        ).apply { maxZoom = 16.5f; setFilter(eq(get("has3d"), literal(false))) },
     ) }
     guard(problems, "building-cells") {
         s.addLayer(FillLayer("building-cells", "building-cells").withProperties(fillPattern(get("pattern")), fillOpacity(1f))
@@ -296,7 +315,7 @@ internal fun addWorldLayers(s: Style, problems: MutableList<String>) {
         s.addLayer(SymbolLayer("building-art", "buildings").withProperties(
             iconImage(get("art")), iconAllowOverlap(true), iconIgnorePlacement(true), iconAnchor(Property.ICON_ANCHOR_CENTER),
             iconSize(interpolate(exponential(2f), zoom(), stop(16.5f, 0.26f), stop(20, 2.9f))),
-        ).apply { minZoom = 16.5f })
+        ).apply { minZoom = 16.5f; setFilter(eq(get("has3d"), literal(false))) })
     }
     // The travelling trader, by the village you visited last. Tap to trade.
     guard(problems, "trader") { s.addLayer(
@@ -359,7 +378,7 @@ private inline fun guard(problems: MutableList<String>, what: String, block: () 
     try { block() } catch (e: Exception) { problems += "$what: ${e.javaClass.simpleName} ${e.message}" }
 }
 
-internal val SPRITES: Map<String, Int> get() = MapIcons.images
+internal val SPRITES: Map<String, Int> get() = MapIcons.images + Buildings3d.images
 
 internal fun addSprites(s: Style, context: Context) {
     val opts = BitmapFactory.Options().apply { inScaled = false }

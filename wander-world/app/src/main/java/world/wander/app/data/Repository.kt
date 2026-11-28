@@ -258,13 +258,13 @@ class Repository(context: Context) {
      * The 3 am check (0.13): where the phone spent the night. Stored on the phone only; the world founds a camp if that
      * was an area away from home. The night belongs to the evening before ([day] = yesterday at 3 am).
      */
-    suspend fun recordNight(lat: Double, lng: Double, accuracyM: Float) = withContext(Dispatchers.IO) {
+    suspend fun recordNight(lat: Double, lng: Double, accuracyM: Float, stamp: String = "") = withContext(Dispatchers.IO) {
         val day = today() - 1
         dao.upsertNight(NightStayEntity(day, lat, lng, accuracyM, System.currentTimeMillis()))
         val cell = Cells.cell(lat, lng)
         if (ensureTiles(listOf(Cells.tile(lat, lng)))) assignAreas(listOf(cell))
         val area = dao.cellArea(cell)?.areaId
-        log("camp", "Night check: ${if (area == null) "area not known yet" else if (area == prefs.homeAreaId) "at home" else "away, in area $area"} (±${accuracyM.toInt()} m)")
+        log("camp", "Night check $stamp for the evening of ${java.time.LocalDate.ofEpochDay(day.toLong())}: ${if (area == null) "area not known yet" else if (area == prefs.homeAreaId) "at home" else "away, in area $area"} (±${accuracyM.toInt()} m)")
         rebuild()
     }
 

@@ -153,9 +153,36 @@ fun ShopSheet(repo: Repository, w: WorldState, seller: String, looks: Pair<Strin
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (t in listOf("Wares", "Looks")) FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t) })
+                for (t in listOf("Wares", "Looks") + if (trader) listOf("Style") else emptyList()) FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t) })
             }
-            if (tab == "Wares") {
+            if (tab == "Style") {
+                // 0.15: the building culture of the region the trader is in (the village you visited last). Free.
+                val here = w.settlements.maxByOrNull { it.lastAreaDay }
+                val region = here?.let { s -> w.regions.firstOrNull { it.id == s.regionId } }
+                if (region == null) Text("Found a settlement first.", style = MaterialTheme.typography.bodyMedium)
+                else {
+                    Text("How ${region.name} builds", style = MaterialTheme.typography.titleSmall)
+                    Text("Every settlement in this region redraws in the style you pick. Free, and you can change it back.",
+                        style = MaterialTheme.typography.bodySmall, color = SOFT)
+                    for (c in world.wander.engine.Cultures.ALL) {
+                        val current = region.culture == c
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                                .background(if (current) Color(0xFFF0E4C6) else Color.Transparent, RoundedCornerShape(10.dp)).padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Buildings3d.images["b3d_${c}_town_hall"]?.let { Image(ImageBitmap.imageResource(it), null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(56.dp)) }
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(world.wander.engine.Cultures.NAMES[c] ?: c, style = MaterialTheme.typography.titleSmall)
+                                Text(world.wander.engine.Cultures.LOOKS[c] ?: "", style = MaterialTheme.typography.bodySmall, color = SOFT)
+                            }
+                            if (current) Text("Current", style = MaterialTheme.typography.labelLarge, color = FRAME)
+                            else GoldButton("Choose") { scope.launch { message = repo.buy(Shop.TRADER, world.wander.engine.Cultures.item(region.id, c), 1).message + "." } }
+                        }
+                    }
+                }
+            } else if (tab == "Wares") {
                 for (res in listOf("wood", "food", "stone", "metal")) {
                     val sel = res == selected
                     val unit = Shop.price(res, multiplier, w.boughtThisWeek[res] ?: 0, 1)

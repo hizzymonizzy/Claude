@@ -253,7 +253,13 @@ fun BuildingDialog(w: WorldState, areaId: String, projectId: String, onClose: ()
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onClose,
         confirmButton = { androidx.compose.material3.TextButton(onClick = onClose) { Text("Close") } },
-        icon = { MapIcons.images["bldg_hex_$projectId"]?.let { Image(ImageBitmap.imageResource(it), null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(64.dp)) } },
+        // 0.15: the building as it stands on the map, in its region's culture (the hex badge if there's no render).
+        icon = {
+            val s = w.settlements.firstOrNull { it.areaId == areaId }
+            val pic = s?.let { MapLayersBuilder.sprite3d(MapLayersBuilder.cultureOf(w, it), projectId) }?.let { Buildings3d.images[it] }
+                ?: MapIcons.images["bldg_hex_$projectId"]
+            pic?.let { Image(ImageBitmap.imageResource(it), null, filterQuality = FilterQuality.Medium, modifier = Modifier.size(96.dp)) }
+        },
         title = { Text(def.name) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

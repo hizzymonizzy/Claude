@@ -106,10 +106,16 @@ order you tapped them, after the day's walking; every tap says what happened. Ta
 ## 0.14.2 Roads you can see (shipped 0.14.2)
 Roads, own paths and water routes drawn at real width with a material per stage (mockup `docs/art/mockup_roads.png`).
 
-## 0.15 Camps by stays (proposed, before mid-December)
-The player starts camping mid-December and crosses a time zone, so this must be on the phone before they leave.
-Camps per spot, grown by stays (1/3/10/30/100), reach by tier (2–6 neighbourhood hexes), merging within reach; the
-night check at 3 am local to the zone you're in, rescheduled on a time-zone change. Possibly regional specialties.
+## 0.15 Camps by stays, settlements you can see (shipped 0.15.0)
+Player's choice: both in one release.
+1. Camps per spot, grown by stays (1/3/10/30/100), reach by tier (2–6 neighbourhood hexes), merging within reach.
+2. Night check at 3 am local to the zone you're in, rescheduled on a time-zone change (trip in mid-December).
+3. Settlements drawn as buildings rendered by us from 0 A.D.'s 3D models (bird's-eye 35°): houses fill the paved
+   hexes as they grow, projects stand on their hexes.
+4. Culture per region (Britons, Romans, Persians), switchable at the trader.
+
+## Next (proposed)
+Regional specialties and trade; more cultures from 0 A.D.; richer city growth (streets and districts filling in).
 
 ## Later
 Encrypted export/import of your world (player: low value while in alpha). Trade between networks and regions (trade

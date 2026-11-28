@@ -80,6 +80,11 @@ class Prefs(context: Context) {
         get() = sp.getInt("processingVersion", 1)
         set(v) = sp.edit { putInt("processingVersion", v) }
 
+    /** The time zone the next night check was scheduled in (0.15: it follows you when you travel). */
+    var nightZone: String?
+        get() = sp.getString("nightZone", null)
+        set(v) = sp.edit { putString("nightZone", v) }
+
     var lastHealthSyncMs: Long
         get() = sp.getLong("lastHealthSync", 0)
         set(v) = sp.edit { putLong("lastHealthSync", v) }

@@ -15,6 +15,12 @@ internal class EdgeAcc(val info: EdgeInfo) {
 }
 
 internal class SettlementAcc(val areaId: String, val capital: Boolean, val foundedDay: Int) {
+    /** A camp (0.15): grown by stays where you slept, centred on [hood] (neighbourhood hex), named after [nearArea]. */
+    var camp = false
+    var hood: String? = null
+    var nearArea: String? = null
+    var lastNight = -10
+    var stays = 0
     var lastVisit = foundedDay
     var d = 0.0
     var peakD = 0.0

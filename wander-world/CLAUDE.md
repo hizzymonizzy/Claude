@@ -87,6 +87,8 @@ choices: `docs/decisions/` (read before reopening a question). Shipping: `docs/p
   - `security_scan.sh`: full third-party inventory.
   - `asset_intake.py`, `build_0ad_assets.py`, `gen_sprites.py`, `gen_hex_icons.py`, `gen_legend.py`; design mockups in
     `tools/mockups/`.
+  - `render3d/`: renders 0 A.D.'s 3D buildings to `b3d_<culture>_<key>.png` and `ui/Buildings3d.kt` (0.15):
+    `python3 -I tools/render3d/build_buildings.py <0ad clone> <quarantine dir>`; own intake for meshes and DDS.
 
 ## Commands (from `wander-world/`)
 ```

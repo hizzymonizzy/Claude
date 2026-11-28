@@ -93,6 +93,7 @@ internal fun Simulation.snapshot(): WorldState {
                 name = (if (r.id == (homeRegion ?: 0)) input.homeAreaId?.let { areaNames[it] } else null)
                     ?: r.firstAreaId?.let { areaNames[it] } ?: "Unnamed lands",
                 center = r.seed, isHome = r.id == (homeRegion ?: 0), dormant = r.dormant, lastPresenceDay = r.lastPresence,
+                culture = regionCulture[r.id] ?: world.wander.engine.Cultures.default(r.id, homeRegion),
             )
         },
         waystones = waystones.map { WaystoneState(it.id, it.center, it.great, it.regionId, it.foundDay, it.trips) },
@@ -145,9 +146,17 @@ internal fun Simulation.areaNames(): Map<String, String> {
         val areaId = input.cellArea[Cells.cell(e.info.midpoint.lat, e.info.midpoint.lng)] ?: continue
         roadsByArea.getOrPut(areaId) { mutableListOf() }.add(e)
     }
-    return (areas.keys + settlements.keys).associateWith { areaId ->
-        input.areas[areaId]?.name ?: roadsByArea[areaId]?.maxByOrNull { it.wear }?.info?.name ?: "Unnamed wilds"
+    val base = { areaId: String -> input.areas[areaId]?.name ?: roadsByArea[areaId]?.maxByOrNull { it.wear }?.info?.name }
+    val names = (areas.keys + settlements.keys).filter { !it.startsWith("camp:") }.associateWith { base(it) ?: "Unnamed wilds" }.toMutableMap()
+    // Camps (0.15) are named after the place they're in; several in one place get numbers, oldest first.
+    val camps = settlements.values.filter { it.camp }.sortedBy { it.foundedDay }
+    val count = HashMap<String, Int>()
+    for (c in camps) {
+        val place = c.nearArea?.let { base(it) } ?: "the wilds"
+        val n = count.merge(place, 1, Int::plus)!!
+        names[c.areaId] = "Camp at $place" + if (n > 1) " $n" else ""
     }
+    return names
 }
 
 private fun Simulation.roadLevel(wear: Double): Int {

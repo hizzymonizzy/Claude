@@ -66,10 +66,11 @@ class WorldEngineTest {
         // 0.13: walking an area on many days doesn't found a camp; one night spent there does.
         val walks = (0..9).flatMap { walk(parkCells, start + it * 3, 20.0) }
         val noNight = baseInput(walks).copy(nights = emptyList())
-        assertTrue(WorldEngine().build(noNight, start + 40).settlements.none { it.areaId == "park" })
+        assertTrue(WorldEngine().build(noNight, start + 40).settlements.none { !it.isCapital })
         val night = noNight.copy(nights = listOf(Arrival(start + 6, 40.7600, -74.2000)))
-        val s = WorldEngine().build(night, start + 40).settlements.single { it.areaId == "park" }
+        val s = WorldEngine().build(night, start + 40).settlements.single { it.areaId.startsWith("camp:") }
         assertEquals(start + 6, s.foundedDay)
+        assertEquals("Camp at Ridgefield", s.name)
         assertTrue(DispatchWriter.write(WorldEngine().build(night, start + 6), start + 6).text.contains("night"))
     }
 
@@ -92,21 +93,22 @@ class WorldEngineTest {
 
     @Test
     fun regularWalkingGrowsATown() {
-        // 4 walks a week in the park area for 20 weeks, covering more cells over time.
+        // 4 walks a week at home for 20 weeks, covering more cells over time: the capital grows by walking (0.15:
+        // camps grow only by stays).
         val days = (0 until 140).filter { it % 7 in listOf(0, 2, 4, 5) }.map { start + it }
-        val presence = days.flatMap { walk(parkCells, it, 35.0, cellCount = 6) }
+        val presence = days.flatMap { walk(homeCells, it, 35.0, cellCount = 6) }
         val intensity = steadyIntensity(start..start + 140, 30.0)
-        val s = WorldEngine().build(baseInput(presence, intensity), start + 140).settlements.single()
+        val s = WorldEngine().build(baseInput(presence, intensity).copy(nights = emptyList()), start + 140).settlements.single()
+        assertTrue(s.isCapital)
         assertEquals(Tier.TOWN, s.tier)
     }
 
     @Test
     fun inactivityDecaysButNeverBelowTwoTiersUnderPeak() {
-        val days = (0 until 140).filter { it % 7 in listOf(0, 2, 4, 5) }.map { start + it }
-        val presence = days.flatMap { walk(parkCells, it, 35.0, cellCount = 6) }
-        val intensity = steadyIntensity(start..start + 140, 30.0)
-        // Then two years of nothing at all.
-        val state = WorldEngine().build(baseInput(presence, intensity), start + 140 + 730)
+        // 0.15: a camp grown to a Town by 30 separate stays (a night every other day), then two years of nothing.
+        val nights = (0 until 30).map { Arrival(start + it * 2, 40.7600, -74.2000) }
+        val intensity = steadyIntensity(start..start + 60, 30.0)
+        val state = WorldEngine().build(baseInput(emptyList(), intensity).copy(nights = nights), start + 60 + 730)
         val s = state.settlements.single()
         assertEquals(Tier.TOWN, s.peakTier)
         assertEquals(Tier.HAMLET, s.tier) // Town − 2
